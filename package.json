@@ -14,14 +14,15 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.rclone.gui",
-    "productName": "Rclone GUI",
+    "appId": "com.rclone.gui.glasswing",
+    "productName": "Rclone Glasswing",
     "directories": {
       "output": "dist"
     },
     "win": {
       "target": [
-        "portable"
+        "portable", 
+        "nsis"
       ]
     },
     "files": [
