@@ -1,0 +1,35 @@
+{
+  "name": "rclone-gui",
+  "version": "1.0.0",
+  "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.rclone.gui",
+    "productName": "Rclone GUI",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*"
+    ]
+  },
+  "allowScripts": {
+    "electron@35.7.5": true
+  }
+}

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>Rclone GUI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient-bg" aria-hidden="true"></div>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">⇄</div>
+          <div>
+            <h1>Rclone GUI</h1>
+            <p class="subtitle version-line">
+              <span id="app-version" class="app-version">v1.0.0</span>
+              <span class="version-separator" aria-hidden="true">·</span>
+              <span id="rclone-version">Checking rclone...</span>
+            </p>
+          </div>
+        </div>
+        <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel-form">
+          <div class="form-body">
+            <h2>Job</h2>
+
+            <div class="form-section">
+              <label class="field">
+                <span>Operation</span>
+                <select id="operation">
+                  <option value="copy">Copy</option>
+                  <option value="sync">Sync</option>
+                  <option value="move">Move</option>
+                </select>
+              </label>
+
+              <div class="hint" id="operation-hint">
+                Copy adds or updates files in the destination.
+              </div>
+            </div>
+
+            <div class="form-section">
+              <label class="field">
+                <span>Source</span>
+                <div class="input-row">
+                  <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
+                  <button type="button" class="secondary" data-target="source">Browse</button>
+                </div>
+              </label>
+
+              <label class="field">
+                <span>Destination</span>
+                <div class="input-row">
+                  <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
+                  <button type="button" class="secondary" data-target="destination">Browse</button>
+                </div>
+              </label>
+            </div>
+
+            <div class="form-section">
+              <div class="field">
+                <span>Quick insert remote</span>
+                <div class="remote-insert">
+                  <div class="remote-fields">
+                    <select id="remote-picker">
+                      <option value="">Select a configured remote...</option>
+                    </select>
+                    <input id="remote-path" type="text" placeholder="optional/path" />
+                  </div>
+                  <div class="remote-actions">
+                    <button id="insert-remote-source" type="button" class="secondary">To source</button>
+                    <button id="insert-remote-dest" type="button" class="secondary">To destination</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="options">
+                <label class="checkbox">
+                  <input id="dry-run" type="checkbox" />
+                  Dry run (no changes)
+                </label>
+                <label class="checkbox">
+                  <input id="delete-excluded" type="checkbox" />
+                  Delete excluded files (sync only)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <div class="actions">
+              <button id="run-job" type="button" class="primary">Run job</button>
+              <button id="stop-job" type="button" class="danger" disabled>Stop</button>
+            </div>
+
+            <p id="status" class="status"></p>
+          </div>
+        </section>
+
+        <section class="panel output-panel">
+          <div class="output-header">
+            <h2>Progress</h2>
+            <div class="output-actions">
+              <button id="toggle-raw-log" type="button" class="secondary">Show raw log</button>
+              <button id="clear-log" type="button" class="secondary">Clear</button>
+            </div>
+          </div>
+
+          <div id="job-idle" class="idle-state">
+            <div class="idle-icon" aria-hidden="true">☁</div>
+            <p class="idle-title">No job running</p>
+            <p class="idle-text">Start a copy, sync, or move to see live progress, speed, and activity here.</p>
+          </div>
+
+          <div id="job-dashboard" class="job-dashboard hidden">
+            <div class="job-banner" id="job-banner">
+              <div class="job-banner-main">
+                <span class="job-badge" id="job-badge">Running</span>
+                <div>
+                  <p class="job-title" id="job-title">Copy job</p>
+                  <p class="job-paths" id="job-paths"></p>
+                </div>
+              </div>
+              <p class="job-message" id="job-message"></p>
+            </div>
+
+            <div class="progress-section" id="progress-section">
+              <div class="progress-meta">
+                <span class="progress-percent" id="progress-percent">0%</span>
+                <span class="progress-eta" id="progress-eta">ETA —</span>
+              </div>
+              <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="progress-fill" id="progress-fill"></div>
+                <div class="progress-shimmer" aria-hidden="true">
+                  <div class="progress-shimmer-beam"></div>
+                </div>
+              </div>
+              <p class="progress-detail" id="progress-detail">Waiting for stats…</p>
+            </div>
+
+            <div class="stat-grid">
+              <div class="stat-card stat-card-speed">
+                <span class="stat-icon" aria-hidden="true">⚡</span>
+                <span class="stat-label">Speed</span>
+                <span class="stat-value" id="stat-speed">—</span>
+              </div>
+              <div class="stat-card stat-card-transferred">
+                <span class="stat-icon" aria-hidden="true">↗</span>
+                <span class="stat-label">Transferred</span>
+                <span class="stat-value" id="stat-transferred">—</span>
+              </div>
+              <div class="stat-card stat-card-checks">
+                <span class="stat-icon" aria-hidden="true">✓</span>
+                <span class="stat-label">Checks</span>
+                <span class="stat-value" id="stat-checks">—</span>
+              </div>
+              <div class="stat-card stat-card-errors">
+                <span class="stat-icon" aria-hidden="true">!</span>
+                <span class="stat-label">Errors</span>
+                <span class="stat-value stat-value-danger" id="stat-errors">0</span>
+              </div>
+            </div>
+
+            <div class="activity-section">
+              <div class="activity-header">
+                <h3>Activity</h3>
+                <span class="activity-count" id="activity-count">0 events</span>
+              </div>
+              <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
+        </section>
+      </main>
+    </div>
+
+    <div id="popup-root" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-popup-close></div>
+      <div class="popup-card" role="alertdialog" aria-modal="true" aria-labelledby="popup-title" aria-describedby="popup-message">
+        <p id="popup-title" class="popup-title"></p>
+        <p id="popup-message" class="popup-message"></p>
+        <button id="popup-close" type="button" class="primary">OK</button>
+      </div>
+    </div>
+
+    <script src="job-output.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>
