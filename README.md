@@ -2,7 +2,7 @@
 
 A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live progress dashboard, dry-run support, and a clean glass-style UI. Built with Electron; wraps the `rclone` CLI you already have configured.
 
-> **Status:** v1.0.0 — Windows portable builds are supported today. macOS and Linux builds are planned.
+> Windows portable builds are supported today. macOS and Linux builds are planned.
 
 ## Features
 
@@ -17,7 +17,7 @@ A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live p
 - **Refresh remotes** — reload your rclone config with clear success/error feedback
 - **Save jobs** - Save a job for quick re-use later on
 
-Glasswing does **not** store cloud credentials. It uses your existing rclone installation and config on the machine.
+Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ rclone listremotes
 ## Install & run (development)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/rclone-gui-glasswing.git
+git clone https://github.com/SSCHRE/rclone-gui-glasswing.git
 cd rclone-gui-glasswing
 npm install
 npm start
