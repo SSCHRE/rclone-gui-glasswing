@@ -1,34 +1,320 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, screen, nativeImage } = require("electron");
 const { spawn } = require("child_process");
+const fs = require("fs/promises");
+const fsSync = require("fs");
 const path = require("path");
+const { randomUUID } = require("crypto");
+
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.rclone.gui.glasswing");
+}
 
 let mainWindow = null;
 let activeJob = null;
 
-const WINDOW_MIN_WIDTH = 980;
-const WINDOW_MIN_HEIGHT = 800;
+const WINDOW_ABSOLUTE_MIN_WIDTH = 760;
+const WINDOW_ABSOLUTE_MIN_HEIGHT = 520;
+const WINDOW_PREFERRED_WIDTH_RATIO = 0.78;
+const WINDOW_PREFERRED_HEIGHT_RATIO = 0.9;
+const SCREEN_MARGIN = 20;
 
-function applyMinimumContentSize(window, { width, height }) {
-  const minWidth = Math.max(WINDOW_MIN_WIDTH, Math.ceil(width));
-  const minHeight = Math.max(WINDOW_MIN_HEIGHT, Math.ceil(height) + 12);
-  window.setMinimumSize(minWidth, minHeight);
+let contentChrome = { width: 16, height: 39 };
 
-  const [currentWidth, currentHeight] = window.getContentSize();
-  if (currentWidth < minWidth || currentHeight < minHeight) {
-    window.setContentSize(Math.max(currentWidth, minWidth), Math.max(currentHeight, minHeight));
+function resolveAppIconPath() {
+  const candidates = [
+    path.join(__dirname, "icons", "icon.ico"),
+    path.join(__dirname, "icons", "icon.png"),
+    path.join(__dirname, "..", "build", "icon.ico"),
+    path.join(__dirname, "..", "build", "icon.png"),
+    path.join(process.resourcesPath, "icon.ico"),
+    path.join(process.resourcesPath, "icon.png"),
+  ];
+
+  for (const iconPath of candidates) {
+    if (fsSync.existsSync(iconPath)) {
+      return iconPath;
+    }
   }
 
-  return { minWidth, minHeight };
+  return undefined;
+}
+
+function resolveAppIcon() {
+  const iconPath = resolveAppIconPath();
+  if (!iconPath) {
+    return undefined;
+  }
+
+  const icon = nativeImage.createFromPath(iconPath);
+  return icon.isEmpty() ? undefined : icon;
+}
+const MAX_JOB_HISTORY = 50;
+
+function jobSignature(job) {
+  return [job.operation, job.source, job.destination, !!job.dryRun, !!job.deleteExcluded].join("\0");
+}
+
+function truncatePath(value, max = 28) {
+  if (value.length <= max) {
+    return value;
+  }
+
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function defaultJobName(job) {
+  const operation = job.operation.charAt(0).toUpperCase() + job.operation.slice(1);
+  return `${operation}: ${truncatePath(job.source)} → ${truncatePath(job.destination)}`;
+}
+
+function sortJobHistory(entries) {
+  return [...entries].sort(
+    (left, right) => (right.lastRunAt || right.createdAt || 0) - (left.lastRunAt || left.createdAt || 0),
+  );
+}
+
+function getHistoryFilePath() {
+  return path.join(app.getPath("userData"), "job-history.json");
+}
+
+async function readJobHistory() {
+  try {
+    const raw = await fs.readFile(getHistoryFilePath(), "utf8");
+    const parsed = JSON.parse(raw);
+    const savedEntries = Array.isArray(parsed) ? parsed.filter((entry) => entry.saved) : [];
+    return sortJobHistory(savedEntries);
+  } catch {
+    return [];
+  }
+}
+
+async function writeJobHistory(entries) {
+  const filePath = getHistoryFilePath();
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const trimmed = sortJobHistory(entries.filter((entry) => entry.saved)).slice(0, MAX_JOB_HISTORY);
+  await fs.writeFile(filePath, JSON.stringify(trimmed, null, 2), "utf8");
+  return trimmed;
+}
+
+async function upsertJobHistory(job, { name = null } = {}) {
+  const signature = jobSignature(job);
+  const now = Date.now();
+  const entries = await readJobHistory();
+  const existingIndex = entries.findIndex((entry) => entry.signature === signature);
+  const existing = existingIndex >= 0 ? entries[existingIndex] : null;
+
+  const entry = {
+    id: existing?.id || randomUUID(),
+    signature,
+    name: name?.trim() || existing?.name || defaultJobName(job),
+    operation: job.operation,
+    source: job.source,
+    destination: job.destination,
+    dryRun: !!job.dryRun,
+    deleteExcluded: !!job.deleteExcluded,
+    saved: true,
+    createdAt: existing?.createdAt || now,
+    lastRunAt: existing?.lastRunAt || null,
+    lastRunSuccess: existing?.lastRunSuccess ?? null,
+    runCount: existing?.runCount || 0,
+  };
+
+  if (existingIndex >= 0) {
+    entries.splice(existingIndex, 1);
+  }
+
+  entries.unshift(entry);
+  return writeJobHistory(entries);
+}
+
+async function markJobRunStarted(job) {
+  const signature = jobSignature(job);
+  const now = Date.now();
+  const entries = await readJobHistory();
+  const index = entries.findIndex((entry) => entry.signature === signature);
+
+  if (index < 0) {
+    return null;
+  }
+
+  const [entry] = entries.splice(index, 1);
+  entry.lastRunAt = now;
+  entry.runCount = (entry.runCount || 0) + 1;
+  entries.unshift(entry);
+  await writeJobHistory(entries);
+  return entry.id;
+}
+
+async function markJobRunFinished(historyId, { success, cancelled }) {
+  if (!historyId) {
+    return readJobHistory();
+  }
+
+  const entries = await readJobHistory();
+  const entry = entries.find((item) => item.id === historyId);
+  if (!entry) {
+    return entries;
+  }
+
+  entry.lastRunSuccess = cancelled ? null : success;
+  return writeJobHistory(entries);
+}
+function cacheContentChrome(window) {
+  const [contentWidth, contentHeight] = window.getContentSize();
+  const [outerWidth, outerHeight] = window.getSize();
+  contentChrome = {
+    width: Math.max(0, outerWidth - contentWidth),
+    height: Math.max(0, outerHeight - contentHeight),
+  };
+}
+
+function getWorkAreaContentLimits(window) {
+  const display = window
+    ? screen.getDisplayMatching(window.getBounds())
+    : screen.getPrimaryDisplay();
+  const { workArea } = display;
+  const frameWidth = contentChrome.width + SCREEN_MARGIN * 2;
+  const frameHeight = contentChrome.height + SCREEN_MARGIN * 2;
+
+  return {
+    maxWidth: Math.max(
+      WINDOW_ABSOLUTE_MIN_WIDTH,
+      workArea.width - frameWidth,
+    ),
+    maxHeight: Math.max(
+      WINDOW_ABSOLUTE_MIN_HEIGHT,
+      workArea.height - frameHeight,
+    ),
+  };
+}
+
+function getPreferredContentSize(window) {
+  const limits = getWorkAreaContentLimits(window);
+
+  return {
+    width: Math.max(
+      WINDOW_ABSOLUTE_MIN_WIDTH,
+      Math.floor(limits.maxWidth * WINDOW_PREFERRED_WIDTH_RATIO),
+    ),
+    height: Math.max(
+      WINDOW_ABSOLUTE_MIN_HEIGHT,
+      Math.floor(limits.maxHeight * WINDOW_PREFERRED_HEIGHT_RATIO),
+    ),
+  };
+}
+
+function getInitialContentSize() {
+  const display = screen.getPrimaryDisplay();
+  const maxWidth = Math.max(
+    WINDOW_ABSOLUTE_MIN_WIDTH,
+    display.workAreaSize.width - 48,
+  );
+  const maxHeight = Math.max(
+    WINDOW_ABSOLUTE_MIN_HEIGHT,
+    display.workAreaSize.height - 48,
+  );
+
+  return {
+    width: Math.max(
+      WINDOW_ABSOLUTE_MIN_WIDTH,
+      Math.floor(maxWidth * WINDOW_PREFERRED_WIDTH_RATIO),
+    ),
+    height: Math.max(
+      WINDOW_ABSOLUTE_MIN_HEIGHT,
+      Math.floor(maxHeight * WINDOW_PREFERRED_HEIGHT_RATIO),
+    ),
+  };
+}
+
+function ensureWindowOnScreen(window) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  const bounds = window.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const { workArea } = display;
+  const inset = 8;
+  let { x, y, width, height } = bounds;
+
+  width = Math.min(width, workArea.width - inset * 2);
+  height = Math.min(height, workArea.height - inset * 2);
+  x = Math.max(workArea.x + inset, Math.min(x, workArea.x + workArea.width - width - inset));
+  y = Math.max(workArea.y + inset, Math.min(y, workArea.y + workArea.height - height - inset));
+
+  if (
+    x !== bounds.x ||
+    y !== bounds.y ||
+    width !== bounds.width ||
+    height !== bounds.height
+  ) {
+    window.setBounds({ x, y, width, height });
+  }
+}
+
+function applyMinimumContentSize(window) {
+  window.setMinimumSize(WINDOW_ABSOLUTE_MIN_WIDTH, WINDOW_ABSOLUTE_MIN_HEIGHT);
+  return {
+    minWidth: WINDOW_ABSOLUTE_MIN_WIDTH,
+    minHeight: WINDOW_ABSOLUTE_MIN_HEIGHT,
+  };
+}
+
+function fitWindowToContent(window, { width, height } = {}, snap = false) {
+  const limits = getWorkAreaContentLimits(window);
+  const preferred = getPreferredContentSize(window);
+  applyMinimumContentSize(window);
+
+  const measuredWidth = width != null ? Math.ceil(width) : null;
+  const targetWidth = measuredWidth != null
+    ? Math.max(measuredWidth, preferred.width)
+    : preferred.width;
+  const desiredWidth = Math.min(
+    limits.maxWidth,
+    Math.max(WINDOW_ABSOLUTE_MIN_WIDTH, targetWidth),
+  );
+  const desiredHeight = Math.min(
+    limits.maxHeight,
+    Math.max(
+      WINDOW_ABSOLUTE_MIN_HEIGHT,
+      Math.ceil(height ?? preferred.height),
+    ),
+  );
+
+  const [currentWidth, currentHeight] = window.getContentSize();
+  const nextWidth = snap
+    ? desiredWidth
+    : Math.min(limits.maxWidth, Math.max(WINDOW_ABSOLUTE_MIN_WIDTH, currentWidth));
+  const nextHeight = snap
+    ? desiredHeight
+    : Math.min(limits.maxHeight, Math.max(WINDOW_ABSOLUTE_MIN_HEIGHT, currentHeight));
+
+  window.setContentSize(nextWidth, nextHeight);
+  cacheContentChrome(window);
+  ensureWindowOnScreen(window);
+
+  return {
+    minWidth: WINDOW_ABSOLUTE_MIN_WIDTH,
+    minHeight: WINDOW_ABSOLUTE_MIN_HEIGHT,
+    width: nextWidth,
+    height: nextHeight,
+    maxWidth: limits.maxWidth,
+    maxHeight: limits.maxHeight,
+  };
 }
 
 function createWindow() {
+  const initialSize = getInitialContentSize();
+
   mainWindow = new BrowserWindow({
-    width: 1120,
-    height: 980,
-    minWidth: WINDOW_MIN_WIDTH,
-    minHeight: WINDOW_MIN_HEIGHT,
+    width: initialSize.width,
+    height: initialSize.height,
+    minWidth: WINDOW_ABSOLUTE_MIN_WIDTH,
+    minHeight: WINDOW_ABSOLUTE_MIN_HEIGHT,
     useContentSize: true,
     center: true,
+    show: false,
+    icon: resolveAppIcon(),
     title: `Rclone GUI v${app.getVersion()}`,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -38,6 +324,12 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
+  cacheContentChrome(mainWindow);
+
+  const icon = resolveAppIcon();
+  if (icon) {
+    mainWindow.setIcon(icon);
+  }
 }
 
 function runRclone(args) {
@@ -87,12 +379,12 @@ function stopActiveJob() {
 
 ipcMain.handle("get-app-version", async () => app.getVersion());
 
-ipcMain.handle("set-minimum-content-size", async (_event, size) => {
+ipcMain.handle("set-minimum-content-size", async () => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return null;
   }
 
-  return applyMinimumContentSize(mainWindow, size);
+  return applyMinimumContentSize(mainWindow);
 });
 
 ipcMain.handle("probe-minimum-content-size", async (_event, size) => {
@@ -100,7 +392,7 @@ ipcMain.handle("probe-minimum-content-size", async (_event, size) => {
     return null;
   }
 
-  const { minWidth, minHeight } = applyMinimumContentSize(mainWindow, size);
+  const { minWidth, minHeight } = fitWindowToContent(mainWindow, size, true);
   const [restoreWidth, restoreHeight] = mainWindow.getContentSize();
   mainWindow.setContentSize(minWidth, minHeight);
 
@@ -117,8 +409,60 @@ ipcMain.handle("restore-content-size", async (_event, { width, height }) => {
     return;
   }
 
-  const [minWidth, minHeight] = mainWindow.getMinimumSize();
-  mainWindow.setContentSize(Math.max(width, minWidth), Math.max(height, minHeight));
+  const limits = getWorkAreaContentLimits(mainWindow);
+  mainWindow.setContentSize(
+    Math.min(limits.maxWidth, Math.max(WINDOW_ABSOLUTE_MIN_WIDTH, width)),
+    Math.min(limits.maxHeight, Math.max(WINDOW_ABSOLUTE_MIN_HEIGHT, height)),
+  );
+  ensureWindowOnScreen(mainWindow);
+});
+
+ipcMain.handle("fit-window-to-content", async (_event, size, snap = false) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null;
+  }
+
+  return fitWindowToContent(mainWindow, size, snap);
+});
+
+ipcMain.handle("show-main-window", async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  ensureWindowOnScreen(mainWindow);
+
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+});
+
+ipcMain.handle("get-work-area-limits", async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    const display = screen.getPrimaryDisplay();
+    const maxWidth = Math.max(WINDOW_ABSOLUTE_MIN_WIDTH, display.workAreaSize.width - 48);
+    const maxHeight = Math.max(WINDOW_ABSOLUTE_MIN_HEIGHT, display.workAreaSize.height - 48);
+    return {
+      maxWidth,
+      maxHeight,
+      preferredWidth: Math.max(
+        WINDOW_ABSOLUTE_MIN_WIDTH,
+        Math.floor(maxWidth * WINDOW_PREFERRED_WIDTH_RATIO),
+      ),
+      preferredHeight: Math.max(
+        WINDOW_ABSOLUTE_MIN_HEIGHT,
+        Math.floor(maxHeight * WINDOW_PREFERRED_HEIGHT_RATIO),
+      ),
+    };
+  }
+
+  const limits = getWorkAreaContentLimits(mainWindow);
+  const preferred = getPreferredContentSize(mainWindow);
+  return {
+    ...limits,
+    preferredWidth: preferred.width,
+    preferredHeight: preferred.height,
+  };
 });
 
 ipcMain.handle("get-rclone-version", async () => {
@@ -194,6 +538,13 @@ ipcMain.handle("start-job", async (_event, job) => {
     id: Date.now(),
     process: child,
     killed: false,
+    historyId: await markJobRunStarted({
+      operation,
+      source: job.source,
+      destination: job.destination,
+      dryRun: job.dryRun,
+      deleteExcluded: job.deleteExcluded,
+    }),
   };
 
   activeJob = jobState;
@@ -219,7 +570,8 @@ ipcMain.handle("start-job", async (_event, job) => {
   forwardOutput(child.stdout, "stdout");
   forwardOutput(child.stderr, "stderr");
 
-  child.on("error", (error) => {
+  child.on("error", async (error) => {
+    await markJobRunFinished(jobState.historyId, { success: false, cancelled: false });
     send("job-finished", {
       id: jobState.id,
       code: -1,
@@ -230,8 +582,12 @@ ipcMain.handle("start-job", async (_event, job) => {
     activeJob = null;
   });
 
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     const cancelled = jobState.killed;
+    await markJobRunFinished(jobState.historyId, {
+      success: code === 0 && !cancelled,
+      cancelled,
+    });
     send("job-finished", {
       id: jobState.id,
       code,
@@ -253,8 +609,48 @@ ipcMain.handle("stop-job", async () => {
   return { stopped };
 });
 
+ipcMain.handle("list-jobs", async () => readJobHistory());
+
+ipcMain.handle("save-job", async (_event, job) => {
+  if (!job?.source?.trim() || !job?.destination?.trim()) {
+    throw new Error("Source and destination are required.");
+  }
+
+  if (!["sync", "copy", "move"].includes(job.operation)) {
+    throw new Error(`Unsupported operation: ${job.operation}`);
+  }
+
+  return upsertJobHistory(
+    {
+      operation: job.operation,
+      source: job.source.trim(),
+      destination: job.destination.trim(),
+      dryRun: !!job.dryRun,
+      deleteExcluded: !!job.deleteExcluded,
+    },
+    { name: job.name },
+  );
+});
+
+ipcMain.handle("delete-job", async (_event, jobId) => {
+  const entries = await readJobHistory();
+  const next = entries.filter((entry) => entry.id !== jobId);
+  return writeJobHistory(next);
+});
+
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   createWindow();
+
+  screen.on("display-metrics-changed", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    cacheContentChrome(mainWindow);
+    const [width, height] = mainWindow.getContentSize();
+    fitWindowToContent(mainWindow, { width, height }, false);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

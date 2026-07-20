@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   setMinimumContentSize: (size) => ipcRenderer.invoke("set-minimum-content-size", size),
   probeMinimumContentSize: (size) => ipcRenderer.invoke("probe-minimum-content-size", size),
   restoreContentSize: (size) => ipcRenderer.invoke("restore-content-size", size),
+  fitWindowToContent: (size, snap) => ipcRenderer.invoke("fit-window-to-content", size, snap),
+  getWorkAreaLimits: () => ipcRenderer.invoke("get-work-area-limits"),
+  showMainWindow: () => ipcRenderer.invoke("show-main-window"),
+  listJobs: () => ipcRenderer.invoke("list-jobs"),
+  saveJob: (job) => ipcRenderer.invoke("save-job", job),
+  deleteJob: (jobId) => ipcRenderer.invoke("delete-job", jobId),
   onJobStarted: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("job-started", listener);

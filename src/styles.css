@@ -44,6 +44,7 @@
 html,
 body {
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -99,9 +100,42 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   padding: 24px;
   overflow: hidden;
   animation: appEnter 0.7s var(--ease-out) both;
+}
+
+.app-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.app-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.app-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-body::-webkit-scrollbar-thumb {
+  background: rgba(120, 145, 180, 0.22);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.app-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(92, 176, 255, 0.35);
+  background-clip: padding-box;
 }
 
 .header {
@@ -126,11 +160,17 @@ body {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  font-size: 1.45rem;
-  color: var(--accent-strong);
+  overflow: hidden;
   background: linear-gradient(145deg, rgba(92, 176, 255, 0.18), rgba(92, 176, 255, 0.06));
   border: 1px solid rgba(92, 176, 255, 0.18);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 30px rgba(92, 176, 255, 0.12);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .header h1 {
@@ -167,12 +207,12 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(360px, 480px) 1fr;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 22px;
   align-items: stretch;
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 100%;
 }
 
 .panel {
@@ -182,7 +222,6 @@ body {
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  max-height: 100%;
   background: var(--panel);
   backdrop-filter: blur(18px);
   border: 1px solid var(--panel-border);
@@ -208,17 +247,43 @@ body {
 
 .panel-form {
   animation: fadeRight 0.7s var(--ease-out) 0.1s both;
-  padding-bottom: 32px;
 }
 
 .form-body {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  padding-bottom: 4px;
+  scrollbar-gutter: stable;
+}
+
+.form-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.form-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.form-body::-webkit-scrollbar-thumb {
+  background: rgba(120, 145, 180, 0.2);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.form-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(92, 176, 255, 0.32);
+  background-clip: padding-box;
 }
 
 .form-footer {
   flex-shrink: 0;
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 20px;
   padding-bottom: 2px;
 }
 
@@ -505,6 +570,7 @@ button:disabled {
   flex-direction: column;
   gap: 16px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .output-header,
@@ -579,7 +645,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   animation: dashboardEnter 0.55s var(--ease-out);
@@ -798,17 +864,18 @@ button:disabled {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(132px, 1fr));
   gap: 12px;
 }
 
 .stat-card {
   position: relative;
-  padding: 15px 16px 14px;
+  padding: 14px 14px 13px;
   border-radius: var(--radius-md);
   border: 1px solid var(--panel-border);
   background: rgba(10, 14, 20, 0.88);
   overflow: hidden;
+  min-width: 0;
   transition:
     transform 0.28s var(--ease-out),
     border-color 0.28s ease,
@@ -863,17 +930,21 @@ button:disabled {
   display: block;
   margin-bottom: 8px;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
 }
 
 .stat-value {
   display: block;
-  font-size: 1rem;
+  font-size: 0.96rem;
   font-weight: 600;
   line-height: 1.3;
-  word-break: break-word;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stat-value-danger {
@@ -884,7 +955,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -892,12 +963,14 @@ button:disabled {
 .activity-count {
   color: var(--muted);
   font-size: 0.82rem;
+  flex-shrink: 0;
 }
 
 .activity-feed {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1075,6 +1148,137 @@ button:disabled {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.history-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.history-actions button:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.history-meta {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.history-meta:empty {
+  display: none;
+}
+
+.job-history-section {
+  padding-bottom: 0;
+  gap: 0;
+}
+
+.collapsible {
+  overflow: hidden;
+}
+
+.collapsible-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-summary:hover {
+  color: #d8e2ef;
+}
+
+.collapsible-title {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.collapsible-badge {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: rgba(92, 176, 255, 0.1);
+  border: 1px solid rgba(92, 176, 255, 0.16);
+}
+
+.collapsible-badge:empty {
+  display: none;
+}
+
+.collapsible-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.22s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.collapsible[open] .collapsible-chevron {
+  transform: rotate(-135deg) translateY(2px);
+}
+
+.collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  animation: collapsibleOpen 0.24s var(--ease-out);
+}
+
+.collapsible:not([open]) .collapsible-body {
+  display: none;
+}
+
+@keyframes collapsibleOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popup-card-form {
+  width: min(460px, calc(100vw - 48px));
+}
+
+.popup-field {
+  margin-bottom: 18px;
+}
+
+.popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.popup-actions .primary,
+.popup-actions .secondary {
+  width: auto;
+  min-width: 96px;
+}
+
 @keyframes popupEnter {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
@@ -1140,11 +1344,154 @@ button:disabled {
   width: 100%;
 }
 
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
+.snackbar-root {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 88px;
+  z-index: 15;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px;
+  pointer-events: none;
+}
+
+.snackbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(460px, 100%);
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(24, 31, 42, 0.98), rgba(12, 16, 22, 0.98));
+  box-shadow: var(--shadow-soft);
+  color: var(--text);
+  pointer-events: none;
+  animation: snackbarEnter 0.34s var(--ease-spring);
+}
+
+.snackbar-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.snackbar-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.snackbar-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.snackbar-message {
+  color: #d8e2ef;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.snackbar.success {
+  border-color: rgba(115, 224, 163, 0.42);
+  background: linear-gradient(135deg, rgba(18, 36, 28, 0.98), rgba(10, 18, 14, 0.98));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(115, 224, 163, 0.14),
+    0 0 36px rgba(115, 224, 163, 0.2);
+}
+
+.snackbar.success .snackbar-icon {
+  color: #8ef0b8;
+  background: rgba(115, 224, 163, 0.16);
+  border: 1px solid rgba(115, 224, 163, 0.34);
+  box-shadow: 0 0 20px rgba(115, 224, 163, 0.18);
+}
+
+.snackbar.success .snackbar-title {
+  color: #8ef0b8;
+}
+
+.snackbar.error {
+  border-color: rgba(255, 123, 123, 0.42);
+  background: linear-gradient(135deg, rgba(36, 18, 18, 0.98), rgba(18, 10, 10, 0.98));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 123, 123, 0.14),
+    0 0 36px rgba(255, 123, 123, 0.16);
+}
+
+.snackbar.error .snackbar-icon {
+  color: #ffb0b0;
+  background: rgba(255, 123, 123, 0.14);
+  border: 1px solid rgba(255, 123, 123, 0.34);
+}
+
+.snackbar.error .snackbar-title {
+  color: #ffb0b0;
+}
+
+.snackbar.is-leaving {
+  animation: snackbarLeave 0.22s var(--ease-out) forwards;
+}
+
+@keyframes snackbarEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
   }
 
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes snackbarLeave {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .panel-form {
+    height: auto;
+  }
+
+  .output-panel {
+    min-height: 360px;
+  }
+
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .header h1 {
+    font-size: 1.55rem;
+  }
+}
+
+@media (max-width: 900px) {
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
