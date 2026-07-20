@@ -41,6 +41,7 @@ jobs:
     name: Build Windows
     runs-on: windows-latest
     needs: validate
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,8 +58,18 @@ jobs:
       - name: Generate icons
         run: npm run icons
 
-      - name: Build portable and NSIS installers
-        run: npx electron-builder --win
+      - name: Build Windows app
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR build: packaging unpacked app only (no publish/signing)"
+            npx electron-builder --win dir --publish never
+          else
+            echo "Main build: portable + NSIS installers (no publish/signing)"
+            npx electron-builder --win --publish never
+          fi
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
