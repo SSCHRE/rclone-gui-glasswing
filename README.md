@@ -73,7 +73,6 @@ The portable executable is written to `dist/`.
 | Type | Example |
 |------|---------|
 | Local (Windows) | `C:\Users\you\Documents\backup` |
-| Local (macOS/Linux) | `/home/you/Documents/backup` |
 | Remote | `gdrive:Photos/2024` |
 | Remote + path | Pick `gdrive` + `Photos/2024` via quick insert |
 
@@ -93,23 +92,7 @@ Job output is parsed into the dashboard (progress bar, stat cards, activity feed
 | macOS | `~/.config/rclone/rclone.conf` |
 | Linux | `~/.config/rclone/rclone.conf` |
 
-Never commit `rclone.conf` or copy it into this repository; it may contain OAuth tokens and storage keys.
-
-## Project structure
-
-```
-rclone-gui-glasswing/
-├── electron/
-│   ├── main.js       # Window, IPC, rclone process management
-│   └── preload.js    # Secure bridge to renderer
-├── src/
-│   ├── index.html    # UI layout
-│   ├── styles.css    # Theme and layout
-│   ├── renderer.js   # Form, job controls, remotes
-│   └── job-output.js # Stats parsing and progress dashboard
-├── package.json
-└── README.md
-```
+Never commit `rclone.conf` or copy it into this repository or any forked repositories; it may contain OAuth tokens and storage keys.
 
 ## Roadmap
 - [x] Job history
@@ -117,7 +100,6 @@ rclone-gui-glasswing/
 - [ ] Remote management UI
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
-
 
 
 # Screenshots
