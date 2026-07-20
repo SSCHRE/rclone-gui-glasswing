@@ -117,7 +117,11 @@ rclone-gui-glasswing/
 - [ ] Remote management UI
 - [ ] Job history
 
-## Troubleshooting
+# Screenshots
+![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
+![App Screenshot2](https://i.ibb.co/gbSwX4RH/electron-lt-Ori2-HGPQ.png)
+
+# Troubleshooting
 
 **“Checking rclone…” never resolves**
 
