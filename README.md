@@ -112,11 +112,12 @@ rclone-gui-glasswing/
 ```
 
 ## Roadmap
-
+- [x] Job history
+- [ ] Remote management UI
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
-- [ ] Remote management UI
-- [ ] Job history
+
+
 
 # Screenshots
 ![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
