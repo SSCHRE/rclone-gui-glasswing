@@ -1,33 +1,63 @@
 {
-  "name": "rclone-gui",
-  "version": "1.0.0",
+  "name": "rclone-gui-glasswing",
+  "version": "1.1.0",
   "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
   "main": "electron/main.js",
   "scripts": {
+    "icons": "node scripts/generate-icons.js",
+    "prebuild": "npm run icons",
     "start": "electron .",
-    "build": "electron-builder --win portable"
+    "build": "electron-builder --win portable",
+    "build:dir": "electron-builder --win dir"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "electron": "^35.7.5",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8"
   },
   "build": {
     "appId": "com.rclone.gui.glasswing",
-    "productName": "Rclone Glasswing",
+    "productName": "Glasswing Rclone",
+    "icon": "build/icon.ico",
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
-        "portable", 
+        "portable",
         "nsis"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Glasswing Rclone",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "runAfterFinish": false
+    },
     "files": [
       "electron/**/*",
-      "src/**/*"
+      "src/**/*",
+      "build/icon.png",
+      "build/icon.ico"
     ]
   },
   "allowScripts": {

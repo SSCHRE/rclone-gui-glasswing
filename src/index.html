@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
-    <title>Rclone GUI</title>
+    <title>Glasswing Rclone</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -12,11 +12,13 @@
     <div class="app">
       <header class="header">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">⇄</div>
+          <div class="brand-mark" aria-hidden="true">
+            <img src="assets/icon.png" alt="" width="52" height="52" />
+          </div>
           <div>
-            <h1>Rclone GUI</h1>
+            <h1>Glasswing Rclone</h1>
             <p class="subtitle version-line">
-              <span id="app-version" class="app-version">v1.0.0</span>
+              <span id="app-version" class="app-version"></span>
               <span class="version-separator" aria-hidden="true">·</span>
               <span id="rclone-version">Checking rclone...</span>
             </p>
@@ -25,10 +27,34 @@
         <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
       </header>
 
+      <div class="app-body">
       <main class="layout">
         <section class="panel panel-form">
           <div class="form-body">
             <h2>Job</h2>
+
+            <details class="form-section job-history-section collapsible" id="job-history-collapsible">
+              <summary class="collapsible-summary">
+                <span class="collapsible-title">Saved jobs</span>
+                <span id="job-history-count" class="collapsible-badge"></span>
+                <span class="collapsible-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="collapsible-body">
+                <label class="field">
+                  <span>Quick select</span>
+                  <select id="job-history-picker">
+                    <option value="">Select a job to load…</option>
+                  </select>
+                </label>
+                <div class="history-actions">
+                  <button id="load-job" type="button" class="secondary" disabled>Load</button>
+                  <button id="run-saved-job" type="button" class="secondary" disabled>Run</button>
+                  <button id="save-job" type="button" class="secondary">Save current</button>
+                  <button id="delete-job" type="button" class="secondary" disabled>Remove</button>
+                </div>
+                <p id="job-history-meta" class="history-meta"></p>
+              </div>
+            </details>
 
             <div class="form-section">
               <label class="field">
@@ -110,7 +136,6 @@
             <h2>Progress</h2>
             <div class="output-actions">
               <button id="toggle-raw-log" type="button" class="secondary">Show raw log</button>
-              <button id="clear-log" type="button" class="secondary">Clear</button>
             </div>
           </div>
 
@@ -181,6 +206,17 @@
           <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
         </section>
       </main>
+      </div>
+    </div>
+
+    <div id="snackbar-root" class="snackbar-root hidden" aria-hidden="true">
+      <div id="snackbar" class="snackbar" role="status" aria-live="polite">
+        <span id="snackbar-icon" class="snackbar-icon" aria-hidden="true"></span>
+        <span class="snackbar-body">
+          <span id="snackbar-title" class="snackbar-title"></span>
+          <span id="snackbar-message" class="snackbar-message"></span>
+        </span>
+      </div>
     </div>
 
     <div id="popup-root" class="popup-root hidden" aria-hidden="true">
@@ -189,6 +225,22 @@
         <p id="popup-title" class="popup-title"></p>
         <p id="popup-message" class="popup-message"></p>
         <button id="popup-close" type="button" class="primary">OK</button>
+      </div>
+    </div>
+
+    <div id="save-job-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-save-dialog-close></div>
+      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="save-job-title">
+        <p id="save-job-title" class="popup-title">Save job</p>
+        <p class="popup-message">Give this job a name for quick access later. Leave blank to use the auto-generated label.</p>
+        <label class="field popup-field">
+          <span>Job name</span>
+          <input id="save-job-name" type="text" placeholder="e.g. Nightly photo backup" />
+        </label>
+        <div class="popup-actions">
+          <button id="save-job-cancel" type="button" class="secondary">Cancel</button>
+          <button id="save-job-confirm" type="button" class="primary">Save</button>
+        </div>
       </div>
     </div>
 
