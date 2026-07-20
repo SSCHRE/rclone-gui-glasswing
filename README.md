@@ -15,6 +15,7 @@ A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live p
 - **Raw log toggle** — switch to verbose output when you need the details
 - **Stop job** — cancel a running transfer
 - **Refresh remotes** — reload your rclone config with clear success/error feedback
+- **Save jobs** - Save a job for quick re-use later on
 
 Glasswing does **not** store cloud credentials. It uses your existing rclone installation and config on the machine.
 
