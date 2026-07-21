@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   showMainWindow: () => ipcRenderer.invoke("show-main-window"),
   listJobs: () => ipcRenderer.invoke("list-jobs"),
   saveJob: (job) => ipcRenderer.invoke("save-job", job),
+  updateJob: (jobId, job) => ipcRenderer.invoke("update-job", jobId, job),
   deleteJob: (jobId) => ipcRenderer.invoke("delete-job", jobId),
   onJobStarted: (callback) => {
     const listener = (_event, payload) => callback(payload);

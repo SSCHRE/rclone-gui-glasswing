@@ -1,6 +1,6 @@
 {
-  "name": "rclone-gui-glasswing",
-  "version": "1.1.0",
+  "name": "rclone-glasswing-gui",
+  "version": "1.2.0",
   "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
   "main": "electron/main.js",
   "scripts": {
