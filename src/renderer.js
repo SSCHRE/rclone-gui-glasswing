@@ -30,6 +30,7 @@ const elements = {
   dryRun: document.getElementById("dry-run"),
 
   deleteExcluded: document.getElementById("delete-excluded"),
+  extraArgs: document.getElementById("extra-args"),
 
   runJob: document.getElementById("run-job"),
 
@@ -45,11 +46,13 @@ const elements = {
   popupClose: document.getElementById("popup-close"),
   jobHistoryPicker: document.getElementById("job-history-picker"),
   loadJob: document.getElementById("load-job"),
-  runSavedJob: document.getElementById("run-saved-job"),
+  updateJob: document.getElementById("update-job"),
   saveJob: document.getElementById("save-job"),
   deleteJob: document.getElementById("delete-job"),
   jobHistoryMeta: document.getElementById("job-history-meta"),
   jobHistoryCollapsible: document.getElementById("job-history-collapsible"),
+  pathsCollapsible: document.getElementById("paths-collapsible"),
+  remoteInsertCollapsible: document.getElementById("remote-insert-collapsible"),
   jobHistoryCount: document.getElementById("job-history-count"),
   saveJobDialog: document.getElementById("save-job-dialog"),
   saveJobName: document.getElementById("save-job-name"),
@@ -88,7 +91,7 @@ function hideSnackbar() {
     snackbarLeaveTimeout = null;
   }
 
-  elements.snackbar.classList.remove("success", "error", "is-leaving");
+  elements.snackbar.classList.remove("success", "error", "running", "is-leaving");
   elements.snackbarIcon.textContent = "";
   elements.snackbarTitle.textContent = "";
   elements.snackbarMessage.textContent = "";
@@ -99,7 +102,12 @@ function hideSnackbar() {
 function showSnackbar({ title, message, type = "success" }) {
   hideSnackbar();
 
-  elements.snackbarIcon.textContent = type === "success" ? "✓" : "!";
+  const icons = {
+    success: "✓",
+    error: "!",
+    running: "▶",
+  };
+  elements.snackbarIcon.textContent = icons[type] || "•";
   elements.snackbarTitle.textContent = title;
   elements.snackbarMessage.textContent = message;
   elements.snackbar.classList.add(type);
@@ -192,9 +200,10 @@ function setRunning(isRunning) {
   elements.destination.disabled = isRunning;
   elements.dryRun.disabled = isRunning;
   elements.deleteExcluded.disabled = isRunning || elements.operation.value !== "sync";
+  elements.extraArgs.disabled = isRunning;
   elements.jobHistoryPicker.disabled = isRunning;
   elements.loadJob.disabled = isRunning || !elements.jobHistoryPicker.value;
-  elements.runSavedJob.disabled = isRunning || !elements.jobHistoryPicker.value;
+  elements.updateJob.disabled = isRunning || !elements.jobHistoryPicker.value;
   elements.saveJob.disabled = isRunning;
   elements.deleteJob.disabled = isRunning || !elements.jobHistoryPicker.value;
 }
@@ -206,6 +215,7 @@ function getCurrentJobConfig() {
     destination: elements.destination.value.trim(),
     dryRun: elements.dryRun.checked,
     deleteExcluded: elements.deleteExcluded.checked,
+    extraArgs: elements.extraArgs.value.trim(),
   };
 }
 
@@ -264,6 +274,13 @@ function formatJobMeta(entry) {
     parts.push("delete excluded");
   }
 
+  if (entry.extraArgs) {
+    const preview = entry.extraArgs.length > 48
+      ? `${entry.extraArgs.slice(0, 47)}…`
+      : entry.extraArgs;
+    parts.push(`flags: ${preview}`);
+  }
+
   return parts.join(" · ");
 }
 
@@ -276,13 +293,35 @@ function getSelectedHistoryEntry() {
   return jobHistory.find((entry) => entry.id === selectedId) || null;
 }
 
-function applyJobToForm(entry) {
+function savedJobMatchesForm(entry) {
+  if (!entry) {
+    return false;
+  }
+
+  const job = getCurrentJobConfig();
+  return (
+    entry.operation === job.operation &&
+    entry.source === job.source &&
+    entry.destination === job.destination &&
+    entry.dryRun === job.dryRun &&
+    entry.deleteExcluded === job.deleteExcluded &&
+    (entry.extraArgs || "") === job.extraArgs
+  );
+}
+
+function applyJobToForm(entry, { fromSavedJob = false } = {}) {
   elements.operation.value = entry.operation;
   elements.source.value = entry.source;
   elements.destination.value = entry.destination;
   elements.dryRun.checked = entry.dryRun;
   elements.deleteExcluded.checked = entry.deleteExcluded;
+  elements.extraArgs.value = entry.extraArgs || "";
   elements.operation.dispatchEvent(new Event("change"));
+
+  if (fromSavedJob) {
+    elements.pathsCollapsible.open = true;
+    elements.remoteInsertCollapsible.open = false;
+  }
 }
 
 function updateHistoryActions() {
@@ -291,7 +330,7 @@ function updateHistoryActions() {
   const isRunning = activeJobId !== null;
 
   elements.loadJob.disabled = isRunning || !hasSelection;
-  elements.runSavedJob.disabled = isRunning || !hasSelection;
+  elements.updateJob.disabled = isRunning || !hasSelection || savedJobMatchesForm(entry);
   elements.deleteJob.disabled = isRunning || !hasSelection;
   elements.jobHistoryMeta.textContent = entry ? formatJobMeta(entry) : "";
 }
@@ -368,14 +407,15 @@ async function confirmSaveJob() {
         entry.source === job.source &&
         entry.destination === job.destination &&
         entry.dryRun === job.dryRun &&
-        entry.deleteExcluded === job.deleteExcluded,
+        entry.deleteExcluded === job.deleteExcluded &&
+        (entry.extraArgs || "") === job.extraArgs,
     );
 
     fillJobHistoryPicker(savedEntry?.id || "");
     setStatus("Job saved for quick access.", "success", { hideAfter: 4000, ensureVisible: true });
     showPopup({
       title: "Job saved",
-      message: "You can load or run it anytime from Saved & recent jobs.",
+      message: "You can load or update it anytime from Saved jobs.",
       type: "success",
     });
   } catch (error) {
@@ -403,7 +443,11 @@ async function startJobFromForm() {
       destination: job.destination,
     });
 
-    setStatus("Job running.", "running", { hideAfter: 5000, ensureVisible: true });
+    showSnackbar({
+      title: "Job running",
+      message: `${job.operation.charAt(0).toUpperCase() + job.operation.slice(1)} job started.`,
+      type: "running",
+    });
     await refreshJobHistory(elements.jobHistoryPicker.value);
   } catch (error) {
     setRunning(false);
@@ -681,29 +725,56 @@ elements.popupRoot.querySelector("[data-popup-close]").addEventListener("click",
 
 elements.jobHistoryPicker.addEventListener("change", updateHistoryActions);
 
+for (const input of [
+  elements.operation,
+  elements.source,
+  elements.destination,
+  elements.dryRun,
+  elements.deleteExcluded,
+  elements.extraArgs,
+]) {
+  input.addEventListener("input", updateHistoryActions);
+  input.addEventListener("change", updateHistoryActions);
+}
+
 elements.loadJob.addEventListener("click", () => {
   const entry = getSelectedHistoryEntry();
   if (!entry) {
     return;
   }
 
-  applyJobToForm(entry);
+  applyJobToForm(entry, { fromSavedJob: true });
   elements.jobHistoryCollapsible.open = false;
   showSnackbar({
     title: "Job loaded",
-    message: `"${entry.name}" has been loaded!.`,
+    message: `"${entry.name}" has been loaded.`,
     type: "success",
   });
 });
 
-elements.runSavedJob.addEventListener("click", async () => {
+elements.updateJob.addEventListener("click", async () => {
   const entry = getSelectedHistoryEntry();
   if (!entry) {
     return;
   }
 
-  applyJobToForm(entry);
-  await startJobFromForm();
+  const job = getCurrentJobConfig();
+  if (!job.source || !job.destination) {
+    setStatus("Source and destination are required.", "error");
+    return;
+  }
+
+  try {
+    jobHistory = await window.rcloneGui.updateJob(entry.id, job);
+    fillJobHistoryPicker(entry.id);
+    showSnackbar({
+      title: "Job updated",
+      message: `"${entry.name}" now matches the current form.`,
+      type: "success",
+    });
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
 });
 
 elements.saveJob.addEventListener("click", showSaveJobDialog);
@@ -758,7 +829,11 @@ elements.runJob.addEventListener("click", () => {
 
 
 elements.stopJob.addEventListener("click", async () => {
-  setStatus("Job ending.", "running", { hideAfter: 5000, ensureVisible: true });
+  showSnackbar({
+    title: "Stopping job",
+    message: "Waiting for rclone to finish…",
+    type: "running",
+  });
   await window.rcloneGui.stopJob();
 });
 
@@ -798,8 +873,26 @@ window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
 
   outputPanel.finishJob({ success, message, cancelled });
 
-  const tone = cancelled ? "running" : success ? "success" : "error";
-  setStatus("Job ended.", tone, { hideAfter: 5000, ensureVisible: true });
+  if (cancelled) {
+    showSnackbar({
+      title: "Job cancelled",
+      message: message || "The job was stopped.",
+      type: "running",
+    });
+  } else if (success) {
+    showSnackbar({
+      title: "Job completed",
+      message: message || "The job finished successfully.",
+      type: "success",
+    });
+  } else {
+    showSnackbar({
+      title: "Job failed",
+      message: message || "The job ended with errors.",
+      type: "error",
+    });
+  }
+
   void refreshJobHistory(elements.jobHistoryPicker.value);
 });
 

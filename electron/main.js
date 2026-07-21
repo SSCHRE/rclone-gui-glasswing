@@ -51,7 +51,75 @@ function resolveAppIcon() {
 const MAX_JOB_HISTORY = 50;
 
 function jobSignature(job) {
-  return [job.operation, job.source, job.destination, !!job.dryRun, !!job.deleteExcluded].join("\0");
+  return [
+    job.operation,
+    job.source,
+    job.destination,
+    !!job.dryRun,
+    !!job.deleteExcluded,
+    (job.extraArgs || "").trim(),
+  ].join("\0");
+}
+
+function parseExtraArgs(input) {
+  if (!input?.trim()) {
+    return [];
+  }
+
+  const args = [];
+  let current = "";
+  let quote = null;
+
+  for (const char of input.trim()) {
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (quote) {
+    throw new Error("Custom arguments contain an unclosed quote.");
+  }
+
+  if (current) {
+    args.push(current);
+  }
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg.startsWith("-")) {
+      continue;
+    }
+
+    if (index === 0) {
+      throw new Error('Custom arguments must start with a flag (e.g. --drime-upload-cutoff 128M).');
+    }
+
+    if (!args[index - 1].startsWith("-")) {
+      throw new Error(`Invalid custom argument "${arg}".`);
+    }
+  }
+
+  return args;
 }
 
 function truncatePath(value, max = 28) {
@@ -112,6 +180,7 @@ async function upsertJobHistory(job, { name = null } = {}) {
     destination: job.destination,
     dryRun: !!job.dryRun,
     deleteExcluded: !!job.deleteExcluded,
+    extraArgs: (job.extraArgs || "").trim(),
     saved: true,
     createdAt: existing?.createdAt || now,
     lastRunAt: existing?.lastRunAt || null,
@@ -124,6 +193,39 @@ async function upsertJobHistory(job, { name = null } = {}) {
   }
 
   entries.unshift(entry);
+  return writeJobHistory(entries);
+}
+
+async function updateSavedJob(jobId, job) {
+  const entries = await readJobHistory();
+  const index = entries.findIndex((entry) => entry.id === jobId);
+  if (index < 0) {
+    throw new Error("Saved job not found.");
+  }
+
+  const signature = jobSignature(job);
+  const duplicateIndex = entries.findIndex(
+    (entry) => entry.signature === signature && entry.id !== jobId,
+  );
+  if (duplicateIndex >= 0) {
+    throw new Error("Another saved job already uses these settings.");
+  }
+
+  const existing = entries[index];
+  const updated = {
+    ...existing,
+    signature,
+    operation: job.operation,
+    source: job.source.trim(),
+    destination: job.destination.trim(),
+    dryRun: !!job.dryRun,
+    deleteExcluded: !!job.deleteExcluded,
+    extraArgs: (job.extraArgs || "").trim(),
+    saved: true,
+  };
+
+  entries.splice(index, 1);
+  entries.unshift(updated);
   return writeJobHistory(entries);
 }
 
@@ -529,6 +631,8 @@ ipcMain.handle("start-job", async (_event, job) => {
     args.push("--delete-excluded");
   }
 
+  args.push(...parseExtraArgs(job.extraArgs));
+
   const child = spawn("rclone", args, {
     windowsHide: true,
     shell: false,
@@ -544,6 +648,7 @@ ipcMain.handle("start-job", async (_event, job) => {
       destination: job.destination,
       dryRun: job.dryRun,
       deleteExcluded: job.deleteExcluded,
+      extraArgs: job.extraArgs,
     }),
   };
 
@@ -592,7 +697,7 @@ ipcMain.handle("start-job", async (_event, job) => {
       id: jobState.id,
       code,
       success: code === 0 && !cancelled,
-      message: cancelled ? "Job cancelled." : code === 0 ? "Job completed successfully." : "Job failed.",
+      message: cancelled ? "" : code === 0 ? "Job completed successfully." : "Job failed.",
       cancelled,
     });
 
@@ -627,9 +732,33 @@ ipcMain.handle("save-job", async (_event, job) => {
       destination: job.destination.trim(),
       dryRun: !!job.dryRun,
       deleteExcluded: !!job.deleteExcluded,
+      extraArgs: (job.extraArgs || "").trim(),
     },
     { name: job.name },
   );
+});
+
+ipcMain.handle("update-job", async (_event, jobId, job) => {
+  if (!jobId) {
+    throw new Error("Saved job id is required.");
+  }
+
+  if (!job?.source?.trim() || !job?.destination?.trim()) {
+    throw new Error("Source and destination are required.");
+  }
+
+  if (!["sync", "copy", "move"].includes(job.operation)) {
+    throw new Error(`Unsupported operation: ${job.operation}`);
+  }
+
+  return updateSavedJob(jobId, {
+    operation: job.operation,
+    source: job.source.trim(),
+    destination: job.destination.trim(),
+    dryRun: !!job.dryRun,
+    deleteExcluded: !!job.deleteExcluded,
+    extraArgs: (job.extraArgs || "").trim(),
+  });
 });
 
 ipcMain.handle("delete-job", async (_event, jobId) => {

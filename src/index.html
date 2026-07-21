@@ -48,7 +48,7 @@
                 </label>
                 <div class="history-actions">
                   <button id="load-job" type="button" class="secondary" disabled>Load</button>
-                  <button id="run-saved-job" type="button" class="secondary" disabled>Run</button>
+                  <button id="update-job" type="button" class="secondary" disabled>Update</button>
                   <button id="save-job" type="button" class="secondary">Save current</button>
                   <button id="delete-job" type="button" class="secondary" disabled>Remove</button>
                 </div>
@@ -71,27 +71,36 @@
               </div>
             </div>
 
-            <div class="form-section">
-              <label class="field">
-                <span>Source</span>
-                <div class="input-row">
-                  <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
-                  <button type="button" class="secondary" data-target="source">Browse</button>
-                </div>
-              </label>
+            <details class="form-section collapsible" id="paths-collapsible" open>
+              <summary class="collapsible-summary">
+                <span class="collapsible-title">Source &amp; destination</span>
+                <span class="collapsible-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="collapsible-body">
+                <label class="field">
+                  <span>Source</span>
+                  <div class="input-row">
+                    <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
+                    <button type="button" class="secondary" data-target="source">Browse</button>
+                  </div>
+                </label>
 
-              <label class="field">
-                <span>Destination</span>
-                <div class="input-row">
-                  <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
-                  <button type="button" class="secondary" data-target="destination">Browse</button>
-                </div>
-              </label>
-            </div>
+                <label class="field">
+                  <span>Destination</span>
+                  <div class="input-row">
+                    <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
+                    <button type="button" class="secondary" data-target="destination">Browse</button>
+                  </div>
+                </label>
+              </div>
+            </details>
 
-            <div class="form-section">
-              <div class="field">
-                <span>Quick insert remote</span>
+            <details class="form-section collapsible" id="remote-insert-collapsible" open>
+              <summary class="collapsible-summary">
+                <span class="collapsible-title">Quick insert remote</span>
+                <span class="collapsible-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="collapsible-body">
                 <div class="remote-insert">
                   <div class="remote-fields">
                     <select id="remote-picker">
@@ -105,7 +114,28 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </details>
+
+            <details class="form-section collapsible" id="extra-args-collapsible">
+              <summary class="collapsible-summary">
+                <span class="collapsible-title">Extra rclone flags</span>
+                <span class="collapsible-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="collapsible-body">
+                <label class="field">
+                  <span>Custom arguments</span>
+                  <textarea
+                    id="extra-args"
+                    rows="3"
+                    spellcheck="false"
+                    placeholder="--transfers 8 --checkers 16 --filter &quot;- *.tmp&quot;"
+                  ></textarea>
+                </label>
+                <p class="hint">
+                  Optional flags appended to the rclone command. Quote values that contain spaces.
+                </p>
+              </div>
+            </details>
 
             <div class="form-section">
               <div class="options">
@@ -194,13 +224,16 @@
               </div>
             </div>
 
-            <div class="activity-section">
-              <div class="activity-header">
-                <h3>Activity</h3>
-                <span class="activity-count" id="activity-count">0 events</span>
+            <details class="activity-section collapsible" id="activity-collapsible" open>
+              <summary class="collapsible-summary">
+                <span class="collapsible-title">Activity</span>
+                <span id="activity-count" class="activity-count collapsible-badge">0 events</span>
+                <span class="collapsible-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="collapsible-body activity-collapsible-body">
+                <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
               </div>
-              <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
-            </div>
+            </details>
           </div>
 
           <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
