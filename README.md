@@ -96,7 +96,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 
 ## Roadmap
 - [x] Job history
-- [ ] Custom rclone arguments (priority)
+- [x] Custom rclone arguments
 - [ ] Remote management UI
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
