@@ -434,10 +434,10 @@ function createWindow() {
   }
 }
 
-function runRclone(args) {
+function runRclone(args, { interactive = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
-      windowsHide: true,
+      windowsHide: !interactive,
       shell: false,
     });
 
@@ -460,6 +460,33 @@ function runRclone(args) {
       resolve({ code, stdout, stderr });
     });
   });
+}
+
+function parseConfigDump(stdout) {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  return JSON.parse(trimmed);
+}
+
+function getRemoteEntriesFromDump(config) {
+  return Object.entries(config)
+    .map(([name, settings]) => ({
+      name,
+      type: settings?.type || "unknown",
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function readRemoteEntries() {
+  const result = await runRclone(["config", "dump"]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to read rclone config");
+  }
+
+  return getRemoteEntriesFromDump(parseConfigDump(result.stdout));
 }
 
 function send(channel, payload) {
@@ -578,16 +605,134 @@ ipcMain.handle("get-rclone-version", async () => {
 });
 
 ipcMain.handle("list-remotes", async () => {
-  const result = await runRclone(["listremotes"]);
+  const entries = await readRemoteEntries();
+  return entries.map((entry) => entry.name);
+});
+
+ipcMain.handle("list-remote-entries", async () => readRemoteEntries());
+
+ipcMain.handle("get-config-providers", async () => {
+  const result = await runRclone(["config", "providers"]);
   if (result.code !== 0) {
-    throw new Error(result.stderr || "Failed to list remotes");
+    throw new Error(result.stderr || "Failed to load rclone providers");
   }
 
-  return result.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/:$/, ""));
+  return JSON.parse(result.stdout);
+});
+
+ipcMain.handle("get-remote-redacted", async (_event, name) => {
+  if (!name?.trim()) {
+    throw new Error("Remote name is required.");
+  }
+
+  const result = await runRclone(["config", "redacted", name.trim()]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || `Failed to load remote "${name}"`);
+  }
+
+  return result.stdout.trim();
+});
+
+ipcMain.handle("delete-remote", async (_event, name) => {
+  if (!name?.trim()) {
+    throw new Error("Remote name is required.");
+  }
+
+  const result = await runRclone(["config", "delete", name.trim()]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || `Failed to delete remote "${name}"`);
+  }
+
+  return readRemoteEntries();
+});
+
+ipcMain.handle("create-remote", async (_event, payload) => {
+  const name = payload?.name?.trim();
+  const type = payload?.type?.trim();
+  const options = payload?.options || {};
+
+  if (!name || !type) {
+    throw new Error("Remote name and provider type are required.");
+  }
+
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) {
+    throw new Error("Remote name must start with a letter or number and contain only letters, numbers, underscore, or hyphen.");
+  }
+
+  const args = ["config", "create", name, type];
+  for (const [key, value] of Object.entries(options)) {
+    if (value === "" || value == null) {
+      continue;
+    }
+
+    if (typeof value === "boolean") {
+      args.push(`${key}=${value ? "true" : "false"}`);
+      continue;
+    }
+
+    args.push(`${key}=${String(value)}`);
+  }
+
+  const result = await runRclone(args);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to create remote "${name}"`);
+  }
+
+  return readRemoteEntries();
+});
+
+ipcMain.handle("authorize-provider", async (_event, provider) => {
+  if (!provider?.trim()) {
+    throw new Error("Provider type is required.");
+  }
+
+  const result = await runRclone(["authorize", provider.trim()], { interactive: true });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Authorization failed or was cancelled.");
+  }
+
+  return result.stdout.trim();
+});
+
+ipcMain.handle("reconnect-remote", async (_event, name) => {
+  if (!name?.trim()) {
+    throw new Error("Remote name is required.");
+  }
+
+  const result = await runRclone(["config", "reconnect", name.trim()], { interactive: true });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || `Failed to reconnect remote "${name}"`);
+  }
+
+  return result.stdout.trim();
+});
+
+ipcMain.handle("open-rclone-config", async () => {
+  if (process.platform === "win32") {
+    const child = spawn("cmd.exe", ["/c", "start", "", "cmd", "/k", "rclone", "config"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+    return;
+  }
+
+  const child = spawn("rclone", ["config"], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+  child.unref();
+});
+
+ipcMain.handle("get-config-file-path", async () => {
+  const result = await runRclone(["config", "file"]);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to locate rclone config file");
+  }
+
+  return result.stdout.trim();
 });
 
 ipcMain.handle("pick-folder", async () => {

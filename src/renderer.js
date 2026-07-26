@@ -37,6 +37,7 @@ const elements = {
   stopJob: document.getElementById("stop-job"),
 
   refreshRemotes: document.getElementById("refresh-remotes"),
+  manageRemotes: document.getElementById("manage-remotes"),
 
   status: document.getElementById("status"),
   popupRoot: document.getElementById("popup-root"),
@@ -206,6 +207,9 @@ function setRunning(isRunning) {
   elements.updateJob.disabled = isRunning || !elements.jobHistoryPicker.value;
   elements.saveJob.disabled = isRunning;
   elements.deleteJob.disabled = isRunning || !elements.jobHistoryPicker.value;
+  if (elements.manageRemotes) {
+    elements.manageRemotes.disabled = isRunning;
+  }
 }
 
 function getCurrentJobConfig() {
@@ -571,12 +575,11 @@ async function syncMinimumWindowSize(forceSnap = false) {
 
 async function loadRemotes({ showFeedback = false } = {}) {
   if (!window.rcloneGui) {
-    const message = "App bridge unavailable.";
-    if (showFeedback) {
-      showPopup({ title: "Reload failed", message, type: "error", autoClose: false });
-    } else {
-      setStatus(message, "error");
-    }
+    showSnackbar({
+      title: "Reload failed",
+      message: "App bridge unavailable.",
+      type: "error",
+    });
     return;
   }
 
@@ -588,26 +591,17 @@ async function loadRemotes({ showFeedback = false } = {}) {
 
     const countLabel = `${remotes.length} remote${remotes.length === 1 ? "" : "s"}`;
 
-    if (showFeedback) {
-      showPopup({
-        title: "Remotes reloaded",
-        message: `Successfully loaded ${countLabel}.`,
-        type: "success",
-      });
-    } else {
-      setStatus(`Loaded ${countLabel}.`, "", { hideAfter: 5000 });
-    }
+    showSnackbar({
+      title: showFeedback ? "Remotes reloaded" : "Remotes loaded",
+      message: `Successfully loaded ${countLabel}.`,
+      type: "success",
+    });
   } catch (error) {
-    if (showFeedback) {
-      showPopup({
-        title: "Reload failed",
-        message: error.message || "Could not list remotes.",
-        type: "error",
-        autoClose: false,
-      });
-    } else {
-      setStatus(`Could not list remotes: ${error.message}`, "error");
-    }
+    showSnackbar({
+      title: "Reload failed",
+      message: error.message || "Could not list remotes.",
+      type: "error",
+    });
   } finally {
     elements.refreshRemotes.disabled = false;
   }
@@ -720,6 +714,15 @@ document.getElementById("insert-remote-dest").addEventListener("click", () => {
 
 
 elements.refreshRemotes.addEventListener("click", () => loadRemotes({ showFeedback: true }));
+
+elements.manageRemotes?.addEventListener("click", () => {
+  window.RemoteManager?.open({
+    onChanged: async (names) => {
+      remotes = names;
+      fillRemotePicker();
+    },
+  });
+});
 elements.popupClose.addEventListener("click", hidePopup);
 elements.popupRoot.querySelector("[data-popup-close]").addEventListener("click", hidePopup);
 
