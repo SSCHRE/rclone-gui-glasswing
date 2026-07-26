@@ -148,6 +148,13 @@ body {
   animation: fadeDown 0.65s var(--ease-out) 0.05s both;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -334,7 +341,8 @@ body {
   margin-bottom: 12px;
 }
 
-.field > span {
+.field > span,
+.field > .field-label {
   font-size: 0.86rem;
   color: var(--muted);
   font-weight: 600;
@@ -1361,6 +1369,372 @@ button:disabled {
 
 .popup-card .primary {
   width: 100%;
+}
+
+.popup-card-remote-manager {
+  width: min(920px, calc(100vw - 40px));
+  max-height: min(86vh, 820px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.popup-card-remote-manager .popup-title {
+  margin: 0;
+}
+
+.remote-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(120, 145, 180, 0.12);
+  flex-shrink: 0;
+}
+
+.remote-manager-config-path {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(120, 145, 180, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.icon-button:hover {
+  color: var(--text);
+  border-color: rgba(92, 176, 255, 0.28);
+  background: rgba(92, 176, 255, 0.08);
+}
+
+.remote-manager-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.remote-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-right: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(5, 8, 12, 0.35);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.remote-list-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.remote-list-toolbar .primary,
+.remote-list-toolbar .secondary {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 10px;
+}
+
+.remote-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.remote-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.remote-list-item:hover {
+  border-color: rgba(92, 176, 255, 0.24);
+  background: rgba(92, 176, 255, 0.06);
+}
+
+.remote-list-item.is-selected {
+  border-color: rgba(92, 176, 255, 0.34);
+  background: rgba(92, 176, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(92, 176, 255, 0.08);
+}
+
+.remote-list-item-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-list-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.remote-type-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  background: rgba(92, 176, 255, 0.1);
+  border: 1px solid rgba(92, 176, 255, 0.16);
+}
+
+.remote-detail-panel {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.remote-panel-empty,
+.remote-panel-detail,
+.remote-panel-add {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 176, 255, 0.35) transparent;
+  padding: 18px 20px;
+}
+
+.remote-panel-empty::-webkit-scrollbar,
+.remote-panel-detail::-webkit-scrollbar,
+.remote-panel-add::-webkit-scrollbar {
+  width: 10px;
+}
+
+.remote-panel-empty::-webkit-scrollbar-track,
+.remote-panel-detail::-webkit-scrollbar-track,
+.remote-panel-add::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.remote-panel-empty::-webkit-scrollbar-thumb,
+.remote-panel-detail::-webkit-scrollbar-thumb,
+.remote-panel-add::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(92, 176, 255, 0.28);
+  background-clip: padding-box;
+}
+
+.remote-panel-empty::-webkit-scrollbar-thumb:hover,
+.remote-panel-detail::-webkit-scrollbar-thumb:hover,
+.remote-panel-add::-webkit-scrollbar-thumb:hover {
+  background: rgba(92, 176, 255, 0.42);
+  background-clip: padding-box;
+}
+
+.remote-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  color: var(--muted);
+}
+
+.remote-panel-empty-icon {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  border-radius: 20px;
+  font-size: 2rem;
+  color: var(--accent-strong);
+  background: rgba(92, 176, 255, 0.08);
+  border: 1px dashed rgba(92, 176, 255, 0.18);
+}
+
+.remote-panel-empty-title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.remote-panel-empty-text {
+  margin: 0;
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+.remote-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.remote-detail-name {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.remote-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.remote-detail-actions .secondary,
+.remote-detail-actions .danger {
+  width: auto;
+  min-width: 96px;
+}
+
+.remote-config-block {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(4, 6, 10, 0.72);
+  color: #d7e3f4;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.remote-add-title {
+  margin: 0 0 16px;
+  font-size: 1.05rem;
+}
+
+.remote-provider-description {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+#remote-provider-select {
+  min-height: 180px;
+}
+
+.remote-provider-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.remote-option-field > .remote-option-help {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: rgba(147, 161, 182, 0.92);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.remote-advanced-toggle {
+  margin-bottom: 12px;
+}
+
+.remote-create-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--danger);
+  background: rgba(255, 123, 123, 0.08);
+  border: 1px solid rgba(255, 123, 123, 0.16);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.remote-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.remote-add-actions .primary,
+.remote-add-actions .secondary,
+.remote-add-actions .danger {
+  width: auto;
+  min-width: 112px;
+}
+
+.remote-manager-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid rgba(120, 145, 180, 0.12);
+  flex-shrink: 0;
+}
+
+.remote-manager-footer .secondary {
+  width: auto;
+  min-width: 112px;
+}
+
+@media (max-width: 760px) {
+  .remote-manager-body {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-list-panel {
+    border-right: none;
+    border-bottom: 1px solid rgba(120, 145, 180, 0.12);
+    max-height: 220px;
+  }
 }
 
 .snackbar-root {

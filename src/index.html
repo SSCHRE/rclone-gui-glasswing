@@ -24,7 +24,10 @@
             </p>
           </div>
         </div>
-        <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
+        <div class="header-actions">
+          <button id="manage-remotes" type="button" class="secondary">Manage remotes</button>
+          <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
+        </div>
       </header>
 
       <div class="app-body">
@@ -277,7 +280,84 @@
       </div>
     </div>
 
+    <div id="remote-manager-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-remote-manager-close></div>
+      <div class="popup-card popup-card-remote-manager" role="dialog" aria-modal="true" aria-labelledby="remote-manager-title">
+        <div class="remote-manager-header">
+          <div>
+            <h2 id="remote-manager-title" class="popup-title remote-manager-title">Remote manager</h2>
+            <p id="remote-manager-config-path" class="remote-manager-config-path"></p>
+          </div>
+          <button id="remote-manager-close" type="button" class="icon-button" aria-label="Close remote manager">×</button>
+        </div>
+
+        <div class="remote-manager-body">
+          <aside class="remote-list-panel">
+            <div class="remote-list-toolbar">
+              <button id="remote-add-btn" type="button" class="primary">Add remote</button>
+              <button id="remote-refresh-btn" type="button" class="secondary">Refresh</button>
+            </div>
+            <ul id="remote-list" class="remote-list"></ul>
+            <p id="remote-list-empty" class="remote-list-empty hidden">No remotes configured yet.</p>
+          </aside>
+
+          <section class="remote-detail-panel">
+            <div id="remote-panel-empty" class="remote-panel-empty">
+              <div class="remote-panel-empty-icon" aria-hidden="true">☁</div>
+              <p class="remote-panel-empty-title">Select a remote</p>
+              <p class="remote-panel-empty-text">Pick a remote from the list to view its settings, or add a new one.</p>
+            </div>
+
+            <div id="remote-panel-detail" class="remote-panel-detail hidden">
+              <div class="remote-detail-header">
+                <div>
+                  <h3 id="remote-detail-name" class="remote-detail-name"></h3>
+                  <span id="remote-detail-type" class="remote-type-badge"></span>
+                </div>
+                <div class="remote-detail-actions">
+                  <button id="remote-reconnect-btn" type="button" class="secondary">Reconnect</button>
+                  <button id="remote-delete-btn" type="button" class="danger">Delete</button>
+                </div>
+              </div>
+              <pre id="remote-detail-config" class="remote-config-block"></pre>
+            </div>
+
+            <div id="remote-panel-add" class="remote-panel-add hidden">
+              <h3 class="remote-add-title">Add remote</h3>
+              <label class="field">
+                <span>Remote name</span>
+                <input id="remote-create-name" type="text" placeholder="e.g. mydrive" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Provider</span>
+                <input id="remote-provider-search" type="search" placeholder="Search providers…" autocomplete="off" />
+                <select id="remote-provider-select" size="8"></select>
+              </label>
+              <p id="remote-provider-description" class="remote-provider-description"></p>
+              <div id="remote-provider-form" class="remote-provider-form"></div>
+              <label class="checkbox remote-advanced-toggle">
+                <input id="remote-show-advanced" type="checkbox" />
+                Show advanced options
+              </label>
+              <p id="remote-create-error" class="remote-create-error hidden"></p>
+              <div class="remote-add-actions">
+                <button id="remote-authorize-btn" type="button" class="secondary hidden">Authorize in browser</button>
+                <button id="remote-create-cancel" type="button" class="secondary">Cancel</button>
+                <button id="remote-create-submit" type="button" class="primary">Create remote</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="remote-manager-footer">
+          <button id="remote-open-wizard-btn" type="button" class="secondary">Open rclone config wizard</button>
+          <button type="button" class="secondary" data-remote-manager-close>Close</button>
+        </div>
+      </div>
+    </div>
+
     <script src="job-output.js"></script>
+    <script src="remote-manager.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>
