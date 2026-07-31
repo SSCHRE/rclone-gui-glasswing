@@ -21,8 +21,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^35.7.5",
-    "electron-builder": "^25.1.8",
+    "electron": "35.7.5",
+    "electron-builder": "26.15.3",
     "png-to-ico": "^2.1.8"
   },
   "build": {
