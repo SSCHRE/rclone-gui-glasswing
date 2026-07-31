@@ -30,6 +30,7 @@ function hasCommand(command, args = ["version"]) {
 }
 
 function buildNative() {
+  run("npm", ["run", "icons"]);
   run("npx", ["electron-builder", "--linux", ...targets, "--publish", "never"]);
 }
 
