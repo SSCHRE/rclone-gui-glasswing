@@ -1,7 +1,7 @@
 {
   "name": "rclone-glasswing-gui",
   "version": "1.3.0",
-  "desktopName": "glasswing-rclone",
+  "desktopName": "com.rclone.gui.glasswing",
   "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
   "main": "electron/main.js",
   "scripts": {
@@ -63,8 +63,8 @@
       "runAfterFinish": false
     },
     "linux": {
-      "icon": "build/icons",
-      "executableName": "glasswing-rclone",
+      "icon": "build/icon.png",
+      "executableName": "com.rclone.gui.glasswing",
       "category": "Utility",
       "synopsis": "Rclone GUI with live job dashboard",
       "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
@@ -76,9 +76,10 @@
       "desktop": {
         "entry": {
           "Name": "Glasswing Rclone",
+          "GenericName": "Rclone GUI",
           "Comment": "Rclone GUI with live job dashboard",
           "Categories": "Utility;",
-          "StartupWMClass": "glasswing-rclone"
+          "StartupWMClass": "Glasswing Rclone"
         }
       }
     },
@@ -86,6 +87,10 @@
       "packageName": "glasswing-rclone",
       "artifactName": "glasswing-rclone_${version}_${arch}.${ext}",
       "packageCategory": "utils",
+      "afterInstall": "build/linux/deb-after-install.sh",
+      "fpm": [
+        "build/linux/com.rclone.gui.glasswing.metainfo.xml=/usr/share/metainfo/com.rclone.gui.glasswing.metainfo.xml"
+      ],
       "recommends": [
         "rclone"
       ]
@@ -98,7 +103,8 @@
       "src/**/*",
       "build/icon.png",
       "build/icon.ico",
-      "build/icons/**/*"
+      "build/linux/com.rclone.gui.glasswing.metainfo.xml",
+      "build/linux/deb-after-install.sh"
     ]
   },
   "allowScripts": {
