@@ -79,7 +79,8 @@
           "Name": "Glasswing Rclone",
           "GenericName": "Rclone GUI",
           "Comment": "Rclone GUI with live job dashboard",
-          "Categories": "Utility;"
+          "Categories": "Utility;",
+          "StartupWMClass": "com.rclone.gui.glasswing"
         }
       }
     },

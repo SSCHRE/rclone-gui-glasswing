@@ -5,8 +5,15 @@ const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
 
+const APP_ID = "com.rclone.gui.glasswing";
+
 if (process.platform === "win32") {
-  app.setAppUserModelId("com.rclone.gui.glasswing");
+  app.setAppUserModelId(APP_ID);
+} else if (process.platform === "linux") {
+  // Match /usr/share/applications/com.rclone.gui.glasswing.desktop so GNOME
+  // can associate the running window with Icon= and StartupWMClass from that entry.
+  app.setDesktopName(APP_ID);
+  app.commandLine.appendSwitch("class", APP_ID);
 }
 
 app.setName("Glasswing Rclone");
@@ -23,14 +30,20 @@ const SCREEN_MARGIN = 20;
 let contentChrome = { width: 16, height: 39 };
 
 function resolveAppIconPath() {
-  const candidates = [
-    path.join(__dirname, "icons", "icon.ico"),
+  const pngCandidates = [
     path.join(__dirname, "icons", "icon.png"),
-    path.join(__dirname, "..", "build", "icon.ico"),
     path.join(__dirname, "..", "build", "icon.png"),
-    path.join(process.resourcesPath, "icon.ico"),
     path.join(process.resourcesPath, "icon.png"),
   ];
+  const icoCandidates = [
+    path.join(__dirname, "icons", "icon.ico"),
+    path.join(__dirname, "..", "build", "icon.ico"),
+    path.join(process.resourcesPath, "icon.ico"),
+  ];
+  const candidates =
+    process.platform === "win32"
+      ? [...icoCandidates, ...pngCandidates]
+      : [...pngCandidates, ...icoCandidates];
 
   for (const iconPath of candidates) {
     if (fsSync.existsSync(iconPath)) {
