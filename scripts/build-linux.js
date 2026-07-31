@@ -18,7 +18,10 @@ function run(command, args) {
     process.exit(1);
   }
 
-  process.exit(result.status ?? 1);
+  const code = result.status ?? 1;
+  if (code !== 0) {
+    process.exit(code);
+  }
 }
 
 function hasCommand(command, args = ["version"]) {
