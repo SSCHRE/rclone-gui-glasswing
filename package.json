@@ -1,6 +1,7 @@
 {
   "name": "rclone-glasswing-gui",
   "version": "1.3.0",
+  "desktopName": "glasswing-rclone",
   "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
   "main": "electron/main.js",
   "scripts": {
@@ -62,7 +63,8 @@
       "runAfterFinish": false
     },
     "linux": {
-      "icon": "build/icon.png",
+      "icon": "build/icons",
+      "executableName": "glasswing-rclone",
       "category": "Utility",
       "synopsis": "Rclone GUI with live job dashboard",
       "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
@@ -75,11 +77,14 @@
         "entry": {
           "Name": "Glasswing Rclone",
           "Comment": "Rclone GUI with live job dashboard",
-          "Categories": "Utility;"
+          "Categories": "Utility;",
+          "StartupWMClass": "glasswing-rclone"
         }
       }
     },
     "deb": {
+      "packageName": "glasswing-rclone",
+      "artifactName": "glasswing-rclone_${version}_${arch}.${ext}",
       "packageCategory": "utils",
       "recommends": [
         "rclone"
@@ -92,7 +97,8 @@
       "electron/**/*",
       "src/**/*",
       "build/icon.png",
-      "build/icon.ico"
+      "build/icon.ico",
+      "build/icons/**/*"
     ]
   },
   "allowScripts": {

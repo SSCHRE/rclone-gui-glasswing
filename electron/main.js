@@ -9,6 +9,8 @@ if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
 }
 
+app.setName("Glasswing Rclone");
+
 let mainWindow = null;
 let activeJob = null;
 

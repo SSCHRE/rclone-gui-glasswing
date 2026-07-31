@@ -13,6 +13,19 @@ const pngTargets = [
   path.join(root, "electron", "icons", "icon.png"),
 ];
 
+const linuxIconSizes = [16, 32, 48, 64, 128, 256, 512];
+const iconsDir = path.join(root, "build", "icons");
+
+async function writeLinuxIcons() {
+  await fs.mkdir(iconsDir, { recursive: true });
+
+  for (const size of linuxIconSizes) {
+    const target = path.join(iconsDir, `${size}x${size}.png`);
+    await fs.copyFile(sourcePng, target);
+    console.log(`Wrote ${target}`);
+  }
+}
+
 async function main() {
   const ico = await pngToIco(sourcePng);
 
@@ -27,6 +40,8 @@ async function main() {
     await fs.copyFile(sourcePng, target);
     console.log(`Wrote ${target}`);
   }
+
+  await writeLinuxIcons();
 }
 
 main().catch((error) => {
