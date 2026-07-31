@@ -7,8 +7,14 @@
     "icons": "node scripts/generate-icons.js",
     "prebuild": "npm run icons",
     "start": "electron .",
-    "build": "electron-builder --win portable",
-    "build:dir": "electron-builder --win dir"
+    "build": "electron-builder --win portable nsis --publish never",
+    "build:portable": "electron-builder --win portable --publish never",
+    "build:setup": "electron-builder --win nsis --publish never",
+    "build:dir": "electron-builder --win dir --publish never",
+    "build:linux": "electron-builder --linux AppImage deb --publish never",
+    "build:linux:appimage": "electron-builder --linux AppImage --publish never",
+    "build:linux:deb": "electron-builder --linux deb --publish never",
+    "build:linux:dir": "electron-builder --linux dir --publish never"
   },
   "author": "",
   "license": "MIT",
@@ -52,6 +58,31 @@
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
       "runAfterFinish": false
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "synopsis": "Rclone GUI with live job dashboard",
+      "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
+      "maintainer": "Glasswing",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "desktop": {
+        "Name": "Glasswing Rclone",
+        "Comment": "Rclone GUI with live job dashboard",
+        "Categories": "Utility;"
+      }
+    },
+    "deb": {
+      "packageCategory": "utils",
+      "recommends": [
+        "rclone"
+      ]
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "files": [
       "electron/**/*",

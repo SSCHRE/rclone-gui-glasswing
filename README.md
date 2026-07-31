@@ -2,7 +2,7 @@
 
 A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live progress dashboard, dry-run support, and a clean glass-style UI. Built with Electron; wraps the `rclone` CLI you already have configured.
 
-> Windows portable builds are supported today. macOS and Linux builds are planned.
+> Windows portable/installer builds and Linux AppImage/deb packages are supported. macOS builds are planned.
 
 ## Features
 
@@ -50,13 +50,30 @@ npm approve-scripts electron
 npm install
 ```
 
-## Build (Windows portable)
+## Build
+
+### Windows
 
 ```bash
-npm run build
+npm run build              # portable exe + setup installer
+npm run build:portable     # portable exe only
+npm run build:setup        # NSIS setup installer only
 ```
 
-The portable executable is written to `dist/`.
+### Linux (AppImage / `.deb`)
+
+Run these on Linux or WSL — AppImage and `.deb` packages are built on a Linux host:
+
+```bash
+npm run build:linux            # AppImage + .deb
+npm run build:linux:appimage   # AppImage only
+npm run build:linux:deb        # .deb only
+npm run build:linux:dir        # unpacked folder (quick test)
+```
+
+Install rclone separately (`sudo apt install rclone`, or see [rclone.org/install](https://rclone.org/install/)). The `.deb` package recommends `rclone` but does not require it from apt.
+
+Artifacts are written to `dist/`.
 
 ## Usage
 
@@ -99,7 +116,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Custom rclone arguments
 - [x] Remote management UI
 - [ ] macOS build (`.dmg` / `.app`)
-- [ ] Linux build (AppImage / `.deb`)
+- [x] Linux build (AppImage / `.deb`)
 
 
 # Screenshots
