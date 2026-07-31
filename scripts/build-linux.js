@@ -1,7 +1,7 @@
 const { spawnSync } = require("child_process");
 const os = require("os");
 
-const BUILDER_IMAGE = "electronuserland/builder:22";
+const BUILDER_IMAGE = "electronuserland/builder:24";
 const targets = process.argv.slice(2);
 if (targets.length === 0) {
   targets.push("AppImage", "deb");
