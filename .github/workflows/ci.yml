@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, linux-build]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -33,6 +34,8 @@ jobs:
           node --check src/renderer.js
           node --check src/job-output.js
           node --check src/remote-manager.js
+          node --check scripts/build-linux.js
+          node --check scripts/build-linux-wsl.js
           node --check scripts/generate-icons.js
 
       - name: Generate icons

@@ -11,10 +11,12 @@
     "build:portable": "electron-builder --win portable --publish never",
     "build:setup": "electron-builder --win nsis --publish never",
     "build:dir": "electron-builder --win dir --publish never",
-    "build:linux": "electron-builder --linux AppImage deb --publish never",
-    "build:linux:appimage": "electron-builder --linux AppImage --publish never",
-    "build:linux:deb": "electron-builder --linux deb --publish never",
-    "build:linux:dir": "electron-builder --linux dir --publish never"
+    "build:linux": "node scripts/build-linux.js AppImage deb",
+    "build:linux:appimage": "node scripts/build-linux.js AppImage",
+    "build:linux:deb": "node scripts/build-linux.js deb",
+    "build:linux:dir": "node scripts/build-linux.js dir",
+    "build:linux:wsl": "node scripts/build-linux-wsl.js AppImage deb",
+    "build:linux:native": "electron-builder --linux AppImage deb --publish never"
   },
   "author": "",
   "license": "MIT",
