@@ -64,7 +64,8 @@
     },
     "linux": {
       "icon": "build/icon.png",
-      "executableName": "com.rclone.gui.glasswing",
+      "executableName": "glasswing-rclone",
+      "syncDesktopName": true,
       "category": "Utility",
       "synopsis": "Rclone GUI with live job dashboard",
       "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
@@ -78,8 +79,7 @@
           "Name": "Glasswing Rclone",
           "GenericName": "Rclone GUI",
           "Comment": "Rclone GUI with live job dashboard",
-          "Categories": "Utility;",
-          "StartupWMClass": "Glasswing Rclone"
+          "Categories": "Utility;"
         }
       }
     },

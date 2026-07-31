@@ -9,12 +9,12 @@
     <p>Glasswing is an Electron-based Rclone GUI with a live job dashboard and modern UI.</p>
   </description>
   <launchable type="desktop-id">com.rclone.gui.glasswing.desktop</launchable>
-  <icon type="stock">com.rclone.gui.glasswing</icon>
+  <icon type="stock">glasswing-rclone</icon>
   <categories>
     <category>Utility</category>
   </categories>
   <provides>
-    <binary>com.rclone.gui.glasswing</binary>
+    <binary>glasswing-rclone</binary>
   </provides>
   <releases>
     <release version="1.3.0" date="2026-07-31"/>
