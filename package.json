@@ -72,9 +72,11 @@
         "deb"
       ],
       "desktop": {
-        "Name": "Glasswing Rclone",
-        "Comment": "Rclone GUI with live job dashboard",
-        "Categories": "Utility;"
+        "entry": {
+          "Name": "Glasswing Rclone",
+          "Comment": "Rclone GUI with live job dashboard",
+          "Categories": "Utility;"
+        }
       }
     },
     "deb": {
