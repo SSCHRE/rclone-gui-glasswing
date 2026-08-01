@@ -9,11 +9,6 @@ const APP_ID = "com.rclone.gui.glasswing";
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
-} else if (process.platform === "linux") {
-  // Match /usr/share/applications/com.rclone.gui.glasswing.desktop so GNOME
-  // can associate the running window with Icon= and StartupWMClass from that entry.
-  app.setDesktopName(APP_ID);
-  app.commandLine.appendSwitch("class", APP_ID);
 }
 
 app.setName("Glasswing Rclone");

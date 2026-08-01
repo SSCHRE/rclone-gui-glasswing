@@ -88,7 +88,7 @@ async function writeAppStreamMetainfo(version, executable) {
   <description>
     <p>Glasswing is an Electron-based Rclone GUI with a live job dashboard and modern UI.</p>
   </description>
-  <launchable type="desktop-id">${appId}.desktop</launchable>
+  <launchable type="desktop-id">${executable}.desktop</launchable>
   <icon type="stock">${executable}</icon>
   <categories>
     <category>Utility</category>
