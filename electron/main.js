@@ -407,6 +407,7 @@ function fitWindowToContent(window, { width, height } = {}, snap = false) {
 
 function createWindow() {
   const initialSize = getInitialContentSize();
+  const icon = resolveAppIcon();
 
   mainWindow = new BrowserWindow({
     width: initialSize.width,
@@ -416,7 +417,7 @@ function createWindow() {
     useContentSize: true,
     center: true,
     show: false,
-    icon: resolveAppIcon(),
+    icon,
     title: `Rclone GUI v${app.getVersion()}`,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -425,24 +426,54 @@ function createWindow() {
     },
   });
 
+  mainWindow.once("ready-to-show", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    ensureWindowOnScreen(mainWindow);
+    mainWindow.show();
+  });
+
   mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
   cacheContentChrome(mainWindow);
 
-  const icon = resolveAppIcon();
   if (icon) {
     mainWindow.setIcon(icon);
   }
 }
 
-function runRclone(args, { interactive = false } = {}) {
+function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
       windowsHide: !interactive,
       shell: false,
+      env: process.env,
     });
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timer = null;
+
+    const finish = (handler) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      handler();
+    };
+
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        finish(() => {
+          child.kill();
+          reject(new Error(`rclone ${args[0] || ""} timed out after ${timeoutMs}ms`));
+        });
+      }, timeoutMs);
+    }
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -453,11 +484,11 @@ function runRclone(args, { interactive = false } = {}) {
     });
 
     child.on("error", (error) => {
-      reject(error);
+      finish(() => reject(error));
     });
 
     child.on("close", (code) => {
-      resolve({ code, stdout, stderr });
+      finish(() => resolve({ code, stdout, stderr }));
     });
   });
 }
@@ -481,12 +512,24 @@ function getRemoteEntriesFromDump(config) {
 }
 
 async function readRemoteEntries() {
-  const result = await runRclone(["config", "dump"]);
+  const result = await runRclone(["config", "dump"], { timeoutMs: 30000 });
   if (result.code !== 0) {
     throw new Error(result.stderr || "Failed to read rclone config");
   }
 
   return getRemoteEntriesFromDump(parseConfigDump(result.stdout));
+}
+
+async function listRemoteNames() {
+  const result = await runRclone(["listremotes"], { timeoutMs: 15000 });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to list remotes");
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/:$/, ""))
+    .filter(Boolean);
 }
 
 function send(channel, payload) {
@@ -595,7 +638,7 @@ ipcMain.handle("get-work-area-limits", async () => {
 });
 
 ipcMain.handle("get-rclone-version", async () => {
-  const result = await runRclone(["version"]);
+  const result = await runRclone(["version"], { timeoutMs: 15000 });
   if (result.code !== 0) {
     throw new Error(result.stderr || "Failed to run rclone version");
   }
@@ -604,12 +647,63 @@ ipcMain.handle("get-rclone-version", async () => {
   return firstLine || "rclone (unknown version)";
 });
 
-ipcMain.handle("list-remotes", async () => {
-  const entries = await readRemoteEntries();
-  return entries.map((entry) => entry.name);
-});
+ipcMain.handle("list-remotes", async () => listRemoteNames());
 
 ipcMain.handle("list-remote-entries", async () => readRemoteEntries());
+
+function normalizeRemoteBrowsePath(remotePath) {
+  const raw = String(remotePath || "").trim();
+  const match = /^([A-Za-z0-9][A-Za-z0-9_-]*):(.*)$/.exec(raw);
+  if (!match) {
+    throw new Error('Path must look like "remote:" or "remote:folder/path".');
+  }
+
+  const remote = match[1];
+  const subPath = match[2].replace(/^\/+/, "").replace(/\\/g, "/");
+  return subPath ? `${remote}:${subPath}` : `${remote}:`;
+}
+
+ipcMain.handle("list-remote-path", async (_event, remotePath) => {
+  const target = normalizeRemoteBrowsePath(remotePath);
+  const result = await runRclone(
+    [
+      "lsjson",
+      target,
+      "--max-depth",
+      "1",
+    ],
+    { timeoutMs: 120000 },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to list "${target}"`);
+  }
+
+  const trimmed = result.stdout.trim();
+  const entries = trimmed ? JSON.parse(trimmed) : [];
+  if (!Array.isArray(entries)) {
+    throw new Error("Unexpected rclone lsjson response.");
+  }
+
+  const mapped = entries
+    .map((entry) => ({
+      name: entry.Name || entry.Path || "",
+      path: entry.Path || entry.Name || "",
+      size: typeof entry.Size === "number" ? entry.Size : null,
+      modTime: entry.ModTime || "",
+      isDir: Boolean(entry.IsDir),
+    }))
+    .filter((entry) => entry.name && entry.name !== "." && entry.name !== "..");
+
+  mapped.sort((left, right) => {
+    if (left.isDir !== right.isDir) {
+      return left.isDir ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
+
+  return { path: target, entries: mapped };
+});
 
 ipcMain.handle("get-config-providers", async () => {
   const result = await runRclone(["config", "providers"]);
@@ -745,6 +839,43 @@ ipcMain.handle("pick-folder", async () => {
   }
 
   return filePaths[0];
+});
+
+ipcMain.handle("pick-save-file", async (_event, defaultName) => {
+  const suggested = String(defaultName || "download").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: suggested,
+    properties: ["showOverwriteConfirmation", "createDirectory"],
+  });
+
+  if (canceled || !filePath) {
+    return null;
+  }
+
+  return filePath;
+});
+
+ipcMain.handle("download-remote-file", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before downloading.");
+  }
+
+  const remotePath = payload?.remotePath;
+  const localPath = payload?.localPath;
+  if (!localPath?.trim()) {
+    throw new Error("A local save path is required.");
+  }
+
+  const source = normalizeRemoteBrowsePath(remotePath);
+  const result = await runRclone(["copyto", source, localPath.trim()], {
+    timeoutMs: 0,
+  });
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to download "${source}"`);
+  }
+
+  return { source, localPath: localPath.trim() };
 });
 
 ipcMain.handle("start-job", async (_event, job) => {

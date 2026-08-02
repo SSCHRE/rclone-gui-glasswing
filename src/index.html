@@ -24,6 +24,10 @@
             </p>
           </div>
         </div>
+        <nav class="mode-switch" role="tablist" aria-label="App mode">
+          <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">Jobs</button>
+          <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
+        </nav>
         <div class="header-actions">
           <button id="manage-remotes" type="button" class="secondary">Manage remotes</button>
           <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
@@ -31,7 +35,7 @@
       </header>
 
       <div class="app-body">
-      <main class="layout">
+      <main id="jobs-view" class="layout" data-app-view="jobs">
         <section class="panel panel-form">
           <div class="form-body">
             <h2>Job</h2>
@@ -242,6 +246,55 @@
           <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
         </section>
       </main>
+
+      <main id="browse-view" class="layout browse-layout hidden" data-app-view="browse" hidden>
+        <section class="panel browse-panel">
+          <div class="browse-toolbar">
+            <label class="field browse-remote-field">
+              <span>Remote</span>
+              <select id="browse-remote-picker">
+                <option value="">Select a configured remote...</option>
+              </select>
+            </label>
+            <div class="browse-toolbar-actions">
+              <button id="browse-up" type="button" class="secondary" disabled>Up</button>
+              <button id="browse-refresh" type="button" class="secondary" disabled>Reload</button>
+            </div>
+          </div>
+
+          <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+
+          <div class="browse-table-wrap">
+            <table class="browse-table" aria-label="Remote contents">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col" class="browse-col-size">Size</th>
+                  <th scope="col" class="browse-col-modified">Modified</th>
+                </tr>
+              </thead>
+              <tbody id="browse-entries"></tbody>
+            </table>
+            <p id="browse-empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
+            <div id="browse-loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
+              <span class="browse-loading-spinner" aria-hidden="true"></span>
+              <span class="browse-loading-text">Loading…</span>
+            </div>
+          </div>
+
+          <p id="browse-status" class="browse-status hidden" aria-live="polite"></p>
+
+          <div class="browse-footer">
+            <p id="browse-selection" class="browse-selection">Nothing selected</p>
+            <div class="browse-actions">
+              <button id="browse-download" type="button" class="primary" disabled>Download</button>
+              <button id="browse-copy-path" type="button" class="secondary" disabled>Copy path</button>
+              <button id="browse-use-source" type="button" class="secondary" disabled>Use as source</button>
+              <button id="browse-use-dest" type="button" class="secondary" disabled>Use as destination</button>
+            </div>
+          </div>
+        </section>
+      </main>
       </div>
     </div>
 
@@ -358,6 +411,7 @@
 
     <script src="job-output.js"></script>
     <script src="remote-manager.js"></script>
+    <script src="remote-browser.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>
