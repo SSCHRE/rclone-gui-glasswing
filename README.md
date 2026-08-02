@@ -16,6 +16,7 @@ A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live p
 - **Stop job** — cancel a running transfer
 - **Refresh remotes** — reload your rclone config with clear success/error feedback
 - **Save jobs** - Save a job for quick re-use later on
+- **Browse remotes** — open a remote in the Browse tab, navigate folders, copy paths, or send them to a job as source/destination
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
@@ -63,7 +64,7 @@ The portable executable is written to `dist/`.
 1. Launch the app (`npm start` or the built executable).
 2. Choose an **operation** — copy, sync, or move.
 3. Set **source** and **destination** — local paths (`C:\folder`, `/home/user/folder`) or remotes (`myremote:path`).
-4. Optionally use **Quick insert remote** to pick a configured remote and path.
+4. Optionally use **Quick insert remote**, or switch to **Browse** to navigate a remote and send a path to source/destination.
 5. Enable **Dry run** to test first; for sync, **Delete excluded** maps to rclone’s `--delete-excluded`.
 6. Click **Run job** and watch the progress panel.
 7. Use **Stop** to cancel, or **Show raw log** for full verbose output.
@@ -76,7 +77,7 @@ The portable executable is written to `dist/`.
 | Remote | `gdrive:Photos/2024` |
 | Remote + path | Pick `gdrive` + `Photos/2024` via quick insert |
 
-**Browse** opens a folder picker for local directories only. Remote paths must be typed or inserted from the remote picker.
+Path **Browse** buttons open a folder picker for local directories only. Use the **Browse** tab to explore remote contents, or type/insert remote paths as `remote:path`.
 
 ## How it works
 
@@ -98,6 +99,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Job history
 - [x] Custom rclone arguments
 - [x] Remote management UI
+- [x] Browse remotes
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
 

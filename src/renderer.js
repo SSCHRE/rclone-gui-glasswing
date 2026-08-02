@@ -38,6 +38,10 @@ const elements = {
 
   refreshRemotes: document.getElementById("refresh-remotes"),
   manageRemotes: document.getElementById("manage-remotes"),
+  modeJobs: document.getElementById("mode-jobs"),
+  modeBrowse: document.getElementById("mode-browse"),
+  jobsView: document.getElementById("jobs-view"),
+  browseView: document.getElementById("browse-view"),
 
   status: document.getElementById("status"),
   popupRoot: document.getElementById("popup-root"),
@@ -505,7 +509,8 @@ function fillRemotePicker() {
 
 function measureRequiredContentSize() {
   const app = document.querySelector(".app");
-  const layout = document.querySelector(".layout");
+  const layout =
+    document.querySelector(".layout:not(.hidden)") || document.querySelector(".layout");
   if (!app || !layout) {
     return null;
   }
@@ -573,6 +578,51 @@ async function syncMinimumWindowSize(forceSnap = false) {
 }
 
 
+function setAppMode(mode) {
+  const nextMode = mode === "browse" ? "browse" : "jobs";
+  const browsing = nextMode === "browse";
+
+  elements.jobsView?.classList.toggle("hidden", browsing);
+  if (elements.jobsView) {
+    elements.jobsView.hidden = browsing;
+  }
+
+  elements.modeJobs?.classList.toggle("is-active", !browsing);
+  elements.modeBrowse?.classList.toggle("is-active", browsing);
+  elements.modeJobs?.setAttribute("aria-selected", String(!browsing));
+  elements.modeBrowse?.setAttribute("aria-selected", String(browsing));
+
+  if (browsing) {
+    // Re-sync in case remotes loaded while Browse was hidden, or init raced.
+    window.RemoteBrowser?.setRemotes(remotes);
+    window.RemoteBrowser?.show();
+  } else {
+    window.RemoteBrowser?.hide();
+  }
+
+  void syncMinimumWindowSize(false);
+}
+
+function useBrowsePath({ path, target }) {
+  if (!path) {
+    return;
+  }
+
+  if (target === "destination") {
+    elements.destination.value = path;
+  } else {
+    elements.source.value = path;
+  }
+
+  setAppMode("jobs");
+  updateHistoryActions();
+  showSnackbar({
+    title: target === "destination" ? "Destination set" : "Source set",
+    message: path,
+    type: "success",
+  });
+}
+
 async function loadRemotes({ showFeedback = false } = {}) {
   if (!window.rcloneGui) {
     showSnackbar({
@@ -588,14 +638,17 @@ async function loadRemotes({ showFeedback = false } = {}) {
   try {
     remotes = await window.rcloneGui.listRemotes();
     fillRemotePicker();
+    window.RemoteBrowser?.setRemotes(remotes);
 
     const countLabel = `${remotes.length} remote${remotes.length === 1 ? "" : "s"}`;
 
-    showSnackbar({
-      title: showFeedback ? "Remotes reloaded" : "Remotes loaded",
-      message: `Successfully loaded ${countLabel}.`,
-      type: "success",
-    });
+    if (showFeedback) {
+      showSnackbar({
+        title: "Remotes reloaded",
+        message: `Successfully loaded ${countLabel}.`,
+        type: "success",
+      });
+    }
   } catch (error) {
     showSnackbar({
       title: "Reload failed",
@@ -618,9 +671,14 @@ async function init() {
       return;
     }
 
+    // Show the window immediately — never block the first paint on rclone I/O.
+    await window.rcloneGui.showMainWindow();
+
+    let rcloneVersion = "";
     try {
       elements.appVersion.textContent = `v${await window.rcloneGui.getAppVersion()}`;
-      elements.version.textContent = await window.rcloneGui.getRcloneVersion();
+      rcloneVersion = await window.rcloneGui.getRcloneVersion();
+      elements.version.textContent = `${rcloneVersion} · loading remotes…`;
     } catch (error) {
       elements.version.textContent = "rclone not found on PATH";
       setStatus("Install rclone and ensure it is available on PATH.", "error");
@@ -628,8 +686,9 @@ async function init() {
       return;
     }
 
-    await loadRemotes();
-    await refreshJobHistory();
+    await Promise.all([loadRemotes({ showFeedback: false }), refreshJobHistory()]);
+    window.RemoteBrowser?.setRemotes(remotes);
+    elements.version.textContent = rcloneVersion;
     elements.operation.dispatchEvent(new Event("change"));
   } finally {
     if (window.rcloneGui) {
@@ -715,11 +774,20 @@ document.getElementById("insert-remote-dest").addEventListener("click", () => {
 
 elements.refreshRemotes.addEventListener("click", () => loadRemotes({ showFeedback: true }));
 
+elements.modeJobs?.addEventListener("click", () => setAppMode("jobs"));
+elements.modeBrowse?.addEventListener("click", () => setAppMode("browse"));
+
+window.RemoteBrowser?.init({
+  onUsePath: useBrowsePath,
+  onNotify: showSnackbar,
+});
+
 elements.manageRemotes?.addEventListener("click", () => {
   window.RemoteManager?.open({
     onChanged: async (names) => {
       remotes = names;
       fillRemotePicker();
+      window.RemoteBrowser?.setRemotes(remotes);
     },
   });
 });
