@@ -1,0 +1,3 @@
+# Linux packaging scripts must keep LF or deb after-install breaks on Ubuntu/Mint
+build/linux/** text eol=lf
+scripts/*.sh text eol=lf

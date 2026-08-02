@@ -2,14 +2,17 @@ const fs = require("fs/promises");
 const path = require("path");
 const pngToIco = require("png-to-ico");
 const sanitizeFileName = require("sanitize-filename");
+const { Jimp } = require("jimp");
 
 const root = path.join(__dirname, "..");
 const sourcePng = path.join(root, "build", "icon.png");
 const packageJsonPath = path.join(root, "package.json");
 const linuxDir = path.join(root, "build", "linux");
+const linuxIconsDir = path.join(root, "build", "icons");
 const appId = "com.rclone.gui.glasswing";
 const metainfoPath = path.join(linuxDir, `${appId}.metainfo.xml`);
 const debAfterInstallPath = path.join(linuxDir, "deb-after-install.sh");
+const linuxIconSizes = [16, 24, 32, 48, 64, 96, 128, 256, 512];
 const targets = [
   path.join(root, "build", "icon.ico"),
   path.join(root, "electron", "icons", "icon.ico"),
@@ -21,6 +24,11 @@ const pngTargets = [
 
 function bashSingleQuoteEscape(value) {
   return value.replace(/'/g, "'\\''");
+}
+
+function desktopNameBase(packageJson) {
+  const raw = (packageJson.desktopName || appId).trim();
+  return raw.replace(/\.desktop$/i, "") || appId;
 }
 
 async function writeDebAfterInstall(executable, sanitizedProductName) {
@@ -77,7 +85,7 @@ fi
   console.log(`Wrote ${debAfterInstallPath}`);
 }
 
-async function writeAppStreamMetainfo(version, executable) {
+async function writeAppStreamMetainfo(version, executable, desktopId) {
   const content = `<?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>${appId}</id>
@@ -88,7 +96,7 @@ async function writeAppStreamMetainfo(version, executable) {
   <description>
     <p>Glasswing is an Electron-based Rclone GUI with a live job dashboard and modern UI.</p>
   </description>
-  <launchable type="desktop-id">${executable}.desktop</launchable>
+  <launchable type="desktop-id">${desktopId}.desktop</launchable>
   <icon type="stock">${executable}</icon>
   <categories>
     <category>Utility</category>
@@ -108,12 +116,25 @@ async function writeAppStreamMetainfo(version, executable) {
   console.log(`Wrote ${metainfoPath}`);
 }
 
+async function writeLinuxIconSet() {
+  const source = await Jimp.read(sourcePng);
+  await fs.mkdir(linuxIconsDir, { recursive: true });
+
+  for (const size of linuxIconSizes) {
+    const resized = source.clone().resize({ w: size, h: size });
+    const target = path.join(linuxIconsDir, `${size}x${size}.png`);
+    await resized.write(target);
+    console.log(`Wrote ${target}`);
+  }
+}
+
 async function main() {
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8"));
   const productName = packageJson.build?.productName || packageJson.name;
   const executable =
     packageJson.build?.linux?.executableName || sanitizeFileName(productName);
   const sanitizedProductName = sanitizeFileName(productName);
+  const desktopId = desktopNameBase(packageJson);
   const ico = await pngToIco(sourcePng);
 
   for (const target of targets) {
@@ -128,7 +149,8 @@ async function main() {
     console.log(`Wrote ${target}`);
   }
 
-  await writeAppStreamMetainfo(packageJson.version, executable);
+  await writeLinuxIconSet();
+  await writeAppStreamMetainfo(packageJson.version, executable, desktopId);
   await writeDebAfterInstall(executable, sanitizedProductName);
 }
 

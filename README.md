@@ -60,18 +60,22 @@ npm run build:portable     # portable exe only
 npm run build:setup        # NSIS setup installer only
 ```
 
-### Linux (AppImage / `.deb`)
+### Linux (AppImage / `.deb`) — Ubuntu Desktop, Linux Mint, and similar
 
-Run these on Linux or WSL — AppImage and `.deb` packages are built on a Linux host:
+Packages target Debian-based desktops (Ubuntu, Linux Mint, and similar). Build on Linux, WSL, or via Docker from Windows:
 
 ```bash
-npm run build:linux            # AppImage + .deb
+npm run build:linux            # AppImage + .deb (Docker on Windows, native on Linux)
 npm run build:linux:appimage   # AppImage only
 npm run build:linux:deb        # .deb only
-npm run build:linux:dir        # unpacked folder (quick test)
 ```
 
-Install rclone separately (`sudo apt install rclone`, or see [rclone.org/install](https://rclone.org/install/)). The `.deb` package recommends `rclone` but does not require it from apt.
+| Artifact | Install |
+|----------|---------|
+| `glasswing-rclone_*_amd64.deb` | `sudo apt install ./glasswing-rclone_*_amd64.deb` |
+| `Glasswing-Rclone-*-x86_64.AppImage` | `chmod +x …AppImage && ./…AppImage` |
+
+After `.deb` install, the launcher appears as **Glasswing Rclone** (`glasswing-rclone`).
 
 Artifacts are written to `dist/`.
 

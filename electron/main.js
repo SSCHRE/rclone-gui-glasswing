@@ -6,12 +6,18 @@ const path = require("path");
 const { randomUUID } = require("crypto");
 
 const APP_ID = "com.rclone.gui.glasswing";
+const APP_NAME = "Glasswing Rclone";
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
 }
 
-app.setName("Glasswing Rclone");
+// Keep runtime name + Linux desktop id aligned with package.json productName/desktopName
+// so Ubuntu/Mint can match the window (WM_CLASS) to the .desktop entry and icon.
+app.setName(APP_NAME);
+if (process.platform === "linux" && typeof app.setDesktopName === "function") {
+  app.setDesktopName(`${APP_ID}.desktop`);
+}
 
 let mainWindow = null;
 let activeJob = null;
