@@ -442,7 +442,7 @@ function createWindow() {
   }
 }
 
-function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
+function runRclone(args, { interactive = false, timeoutMs = 0, binary = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
       windowsHide: !interactive,
@@ -450,7 +450,8 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
       env: process.env,
     });
 
-    let stdout = "";
+    let stdout = binary ? null : "";
+    const stdoutChunks = binary ? [] : null;
     let stderr = "";
     let settled = false;
     let timer = null;
@@ -476,7 +477,11 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
     }
 
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
+      if (binary) {
+        stdoutChunks.push(chunk);
+      } else {
+        stdout += chunk.toString();
+      }
     });
 
     child.stderr.on("data", (chunk) => {
@@ -488,9 +493,61 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
     });
 
     child.on("close", (code) => {
-      finish(() => resolve({ code, stdout, stderr }));
+      finish(() =>
+        resolve({
+          code,
+          stdout: binary ? Buffer.concat(stdoutChunks) : stdout,
+          stderr,
+        }),
+      );
     });
   });
+}
+
+async function fetchRemoteByteRange(source, offset, count) {
+  if (count <= 0) {
+    return Buffer.alloc(0);
+  }
+
+  const result = await runRclone(
+    [
+      "cat",
+      source,
+      "--offset",
+      String(offset),
+      "--count",
+      String(count),
+      "--buffer-size",
+      "128Ki",
+    ],
+    { timeoutMs: 120000, binary: true },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout?.toString?.() || `Failed to read bytes from "${source}"`);
+  }
+
+  return result.stdout;
+}
+
+async function getRemoteObjectSize(source) {
+  const result = await runRclone(["lsjson", source, "--files-only"], { timeoutMs: 60000 });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to inspect "${source}"`);
+  }
+
+  const trimmed = result.stdout.trim();
+  const entries = trimmed ? JSON.parse(trimmed) : [];
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error(`File not found: ${source}`);
+  }
+
+  const entry = entries.find((item) => !item.IsDir) || entries[0];
+  if (typeof entry.Size !== "number" || entry.Size < 0) {
+    throw new Error("Could not determine file size.");
+  }
+
+  return entry.Size;
 }
 
 function parseConfigDump(stdout) {
@@ -878,6 +935,409 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   return { source, localPath: localPath.trim() };
 });
 
+const PREVIEW_KINDS = {
+  ".txt": { kind: "text", mime: "text/plain", maxBytes: 2 * 1024 * 1024, mode: "buffer" },
+  ".pdf": { kind: "pdf", mime: "application/pdf", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".mp3": { kind: "audio", mime: "audio/mpeg", mode: "stream" },
+  ".mp4": { kind: "video", mime: "video/mp4", mode: "stream" },
+  ".zip": { kind: "zip", mime: "application/zip", mode: "zip" },
+  ".jpg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".jpeg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".png": { kind: "image", mime: "image/png", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+};
+
+const ZIP_EOCD_SIG = 0x06054b50;
+const ZIP_CD_SIG = 0x02014b50;
+const ZIP_ZIP64_LOCATOR_SIG = 0x07064b50;
+const ZIP_ZIP64_EOCD_SIG = 0x06064b50;
+const ZIP_PREVIEW_ENTRY_LIMIT = 5000;
+const ZIP_MAX_CENTRAL_DIRECTORY = 64 * 1024 * 1024;
+
+function parseZipCentralDirectory(central, totalEntriesHint) {
+  const entries = [];
+  let offset = 0;
+  let truncated = false;
+
+  while (offset + 46 <= central.length) {
+    if (central.readUInt32LE(offset) !== ZIP_CD_SIG) {
+      break;
+    }
+
+    const flags = central.readUInt16LE(offset + 8);
+    let compressedSize = central.readUInt32LE(offset + 20);
+    let uncompressedSize = central.readUInt32LE(offset + 24);
+    const nameLen = central.readUInt16LE(offset + 28);
+    const extraLen = central.readUInt16LE(offset + 30);
+    const commentLen = central.readUInt16LE(offset + 32);
+    const externalAttr = central.readUInt32LE(offset + 38);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + nameLen;
+    if (nameEnd > central.length) {
+      break;
+    }
+
+    const nameBuf = central.subarray(nameStart, nameEnd);
+    const name = (flags & 0x800 ? nameBuf.toString("utf8") : nameBuf.toString("latin1")).replace(/\\/g, "/");
+
+    const extraStart = nameEnd;
+    const extraEnd = extraStart + extraLen;
+    if (
+      (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) &&
+      extraLen >= 4 &&
+      extraEnd <= central.length
+    ) {
+      let extraOffset = extraStart;
+      while (extraOffset + 4 <= extraEnd) {
+        const headerId = central.readUInt16LE(extraOffset);
+        const dataSize = central.readUInt16LE(extraOffset + 2);
+        const dataStart = extraOffset + 4;
+        const dataEnd = dataStart + dataSize;
+        if (dataEnd > extraEnd) {
+          break;
+        }
+        if (headerId === 0x0001) {
+          let zip64Pos = dataStart;
+          if (uncompressedSize === 0xffffffff && zip64Pos + 8 <= dataEnd) {
+            uncompressedSize = Number(central.readBigUInt64LE(zip64Pos));
+            zip64Pos += 8;
+          }
+          if (compressedSize === 0xffffffff && zip64Pos + 8 <= dataEnd) {
+            compressedSize = Number(central.readBigUInt64LE(zip64Pos));
+          }
+          break;
+        }
+        extraOffset = dataEnd;
+      }
+    }
+
+    const isDir = name.endsWith("/") || ((externalAttr >>> 16) & 0o40000) !== 0;
+    if (entries.length < ZIP_PREVIEW_ENTRY_LIMIT) {
+      entries.push({
+        name,
+        size: isDir ? null : uncompressedSize,
+        compressedSize: isDir ? null : compressedSize,
+        isDir,
+      });
+    } else {
+      truncated = true;
+    }
+
+    offset = nameEnd + extraLen + commentLen;
+  }
+
+  entries.sort((left, right) => {
+    if (left.isDir !== right.isDir) {
+      return left.isDir ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
+
+  const totalEntries = Math.max(totalEntriesHint || 0, entries.length + (truncated ? 1 : 0));
+  return {
+    entries,
+    totalEntries,
+    truncated: truncated || totalEntries > entries.length,
+  };
+}
+
+async function listZipEntriesFromRemote(source, archiveSize) {
+  if (!Number.isFinite(archiveSize) || archiveSize < 22) {
+    throw new Error("Not a valid zip archive.");
+  }
+
+  // Only fetch the end of the archive (EOCD + usually the central directory).
+  const tailSize = Math.min(archiveSize, 65557);
+  const tailOffset = archiveSize - tailSize;
+  const tail = await fetchRemoteByteRange(source, tailOffset, tailSize);
+
+  let eocd = -1;
+  for (let i = tail.length - 22; i >= 0; i -= 1) {
+    if (tail.readUInt32LE(i) === ZIP_EOCD_SIG) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) {
+    throw new Error("Invalid or unsupported zip (missing central directory).");
+  }
+
+  let totalEntries = tail.readUInt16LE(eocd + 10);
+  let cdSize = tail.readUInt32LE(eocd + 12);
+  let cdOffset = tail.readUInt32LE(eocd + 16);
+
+  if (totalEntries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+    let locator = -1;
+    for (let i = eocd - 20; i >= 0; i -= 1) {
+      if (tail.readUInt32LE(i) === ZIP_ZIP64_LOCATOR_SIG) {
+        locator = i;
+        break;
+      }
+    }
+    if (locator < 0) {
+      throw new Error("Unsupported zip64 archive.");
+    }
+
+    const zip64EocdOffset = Number(tail.readBigUInt64LE(locator + 8));
+    let zip64Header;
+    if (zip64EocdOffset >= tailOffset && zip64EocdOffset + 56 <= archiveSize) {
+      const local = zip64EocdOffset - tailOffset;
+      zip64Header = tail.subarray(local, local + 56);
+    } else {
+      zip64Header = await fetchRemoteByteRange(source, zip64EocdOffset, 56);
+    }
+
+    if (zip64Header.readUInt32LE(0) !== ZIP_ZIP64_EOCD_SIG) {
+      throw new Error("Unsupported zip64 archive.");
+    }
+
+    totalEntries = Number(zip64Header.readBigUInt64LE(32));
+    cdSize = Number(zip64Header.readBigUInt64LE(40));
+    cdOffset = Number(zip64Header.readBigUInt64LE(48));
+  }
+
+  if (!Number.isFinite(cdSize) || !Number.isFinite(cdOffset) || cdSize < 0 || cdOffset < 0) {
+    throw new Error("Invalid zip central directory.");
+  }
+  if (cdSize > ZIP_MAX_CENTRAL_DIRECTORY) {
+    throw new Error("Zip central directory is too large to preview.");
+  }
+
+  let central;
+  if (cdSize === 0) {
+    central = Buffer.alloc(0);
+  } else if (cdOffset >= tailOffset && cdOffset + cdSize <= archiveSize) {
+    const local = cdOffset - tailOffset;
+    central = Buffer.from(tail.subarray(local, local + cdSize));
+  } else {
+    // Directory starts earlier than the EOCD tail window — fetch only that slice.
+    central = await fetchRemoteByteRange(source, cdOffset, cdSize);
+  }
+
+  return parseZipCentralDirectory(central, totalEntries);
+}
+
+let previewServe = null;
+
+function previewKindFromPath(remotePath) {
+  const base = remotePath.split("/").pop() || remotePath;
+  const ext = path.extname(base).toLowerCase();
+  return PREVIEW_KINDS[ext] || null;
+}
+
+function sanitizePreviewFileName(remotePath, ext) {
+  const raw = path.basename((remotePath.split(":").pop() || `preview${ext}`).replace(/\\/g, "/"));
+  const cleaned = raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim() || `preview${ext}`;
+  return cleaned;
+}
+
+function splitRemoteParentAndFile(source) {
+  const match = /^([^:]+):(.*)$/.exec(source);
+  const remote = match[1];
+  const subPath = (match[2] || "").replace(/^\/+/, "").replace(/\\/g, "/");
+  const parts = subPath.split("/").filter(Boolean);
+  const fileName = parts.pop() || "";
+  const parentPath = parts.length ? `${remote}:${parts.join("/")}` : `${remote}:`;
+  return { parentPath, fileName };
+}
+
+function stopPreviewServe() {
+  if (!previewServe) {
+    return;
+  }
+
+  const child = previewServe.child;
+  previewServe = null;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function startPreviewServe(parentPath) {
+  return new Promise((resolve, reject) => {
+    stopPreviewServe();
+
+    // No basic auth: Chromium strips user:pass from media element fetches.
+    // Small VFS chunks avoid the default 128Mi read-ahead that pulled whole MP3s.
+    const child = spawn(
+      "rclone",
+      [
+        "serve",
+        "http",
+        parentPath,
+        "--addr",
+        "127.0.0.1:0",
+        "--vfs-cache-mode",
+        "off",
+        "--vfs-read-chunk-size",
+        "512k",
+        "--vfs-read-chunk-size-limit",
+        "2M",
+        "--buffer-size",
+        "512k",
+      ],
+      {
+        windowsHide: true,
+        shell: false,
+        env: process.env,
+      },
+    );
+
+    let settled = false;
+    let output = "";
+
+    const finish = (handler) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      handler();
+    };
+
+    const timer = setTimeout(() => {
+      finish(() => {
+        try {
+          child.kill();
+        } catch {
+          // ignore
+        }
+        reject(new Error("Timed out starting media preview stream."));
+      });
+    }, 20000);
+
+    const onData = (chunk) => {
+      output += chunk.toString();
+      const match =
+        output.match(/Serving on (https?:\/\/[^\s\]]+)/i) ||
+        output.match(/HTTP Server started on \[(https?:\/\/[^\]]+)\]/i) ||
+        output.match(/HTTP Server started on (https?:\/\/[^\s\]]+)/i);
+      if (!match) {
+        return;
+      }
+
+      finish(() => {
+        const baseUrl = match[1].replace(/\/$/, "");
+        previewServe = { child, baseUrl };
+        resolve(previewServe);
+      });
+    };
+
+    child.stdout.on("data", onData);
+    child.stderr.on("data", onData);
+
+    child.on("error", (error) => {
+      finish(() => reject(error));
+    });
+
+    child.on("close", (code) => {
+      if (previewServe?.child === child) {
+        previewServe = null;
+      }
+      finish(() => {
+        reject(new Error(output.trim() || `Preview stream exited (code ${code ?? "?"}).`));
+      });
+    });
+  });
+}
+
+ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before opening a preview.");
+  }
+
+  const source = normalizeRemoteBrowsePath(remotePath);
+  const meta = previewKindFromPath(source);
+  if (!meta) {
+    throw new Error("Preview supports .txt, .pdf, .mp3, .mp4, .zip, .jpg, .jpeg, and .png files only.");
+  }
+
+  if (meta.mode === "stream") {
+    const { parentPath, fileName } = splitRemoteParentAndFile(source);
+    if (!fileName) {
+      throw new Error("Invalid media path for preview.");
+    }
+
+    const serve = await startPreviewServe(parentPath);
+    // Avoid encodeURIComponent on the whole name: rclone serves path segments with
+    // percent-encoding for reserved chars only (spaces -> %20 is fine via encodeURI).
+    const streamUrl = `${serve.baseUrl}/${encodeURI(fileName).replace(/#/g, "%23")}`;
+    return {
+      kind: meta.kind,
+      name: fileName,
+      mime: meta.mime,
+      streamUrl,
+      streamed: true,
+    };
+  }
+
+  if (meta.mode === "zip") {
+    stopPreviewServe();
+    const { fileName } = splitRemoteParentAndFile(source);
+    if (!fileName) {
+      throw new Error("Invalid zip path for preview.");
+    }
+
+    const hintedSize = Number(options?.size);
+    const archiveSize =
+      Number.isFinite(hintedSize) && hintedSize >= 0 ? hintedSize : await getRemoteObjectSize(source);
+    const listed = await listZipEntriesFromRemote(source, archiveSize);
+    return {
+      kind: "zip",
+      name: fileName,
+      entries: listed.entries,
+      totalEntries: listed.totalEntries,
+      truncated: listed.truncated,
+      archiveBytes: archiveSize,
+    };
+  }
+
+  stopPreviewServe();
+
+  const tmpDir = path.join(app.getPath("temp"), "glasswing-preview", randomUUID());
+  const localPath = path.join(tmpDir, sanitizePreviewFileName(source, path.extname(source)));
+
+  try {
+    await fs.mkdir(tmpDir, { recursive: true });
+    const result = await runRclone(["copyto", source, localPath], { timeoutMs: 0 });
+    if (result.code !== 0) {
+      throw new Error(result.stderr || result.stdout || `Failed to fetch "${source}"`);
+    }
+
+    const stat = await fs.stat(localPath);
+    if (meta.maxBytes && stat.size > meta.maxBytes) {
+      const limitMb = Math.round(meta.maxBytes / (1024 * 1024));
+      throw new Error(`Preview is limited to ${limitMb} MB for ${meta.kind} files.`);
+    }
+
+    if (meta.kind === "text") {
+      const text = await fs.readFile(localPath, "utf8");
+      return {
+        kind: meta.kind,
+        name: path.basename(localPath),
+        text,
+      };
+    }
+
+    const data = await fs.readFile(localPath);
+    return {
+      kind: meta.kind,
+      name: path.basename(localPath),
+      mime: meta.mime,
+      data,
+    };
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+ipcMain.handle("close-remote-preview", async () => {
+  stopPreviewServe();
+});
+
 ipcMain.handle("start-job", async (_event, job) => {
   if (activeJob) {
     throw new Error("A job is already running.");
@@ -1066,6 +1526,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   stopActiveJob();
+  stopPreviewServe();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -1073,4 +1534,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopActiveJob();
+  stopPreviewServe();
 });

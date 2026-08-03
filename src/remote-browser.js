@@ -10,11 +10,30 @@ const remoteBrowser = {
   status: document.getElementById("browse-status"),
   loading: document.getElementById("browse-loading"),
   selectionLabel: document.getElementById("browse-selection"),
+  previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
   copyPathBtn: document.getElementById("browse-copy-path"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
 };
+
+const previewUi = {
+  dialog: document.getElementById("preview-dialog"),
+  title: document.getElementById("preview-title"),
+  subtitle: document.getElementById("preview-subtitle"),
+  text: document.getElementById("preview-text"),
+  pdf: document.getElementById("preview-pdf"),
+  image: document.getElementById("preview-image"),
+  video: document.getElementById("preview-video"),
+  audioWrap: document.getElementById("preview-audio-wrap"),
+  audio: document.getElementById("preview-audio"),
+  zip: document.getElementById("preview-zip"),
+  zipSummary: document.getElementById("preview-zip-summary"),
+  zipEntries: document.getElementById("preview-zip-entries"),
+  closeBtn: document.getElementById("preview-close"),
+};
+
+const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".jpg", ".jpeg", ".png"]);
 
 let browseRemotes = [];
 let currentRemote = "";
@@ -22,10 +41,12 @@ let currentSubPath = "";
 let entries = [];
 let selectedPath = null;
 let selectedIsDir = false;
+let selectedSize = null;
 let loading = false;
 let loadToken = 0;
 let onUsePath = null;
 let onNotify = null;
+let previewBlobUrl = null;
 
 function notify(payload) {
   if (typeof onNotify === "function") {
@@ -135,10 +156,23 @@ function setLoading(isLoading, label = "Loading…") {
   }
 }
 
+function selectedExtension() {
+  const name = selectedFileName();
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+}
+
+function canPreviewSelection() {
+  return Boolean(selectedPath) && !selectedIsDir && !loading && PREVIEW_EXTENSIONS.has(selectedExtension());
+}
+
 function updateActionState() {
   const path = activePath();
   const hasPath = Boolean(path);
   const canDownload = Boolean(selectedPath) && !selectedIsDir && !loading;
+  if (remoteBrowser.previewBtn) {
+    remoteBrowser.previewBtn.disabled = !canPreviewSelection();
+  }
   if (remoteBrowser.downloadBtn) {
     remoteBrowser.downloadBtn.disabled = !canDownload;
   }
@@ -210,9 +244,11 @@ function selectEntry(entry) {
   if (!entry) {
     selectedPath = null;
     selectedIsDir = false;
+    selectedSize = null;
   } else {
     selectedPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
     selectedIsDir = entry.isDir;
+    selectedSize = typeof entry.size === "number" ? entry.size : null;
   }
 
   for (const row of remoteBrowser.entriesBody.querySelectorAll("tr")) {
@@ -273,7 +309,11 @@ function renderEntries() {
         void navigateTo(joinSubPath(currentSubPath, entry.name));
       } else {
         selectEntry(entry);
-        void downloadSelectedFile();
+        if (canPreviewSelection()) {
+          void previewSelectedFile();
+        } else {
+          void downloadSelectedFile();
+        }
       }
     });
     row.addEventListener("keydown", (event) => {
@@ -283,7 +323,11 @@ function renderEntries() {
           void navigateTo(joinSubPath(currentSubPath, entry.name));
         } else {
           selectEntry(entry);
-          void downloadSelectedFile();
+          if (canPreviewSelection()) {
+            void previewSelectedFile();
+          } else {
+            void downloadSelectedFile();
+          }
         }
       }
     });
@@ -307,6 +351,7 @@ async function loadListing() {
   const token = ++loadToken;
   selectedPath = null;
   selectedIsDir = false;
+  selectedSize = null;
   entries = [];
   setStatus("");
   setLoading(true, "Loading folder…");
@@ -369,6 +414,8 @@ function fillRemotePicker() {
     currentSubPath = "";
     entries = [];
     selectedPath = null;
+    selectedIsDir = false;
+    selectedSize = null;
   }
 
   renderBreadcrumbs();
@@ -419,6 +466,275 @@ function selectedFileName() {
   const remoteSide = parts.length > 1 ? parts.slice(1).join(":") : selectedPath;
   const name = remoteSide.split("/").filter(Boolean).pop();
   return name || "download";
+}
+
+function previewCard() {
+  return previewUi.dialog?.querySelector(".popup-card-preview") || null;
+}
+
+function clearPreviewContent() {
+  if (previewBlobUrl) {
+    URL.revokeObjectURL(previewBlobUrl);
+    previewBlobUrl = null;
+  }
+
+  if (previewUi.text) {
+    previewUi.text.textContent = "";
+    previewUi.text.classList.add("hidden");
+  }
+  if (previewUi.pdf) {
+    previewUi.pdf.removeAttribute("src");
+    previewUi.pdf.classList.add("hidden");
+  }
+  if (previewUi.image) {
+    previewUi.image.removeAttribute("src");
+    previewUi.image.classList.add("hidden");
+  }
+  if (previewUi.video) {
+    previewUi.video.pause();
+    previewUi.video.removeAttribute("src");
+    previewUi.video.replaceChildren();
+    previewUi.video.load();
+    previewUi.video.classList.add("hidden");
+  }
+  if (previewUi.audio) {
+    previewUi.audio.pause();
+    previewUi.audio.removeAttribute("src");
+    previewUi.audio.load();
+  }
+  if (previewUi.audioWrap) {
+    previewUi.audioWrap.classList.add("hidden");
+  }
+  if (previewUi.zip) {
+    previewUi.zip.classList.add("hidden");
+  }
+  if (previewUi.zipSummary) {
+    previewUi.zipSummary.textContent = "";
+  }
+  if (previewUi.zipEntries) {
+    previewUi.zipEntries.innerHTML = "";
+  }
+  previewCard()?.classList.remove("is-video");
+}
+
+function closePreview() {
+  clearPreviewContent();
+  void window.rcloneGui?.closeRemotePreview?.();
+  if (!previewUi.dialog) {
+    return;
+  }
+  previewUi.dialog.classList.add("hidden");
+  previewUi.dialog.setAttribute("aria-hidden", "true");
+}
+
+function openPreviewDialog(payload) {
+  clearPreviewContent();
+
+  previewUi.title.textContent = payload.name || "Preview";
+  previewUi.subtitle.textContent = payload.statusText || selectedPath || "";
+  previewCard()?.classList.toggle("is-video", payload.kind === "video");
+
+  if (payload.kind === "text") {
+    previewUi.text.textContent = payload.text ?? "";
+    previewUi.text.classList.remove("hidden");
+  } else if (payload.kind === "pdf") {
+    const bytes = payload.data instanceof Uint8Array ? payload.data : new Uint8Array(payload.data);
+    const blob = new Blob([bytes], { type: payload.mime || "application/pdf" });
+    previewBlobUrl = URL.createObjectURL(blob);
+    previewUi.pdf.src = previewBlobUrl;
+    previewUi.pdf.classList.remove("hidden");
+  } else if (payload.kind === "image") {
+    const bytes = payload.data instanceof Uint8Array ? payload.data : new Uint8Array(payload.data);
+    const blob = new Blob([bytes], { type: payload.mime || "image/jpeg" });
+    previewBlobUrl = URL.createObjectURL(blob);
+    previewUi.image.src = previewBlobUrl;
+    previewUi.image.alt = payload.name || "Image preview";
+    previewUi.image.classList.remove("hidden");
+  } else if (payload.kind === "audio") {
+    if (payload.streamUrl) {
+      bindStreamMedia("audio", payload.streamUrl, payload.mime || "audio/mpeg");
+    } else if (payload.data) {
+      const bytes = payload.data instanceof Uint8Array ? payload.data : new Uint8Array(payload.data);
+      const blob = new Blob([bytes], { type: payload.mime || "audio/mpeg" });
+      previewBlobUrl = URL.createObjectURL(blob);
+      previewUi.audio.src = previewBlobUrl;
+    }
+    previewUi.audioWrap.classList.remove("hidden");
+  } else if (payload.kind === "video") {
+    if (payload.streamUrl) {
+      bindStreamMedia("video", payload.streamUrl, payload.mime || "video/mp4");
+    }
+    previewUi.video.classList.remove("hidden");
+  } else if (payload.kind === "zip") {
+    renderZipPreview(payload);
+    previewUi.zip.classList.remove("hidden");
+  } else {
+    throw new Error("Unsupported preview type.");
+  }
+
+  previewUi.dialog.classList.remove("hidden");
+  previewUi.dialog.setAttribute("aria-hidden", "false");
+}
+
+function renderZipPreview(payload) {
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  const total = typeof payload.totalEntries === "number" ? payload.totalEntries : entries.length;
+  const archiveLabel = formatBytes(payload.archiveBytes);
+  const shown = entries.length;
+  const parts = [`${total.toLocaleString()} item${total === 1 ? "" : "s"}`, archiveLabel];
+  if (payload.truncated && shown < total) {
+    parts.push(`showing first ${shown.toLocaleString()}`);
+  }
+  if (previewUi.zipSummary) {
+    previewUi.zipSummary.textContent = parts.filter(Boolean).join(" · ");
+  }
+
+  if (!previewUi.zipEntries) {
+    return;
+  }
+
+  previewUi.zipEntries.innerHTML = "";
+  if (entries.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 3;
+    cell.textContent = "This archive is empty.";
+    cell.style.color = "var(--muted)";
+    row.appendChild(cell);
+    previewUi.zipEntries.appendChild(row);
+    return;
+  }
+
+  for (const entry of entries) {
+    const row = document.createElement("tr");
+
+    const nameCell = document.createElement("td");
+    nameCell.className = "preview-zip-col-name";
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "preview-zip-name";
+    const icon = document.createElement("span");
+    icon.className = `browse-entry-icon${entry.isDir ? " is-dir" : " is-file"}`;
+    icon.setAttribute("aria-hidden", "true");
+    const nameText = document.createElement("span");
+    nameText.className = "preview-zip-name-text";
+    nameText.textContent = entry.name;
+    nameText.title = entry.name;
+    nameWrap.append(icon, nameText);
+    nameCell.appendChild(nameWrap);
+
+    const sizeCell = document.createElement("td");
+    sizeCell.className = "preview-zip-col-size";
+    sizeCell.textContent = entry.isDir ? "—" : formatBytes(entry.size);
+
+    const packedCell = document.createElement("td");
+    packedCell.className = "preview-zip-col-packed";
+    packedCell.textContent = entry.isDir ? "—" : formatBytes(entry.compressedSize);
+
+    row.append(nameCell, sizeCell, packedCell);
+    previewUi.zipEntries.appendChild(row);
+  }
+}
+
+function bindStreamMedia(kind, streamUrl, mime) {
+  const media = kind === "video" ? previewUi.video : previewUi.audio;
+  if (!media || !streamUrl) {
+    return;
+  }
+
+  media.preload = "none";
+
+  media.addEventListener(
+    "error",
+    () => {
+      notify({
+        title: "Stream failed",
+        message: kind === "video" ? "Could not stream this .mp4 file." : "Could not stream this .mp3 file.",
+        type: "error",
+      });
+    },
+    { once: true },
+  );
+
+  if (kind === "video") {
+    media.removeAttribute("src");
+    media.replaceChildren();
+    const source = document.createElement("source");
+    source.src = streamUrl;
+    source.type = mime || "video/mp4";
+    media.appendChild(source);
+    media.load();
+  } else {
+    media.src = streamUrl;
+  }
+
+  // Starts the ranged fetch; if autoplay is blocked, native controls still work.
+  void media.play().catch(() => {});
+}
+
+async function previewSelectedFile() {
+  if (!canPreviewSelection()) {
+    return;
+  }
+  if (!window.rcloneGui?.openRemotePreview) {
+    notify({
+      title: "Preview unavailable",
+      message: "App bridge does not support previews.",
+      type: "error",
+    });
+    return;
+  }
+
+  const remotePath = selectedPath;
+  const fileSize = selectedSize;
+  const ext = selectedExtension();
+  const streaming = ext === ".mp3" || ext === ".mp4";
+  const kind = ext === ".mp4" ? "video" : ext === ".mp3" ? "audio" : null;
+
+  if (streaming && kind) {
+    // Show the player immediately; only wait on the local stream URL, not the whole file.
+    openPreviewDialog({
+      kind,
+      name: selectedFileName(),
+      streamUrl: null,
+      statusText: "Connecting stream…",
+    });
+    updateActionState();
+    try {
+      const payload = await window.rcloneGui.openRemotePreview(remotePath);
+      if (previewUi.subtitle) {
+        previewUi.subtitle.textContent = selectedPath || "";
+      }
+      bindStreamMedia(kind, payload.streamUrl, payload.mime);
+    } catch (error) {
+      closePreview();
+      notify({
+        title: "Preview failed",
+        message: error.message || "Could not open a preview.",
+        type: "error",
+      });
+    } finally {
+      updateActionState();
+    }
+    return;
+  }
+
+  setLoading(true, ext === ".zip" ? "Reading zip index…" : "Preparing preview…");
+  updateActionState();
+
+  try {
+    const payload = await window.rcloneGui.openRemotePreview(remotePath, { size: fileSize });
+    openPreviewDialog(payload);
+  } catch (error) {
+    void window.rcloneGui?.closeRemotePreview?.();
+    notify({
+      title: "Preview failed",
+      message: error.message || "Could not open a preview.",
+      type: "error",
+    });
+  } finally {
+    setLoading(false);
+    updateActionState();
+  }
 }
 
 async function downloadSelectedFile() {
@@ -482,6 +798,7 @@ function bindEvents() {
     currentSubPath = "";
     selectedPath = null;
     selectedIsDir = false;
+    selectedSize = null;
     void loadListing();
   });
 
@@ -497,12 +814,26 @@ function bindEvents() {
     void copyActivePath();
   });
 
+  remoteBrowser.previewBtn?.addEventListener("click", () => {
+    void previewSelectedFile();
+  });
+
   remoteBrowser.downloadBtn?.addEventListener("click", () => {
     void downloadSelectedFile();
   });
 
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
   remoteBrowser.useDestBtn.addEventListener("click", () => useActivePath("destination"));
+
+  previewUi.closeBtn?.addEventListener("click", closePreview);
+  for (const closer of previewUi.dialog?.querySelectorAll("[data-preview-close]") || []) {
+    closer.addEventListener("click", closePreview);
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
+      closePreview();
+    }
+  });
 }
 
 function init(options = {}) {
