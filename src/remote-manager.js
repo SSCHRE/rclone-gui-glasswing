@@ -283,6 +283,18 @@ function optionNeedsAuthorize(provider) {
   return provider?.Options?.some((option) => option.Name === "token") ?? false;
 }
 
+function hasToggleableAdvancedOptions(provider, nestedProvider) {
+  return (provider?.Options || []).some((option) => {
+    if (!option || option.Hide || option.Name === "type") {
+      return false;
+    }
+    if (!option.Advanced || option.Required) {
+      return false;
+    }
+    return matchProvider(option.Provider, nestedProvider);
+  });
+}
+
 function createOptionInput(option, nestedProvider, previousValues) {
   let input;
   const previous = previousValues[option.Name];
@@ -356,12 +368,20 @@ function renderProviderForm() {
   if (!provider) {
     remoteManager.providerDescription.textContent = "";
     remoteManager.authorizeBtn.classList.add("hidden");
+    remoteManager.showAdvanced?.closest(".remote-advanced-toggle")?.classList.add("hidden");
     return;
   }
 
   const nestedProvider = getNestedProviderValue(provider, previousValues);
   remoteManager.providerDescription.textContent = provider.Description || "";
   remoteManager.authorizeBtn.classList.toggle("hidden", !optionNeedsAuthorize(provider));
+
+  const advancedToggle = remoteManager.showAdvanced?.closest(".remote-advanced-toggle");
+  const showAdvancedToggle = hasToggleableAdvancedOptions(provider, nestedProvider);
+  advancedToggle?.classList.toggle("hidden", !showAdvancedToggle);
+  if (!showAdvancedToggle && remoteManager.showAdvanced) {
+    remoteManager.showAdvanced.checked = false;
+  }
 
   for (const option of provider.Options || []) {
     if (!shouldShowOption(option, nestedProvider)) {
