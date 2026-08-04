@@ -767,6 +767,9 @@ ipcMain.handle("create-remote", async (_event, payload) => {
     args.push(`${key}=${String(value)}`);
   }
 
+  // Obscure password-type values for backends like koofr that require it.
+  args.push("--obscure");
+
   const result = await runRclone(args);
   if (result.code !== 0) {
     throw new Error(result.stderr || result.stdout || `Failed to create remote "${name}"`);
