@@ -386,6 +386,11 @@ body {
 }
 
 input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
 textarea,
 select {
   width: 100%;
@@ -403,12 +408,22 @@ select {
 }
 
 input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="email"]:hover,
+input[type="number"]:hover,
+input[type="search"]:hover,
+input[type="url"]:hover,
 textarea:hover,
 select:hover {
   border-color: rgba(120, 145, 180, 0.28);
 }
 
 input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus,
+input[type="url"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -416,6 +431,12 @@ select:focus {
   background: rgba(8, 12, 18, 0.96);
   box-shadow: 0 0 0 4px rgba(92, 176, 255, 0.12);
   transform: translateY(-1px);
+}
+
+input:disabled,
+select:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 textarea {

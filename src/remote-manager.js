@@ -194,12 +194,77 @@ function getSelectedProvider() {
   return providers.find((provider) => provider.Name === name) || null;
 }
 
-function shouldShowOption(option) {
+// Mirrors rclone's matchProvider(), with one UI tweak: options gated on a nested
+// provider stay hidden until that provider is chosen (avoids triple password fields).
+function matchProvider(providerConfig, nestedProvider) {
+  if (!providerConfig) {
+    return true;
+  }
+
+  if (!nestedProvider) {
+    return false;
+  }
+
+  let config = String(providerConfig);
+  let negate = false;
+  if (config.startsWith("!")) {
+    negate = true;
+    config = config.slice(1);
+  }
+
+  const matched = config
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .includes(nestedProvider);
+
+  return negate ? !matched : matched;
+}
+
+function getNestedProviderValue(provider, previousValues = {}) {
+  if (Object.prototype.hasOwnProperty.call(previousValues, "provider")) {
+    return String(previousValues.provider || "");
+  }
+
+  const existing = remoteManager.providerForm.querySelector('[name="provider"]');
+  if (existing?.value) {
+    return existing.value;
+  }
+
+  const providerOption = (provider?.Options || []).find((option) => option.Name === "provider");
+  if (!providerOption) {
+    return "";
+  }
+
+  if (providerOption.DefaultStr) {
+    return providerOption.DefaultStr;
+  }
+
+  const firstExample = (providerOption.Examples || []).find((example) => example.Value);
+  return firstExample?.Value || "";
+}
+
+function endpointFromProviderHelp(provider, nestedProvider) {
+  const providerOption = (provider?.Options || []).find((option) => option.Name === "provider");
+  const example = (providerOption?.Examples || []).find((item) => item.Value === nestedProvider);
+  if (!example?.Help) {
+    return "";
+  }
+
+  const match = String(example.Help).match(/https?:\/\/[^\s,)]+/i);
+  return match ? match[0] : "";
+}
+
+function shouldShowOption(option, nestedProvider) {
   if (!option || option.Hide) {
     return false;
   }
 
   if (option.Name === "type") {
+    return false;
+  }
+
+  if (!matchProvider(option.Provider, nestedProvider)) {
     return false;
   }
 
@@ -218,22 +283,108 @@ function optionNeedsAuthorize(provider) {
   return provider?.Options?.some((option) => option.Name === "token") ?? false;
 }
 
+function hasToggleableAdvancedOptions(provider, nestedProvider) {
+  return (provider?.Options || []).some((option) => {
+    if (!option || option.Hide || option.Name === "type") {
+      return false;
+    }
+    if (!option.Advanced || option.Required) {
+      return false;
+    }
+    return matchProvider(option.Provider, nestedProvider);
+  });
+}
+
+function createOptionInput(option, nestedProvider, previousValues) {
+  let input;
+  const previous = previousValues[option.Name];
+
+  if (option.Examples?.length) {
+    input = document.createElement("select");
+    const examples = option.Examples.filter((example) => matchProvider(example.Provider, nestedProvider));
+
+    if (!option.Exclusive && !option.Required) {
+      const emptyOption = document.createElement("option");
+      emptyOption.value = "";
+      emptyOption.textContent = option.DefaultStr ? `Default (${option.DefaultStr})` : "Select…";
+      input.appendChild(emptyOption);
+    }
+
+    for (const example of examples) {
+      const exampleOption = document.createElement("option");
+      exampleOption.value = example.Value;
+      exampleOption.textContent = example.Help ? `${example.Value} — ${example.Help}` : example.Value;
+      input.appendChild(exampleOption);
+    }
+
+    if (previous != null && previous !== "") {
+      input.value = String(previous);
+    } else if (option.Name === "provider" && nestedProvider) {
+      input.value = nestedProvider;
+    } else if (option.DefaultStr) {
+      input.value = option.DefaultStr;
+    } else if (option.Exclusive || option.Required) {
+      const first = examples.find((example) => example.Value);
+      if (first) {
+        input.value = first.Value;
+      }
+    }
+  } else if (option.Type === "bool") {
+    input = document.createElement("input");
+    input.type = "checkbox";
+    if (typeof previous === "boolean") {
+      input.checked = previous;
+    } else {
+      input.checked = option.Default === true || option.DefaultStr === "true";
+    }
+  } else {
+    input = document.createElement("input");
+    input.type = option.IsPassword ? "password" : option.Type === "string" && option.Name === "endpoint" ? "url" : "text";
+    if (previous != null && previous !== "" && !option.IsPassword) {
+      input.value = String(previous);
+    } else if (option.DefaultStr && !option.IsPassword) {
+      input.value = option.DefaultStr;
+    } else if (option.DefaultStr) {
+      input.placeholder = `Default: ${option.DefaultStr}`;
+    }
+  }
+
+  input.id = `remote-option-${option.Name}`;
+  input.name = option.Name;
+  input.className = "remote-option-input";
+  if (option.Name === "provider") {
+    input.addEventListener("change", () => renderProviderForm());
+  }
+
+  return input;
+}
+
 function renderProviderForm() {
   const provider = getSelectedProvider();
+  const previousValues = collectCreateOptions();
   remoteManager.providerForm.innerHTML = "";
   showCreateError("");
 
   if (!provider) {
     remoteManager.providerDescription.textContent = "";
     remoteManager.authorizeBtn.classList.add("hidden");
+    remoteManager.showAdvanced?.closest(".remote-advanced-toggle")?.classList.add("hidden");
     return;
   }
 
+  const nestedProvider = getNestedProviderValue(provider, previousValues);
   remoteManager.providerDescription.textContent = provider.Description || "";
   remoteManager.authorizeBtn.classList.toggle("hidden", !optionNeedsAuthorize(provider));
 
+  const advancedToggle = remoteManager.showAdvanced?.closest(".remote-advanced-toggle");
+  const showAdvancedToggle = hasToggleableAdvancedOptions(provider, nestedProvider);
+  advancedToggle?.classList.toggle("hidden", !showAdvancedToggle);
+  if (!showAdvancedToggle && remoteManager.showAdvanced) {
+    remoteManager.showAdvanced.checked = false;
+  }
+
   for (const option of provider.Options || []) {
-    if (!shouldShowOption(option)) {
+    if (!shouldShowOption(option, nestedProvider)) {
       continue;
     }
 
@@ -249,35 +400,7 @@ function renderProviderForm() {
     }
     field.appendChild(label);
 
-    let input;
-    if (option.Examples?.length) {
-      input = document.createElement("select");
-      const emptyOption = document.createElement("option");
-      emptyOption.value = "";
-      emptyOption.textContent = option.DefaultStr ? `Default (${option.DefaultStr})` : "Select…";
-      input.appendChild(emptyOption);
-
-      for (const example of option.Examples) {
-        const exampleOption = document.createElement("option");
-        exampleOption.value = example.Value;
-        exampleOption.textContent = example.Help ? `${example.Value} — ${example.Help}` : example.Value;
-        input.appendChild(exampleOption);
-      }
-    } else if (option.Type === "bool") {
-      input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = option.Default === true || option.DefaultStr === "true";
-    } else {
-      input = document.createElement("input");
-      input.type = option.IsPassword ? "password" : "text";
-      if (option.DefaultStr) {
-        input.placeholder = `Default: ${option.DefaultStr}`;
-      }
-    }
-
-    input.id = `remote-option-${option.Name}`;
-    input.name = option.Name;
-    input.className = "remote-option-input";
+    const input = createOptionInput(option, nestedProvider, previousValues);
     field.appendChild(input);
 
     if (option.Help) {
@@ -289,6 +412,43 @@ function renderProviderForm() {
 
     remoteManager.providerForm.appendChild(field);
   }
+
+  // Show the implied endpoint for providers like koofr/digistorage where rclone
+  // fills it automatically and the endpoint option is hidden (Provider: other).
+  const hasEndpointField = Boolean(remoteManager.providerForm.querySelector('[name="endpoint"]'));
+  const impliedEndpoint = endpointFromProviderHelp(provider, nestedProvider);
+  if (!hasEndpointField && impliedEndpoint) {
+    const field = document.createElement("label");
+    field.className = "field remote-option-field";
+    field.dataset.optionName = "endpoint-display";
+
+    const label = document.createElement("span");
+    label.className = "field-label";
+    label.textContent = "endpoint";
+    field.appendChild(label);
+
+    const input = document.createElement("input");
+    input.type = "url";
+    input.className = "remote-option-input";
+    input.value = impliedEndpoint;
+    input.disabled = true;
+    input.readOnly = true;
+    field.appendChild(input);
+
+    const hint = document.createElement("span");
+    hint.className = "remote-option-help";
+    hint.textContent = "Filled automatically for this provider.";
+    field.appendChild(hint);
+
+    const providerField = remoteManager.providerForm.querySelector('[data-option-name="provider"]');
+    if (providerField?.nextSibling) {
+      remoteManager.providerForm.insertBefore(field, providerField.nextSibling);
+    } else if (providerField) {
+      providerField.after(field);
+    } else {
+      remoteManager.providerForm.prepend(field);
+    }
+  }
 }
 
 function collectCreateOptions() {
@@ -297,7 +457,7 @@ function collectCreateOptions() {
   for (const field of remoteManager.providerForm.querySelectorAll(".remote-option-field")) {
     const name = field.dataset.optionName;
     const input = field.querySelector(".remote-option-input");
-    if (!input || !name) {
+    if (!input || !name || input.disabled || name.endsWith("-display")) {
       continue;
     }
 
