@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob: http://127.0.0.1:* http://localhost:*; frame-src 'self' blob:; img-src 'self' data: blob:" />
     <title>Glasswing Rclone</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -265,17 +265,19 @@
           <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
 
           <div class="browse-table-wrap">
-            <table class="browse-table" aria-label="Remote contents">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col" class="browse-col-size">Size</th>
-                  <th scope="col" class="browse-col-modified">Modified</th>
-                </tr>
-              </thead>
-              <tbody id="browse-entries"></tbody>
-            </table>
-            <p id="browse-empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
+            <div class="browse-table-scroll">
+              <table class="browse-table" aria-label="Remote contents">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col" class="browse-col-size">Size</th>
+                    <th scope="col" class="browse-col-modified">Modified</th>
+                  </tr>
+                </thead>
+                <tbody id="browse-entries"></tbody>
+              </table>
+              <p id="browse-empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
+            </div>
             <div id="browse-loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
               <span class="browse-loading-spinner" aria-hidden="true"></span>
               <span class="browse-loading-text">Loading…</span>
@@ -287,7 +289,8 @@
           <div class="browse-footer">
             <p id="browse-selection" class="browse-selection">Nothing selected</p>
             <div class="browse-actions">
-              <button id="browse-download" type="button" class="primary" disabled>Download</button>
+              <button id="browse-preview" type="button" class="primary" disabled>Preview</button>
+              <button id="browse-download" type="button" class="secondary" disabled>Download</button>
               <button id="browse-copy-path" type="button" class="secondary" disabled>Copy path</button>
               <button id="browse-use-source" type="button" class="secondary" disabled>Use as source</button>
               <button id="browse-use-dest" type="button" class="secondary" disabled>Use as destination</button>
@@ -295,6 +298,51 @@
           </div>
         </section>
       </main>
+      </div>
+    </div>
+
+    <div id="preview-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-preview-close></div>
+      <div class="popup-card popup-card-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+        <div class="preview-header">
+          <div>
+            <h2 id="preview-title" class="popup-title preview-title">Preview</h2>
+            <p id="preview-subtitle" class="preview-subtitle"></p>
+          </div>
+          <button id="preview-close" type="button" class="icon-button" aria-label="Close preview">×</button>
+        </div>
+        <div id="preview-body" class="preview-body">
+          <pre id="preview-text" class="preview-text hidden"></pre>
+          <iframe id="preview-pdf" class="preview-pdf hidden" title="PDF preview"></iframe>
+          <img id="preview-image" class="preview-image hidden" alt="" />
+          <video id="preview-video" class="preview-video hidden" controls playsinline preload="none"></video>
+          <div id="preview-audio-wrap" class="preview-audio-wrap hidden">
+            <div class="preview-audio-icon" aria-hidden="true"></div>
+            <audio id="preview-audio" class="preview-audio" controls preload="none"></audio>
+          </div>
+          <div id="preview-zip" class="preview-zip hidden">
+            <div class="preview-zip-toolbar">
+              <nav id="preview-zip-breadcrumbs" class="preview-zip-breadcrumbs" aria-label="Archive path"></nav>
+              <div id="preview-zip-summary" class="preview-zip-summary"></div>
+            </div>
+            <div id="preview-zip-loading" class="preview-zip-loading hidden" aria-live="polite">
+              <span class="browse-loading-spinner" aria-hidden="true"></span>
+              <span class="preview-zip-loading-text">Reading archive index…</span>
+            </div>
+            <div class="preview-zip-scroll">
+              <table class="preview-zip-table">
+                <thead>
+                  <tr>
+                    <th class="preview-zip-col-name">Name</th>
+                    <th class="preview-zip-col-size">Size</th>
+                    <th class="preview-zip-col-packed">Packed</th>
+                  </tr>
+                </thead>
+                <tbody id="preview-zip-entries"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

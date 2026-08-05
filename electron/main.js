@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const { listSevenZEntriesFromRemote } = require("./7z-preview");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -437,12 +438,27 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
   cacheContentChrome(mainWindow);
 
+  // Windows mouse side buttons arrive as app-command, not reliable mouse events.
+  mainWindow.on("app-command", (event, command) => {
+    if (command !== "browser-backward" && command !== "browser-forward") {
+      return;
+    }
+    event.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    mainWindow.webContents.send(
+      "history-navigate",
+      command === "browser-backward" ? "back" : "forward",
+    );
+  });
+
   if (icon) {
     mainWindow.setIcon(icon);
   }
 }
 
-function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
+function runRclone(args, { interactive = false, timeoutMs = 0, binary = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
       windowsHide: !interactive,
@@ -450,7 +466,8 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
       env: process.env,
     });
 
-    let stdout = "";
+    let stdout = binary ? null : "";
+    const stdoutChunks = binary ? [] : null;
     let stderr = "";
     let settled = false;
     let timer = null;
@@ -476,7 +493,11 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
     }
 
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
+      if (binary) {
+        stdoutChunks.push(chunk);
+      } else {
+        stdout += chunk.toString();
+      }
     });
 
     child.stderr.on("data", (chunk) => {
@@ -488,9 +509,71 @@ function runRclone(args, { interactive = false, timeoutMs = 0 } = {}) {
     });
 
     child.on("close", (code) => {
-      finish(() => resolve({ code, stdout, stderr }));
+      finish(() =>
+        resolve({
+          code,
+          stdout: binary ? Buffer.concat(stdoutChunks) : stdout,
+          stderr,
+        }),
+      );
     });
   });
+}
+
+async function fetchRemoteByteRange(source, offset, count, { timeoutMs = 120000 } = {}) {
+  if (count <= 0) {
+    return Buffer.alloc(0);
+  }
+
+  const result = await runRclone(
+    [
+      "cat",
+      source,
+      "--offset",
+      String(offset),
+      "--count",
+      String(count),
+      "--buffer-size",
+      "128Ki",
+    ],
+    { timeoutMs, binary: true },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout?.toString?.() || `Failed to read bytes from "${source}"`);
+  }
+
+  return result.stdout;
+}
+
+// Prefer end-relative reads. Positive offsets near the end of huge files can make
+// some remotes scan from byte 0; negative offsets map to HTTP suffix ranges.
+async function fetchRemoteTail(source, byteCount, options = {}) {
+  const count = Math.max(0, Math.floor(byteCount));
+  if (count <= 0) {
+    return Buffer.alloc(0);
+  }
+  return fetchRemoteByteRange(source, -count, count, options);
+}
+
+async function getRemoteObjectSize(source) {
+  const result = await runRclone(["lsjson", source, "--files-only"], { timeoutMs: 60000 });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to inspect "${source}"`);
+  }
+
+  const trimmed = result.stdout.trim();
+  const entries = trimmed ? JSON.parse(trimmed) : [];
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error(`File not found: ${source}`);
+  }
+
+  const entry = entries.find((item) => !item.IsDir) || entries[0];
+  if (typeof entry.Size !== "number" || entry.Size < 0) {
+    throw new Error("Could not determine file size.");
+  }
+
+  return entry.Size;
 }
 
 function parseConfigDump(stdout) {
@@ -881,6 +964,465 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   return { source, localPath: localPath.trim() };
 });
 
+const PREVIEW_KINDS = {
+  ".txt": { kind: "text", mime: "text/plain", maxBytes: 2 * 1024 * 1024, mode: "buffer" },
+  ".pdf": { kind: "pdf", mime: "application/pdf", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".mp3": { kind: "audio", mime: "audio/mpeg", mode: "stream" },
+  ".mp4": { kind: "video", mime: "video/mp4", mode: "stream" },
+  ".zip": { kind: "zip", mime: "application/zip", mode: "zip" },
+  ".7z": { kind: "zip", mime: "application/x-7z-compressed", mode: "7z" },
+  ".jpg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".jpeg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+  ".png": { kind: "image", mime: "image/png", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
+};
+
+const ZIP_EOCD_SIG = 0x06054b50;
+const ZIP_CD_SIG = 0x02014b50;
+const ZIP_ZIP64_LOCATOR_SIG = 0x07064b50;
+const ZIP_ZIP64_EOCD_SIG = 0x06064b50;
+const ZIP_PREVIEW_ENTRY_LIMIT = 5000;
+const ZIP_MAX_CENTRAL_DIRECTORY = 64 * 1024 * 1024;
+// EOCD is always within the last 22..65557 bytes (incl. max comment).
+const ZIP_EOCD_PROBE_BYTES = 65557;
+
+// Session cache so reopening the same archive doesn't re-fetch the index.
+const zipPreviewCache = new Map();
+const ZIP_PREVIEW_CACHE_LIMIT = 8;
+
+function parseZipCentralDirectory(central, totalEntriesHint) {
+  const entries = [];
+  let offset = 0;
+  let truncated = false;
+
+  while (offset + 46 <= central.length) {
+    if (central.readUInt32LE(offset) !== ZIP_CD_SIG) {
+      break;
+    }
+
+    const flags = central.readUInt16LE(offset + 8);
+    let compressedSize = central.readUInt32LE(offset + 20);
+    let uncompressedSize = central.readUInt32LE(offset + 24);
+    const nameLen = central.readUInt16LE(offset + 28);
+    const extraLen = central.readUInt16LE(offset + 30);
+    const commentLen = central.readUInt16LE(offset + 32);
+    const externalAttr = central.readUInt32LE(offset + 38);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + nameLen;
+    if (nameEnd > central.length) {
+      break;
+    }
+
+    const nameBuf = central.subarray(nameStart, nameEnd);
+    const name = (flags & 0x800 ? nameBuf.toString("utf8") : nameBuf.toString("latin1")).replace(/\\/g, "/");
+
+    const extraStart = nameEnd;
+    const extraEnd = extraStart + extraLen;
+    if (
+      (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) &&
+      extraLen >= 4 &&
+      extraEnd <= central.length
+    ) {
+      let extraOffset = extraStart;
+      while (extraOffset + 4 <= extraEnd) {
+        const headerId = central.readUInt16LE(extraOffset);
+        const dataSize = central.readUInt16LE(extraOffset + 2);
+        const dataStart = extraOffset + 4;
+        const dataEnd = dataStart + dataSize;
+        if (dataEnd > extraEnd) {
+          break;
+        }
+        if (headerId === 0x0001) {
+          let zip64Pos = dataStart;
+          if (uncompressedSize === 0xffffffff && zip64Pos + 8 <= dataEnd) {
+            uncompressedSize = Number(central.readBigUInt64LE(zip64Pos));
+            zip64Pos += 8;
+          }
+          if (compressedSize === 0xffffffff && zip64Pos + 8 <= dataEnd) {
+            compressedSize = Number(central.readBigUInt64LE(zip64Pos));
+          }
+          break;
+        }
+        extraOffset = dataEnd;
+      }
+    }
+
+    const isDir = name.endsWith("/") || ((externalAttr >>> 16) & 0o40000) !== 0;
+    if (entries.length < ZIP_PREVIEW_ENTRY_LIMIT) {
+      entries.push({
+        name,
+        size: isDir ? null : uncompressedSize,
+        compressedSize: isDir ? null : compressedSize,
+        isDir,
+      });
+    } else {
+      truncated = true;
+    }
+
+    offset = nameEnd + extraLen + commentLen;
+  }
+
+  entries.sort((left, right) => {
+    if (left.isDir !== right.isDir) {
+      return left.isDir ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
+
+  const totalEntries = Math.max(totalEntriesHint || 0, entries.length + (truncated ? 1 : 0));
+  return {
+    entries,
+    totalEntries,
+    truncated: truncated || totalEntries > entries.length,
+  };
+}
+
+function zipPreviewCacheKey(source, archiveSize) {
+  return `${source}\0${archiveSize}`;
+}
+
+function rememberZipPreview(source, archiveSize, payload) {
+  const key = zipPreviewCacheKey(source, archiveSize);
+  if (zipPreviewCache.has(key)) {
+    zipPreviewCache.delete(key);
+  }
+  zipPreviewCache.set(key, payload);
+  while (zipPreviewCache.size > ZIP_PREVIEW_CACHE_LIMIT) {
+    const oldest = zipPreviewCache.keys().next().value;
+    zipPreviewCache.delete(oldest);
+  }
+}
+
+async function listZipEntriesFromRemote(source, archiveSize) {
+  if (!Number.isFinite(archiveSize) || archiveSize < 22) {
+    throw new Error("Not a valid zip archive.");
+  }
+
+  // 1) Tiny end probe for EOCD (always in the last ~64KiB).
+  // 2) If needed, one precise suffix fetch for the central directory.
+  // Never use positive offsets into multi-GB objects.
+  let tail = await fetchRemoteTail(source, Math.min(archiveSize, ZIP_EOCD_PROBE_BYTES), {
+    timeoutMs: 120000,
+  });
+  let tailOffset = archiveSize - tail.length;
+
+  const findEocd = (buffer) => {
+    for (let i = buffer.length - 22; i >= 0; i -= 1) {
+      if (buffer.readUInt32LE(i) === ZIP_EOCD_SIG) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const eocd = findEocd(tail);
+  if (eocd < 0) {
+    throw new Error("Invalid or unsupported zip (missing central directory).");
+  }
+
+  let totalEntries = tail.readUInt16LE(eocd + 10);
+  let cdSize = tail.readUInt32LE(eocd + 12);
+  let cdOffset = tail.readUInt32LE(eocd + 16);
+
+  if (totalEntries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+    let locator = -1;
+    for (let i = eocd - 20; i >= 0; i -= 1) {
+      if (tail.readUInt32LE(i) === ZIP_ZIP64_LOCATOR_SIG) {
+        locator = i;
+        break;
+      }
+    }
+    if (locator < 0) {
+      throw new Error("Unsupported zip64 archive.");
+    }
+
+    const zip64EocdOffset = Number(tail.readBigUInt64LE(locator + 8));
+    let zip64Header;
+    if (zip64EocdOffset >= tailOffset && zip64EocdOffset + 56 <= archiveSize) {
+      const local = zip64EocdOffset - tailOffset;
+      zip64Header = tail.subarray(local, local + 56);
+    } else {
+      const fromEnd = archiveSize - zip64EocdOffset;
+      const slice = await fetchRemoteTail(source, fromEnd, { timeoutMs: 180000 });
+      zip64Header = slice.subarray(0, 56);
+    }
+
+    if (zip64Header.length < 56 || zip64Header.readUInt32LE(0) !== ZIP_ZIP64_EOCD_SIG) {
+      throw new Error("Unsupported zip64 archive.");
+    }
+
+    totalEntries = Number(zip64Header.readBigUInt64LE(32));
+    cdSize = Number(zip64Header.readBigUInt64LE(40));
+    cdOffset = Number(zip64Header.readBigUInt64LE(48));
+  }
+
+  if (!Number.isFinite(cdSize) || !Number.isFinite(cdOffset) || cdSize < 0 || cdOffset < 0) {
+    throw new Error("Invalid zip central directory.");
+  }
+  if (cdSize > ZIP_MAX_CENTRAL_DIRECTORY) {
+    throw new Error("Zip central directory is too large to preview.");
+  }
+  if (cdOffset > archiveSize || cdOffset + cdSize > archiveSize) {
+    throw new Error("Invalid zip central directory offsets.");
+  }
+
+  let central;
+  if (cdSize === 0) {
+    central = Buffer.alloc(0);
+  } else if (cdOffset >= tailOffset && cdOffset + cdSize <= tailOffset + tail.length) {
+    const local = cdOffset - tailOffset;
+    central = Buffer.from(tail.subarray(local, local + cdSize));
+  } else {
+    // Exact suffix covering central directory → end of file.
+    const fromEnd = archiveSize - cdOffset;
+    const slice = await fetchRemoteTail(source, fromEnd, { timeoutMs: 300000 });
+    if (slice.length < cdSize) {
+      throw new Error("Failed to read zip central directory.");
+    }
+    central = Buffer.from(slice.subarray(0, cdSize));
+  }
+
+  return parseZipCentralDirectory(central, totalEntries);
+}
+
+let previewServe = null;
+
+function previewKindFromPath(remotePath) {
+  const base = remotePath.split("/").pop() || remotePath;
+  const ext = path.extname(base).toLowerCase();
+  return PREVIEW_KINDS[ext] || null;
+}
+
+function sanitizePreviewFileName(remotePath, ext) {
+  const raw = path.basename((remotePath.split(":").pop() || `preview${ext}`).replace(/\\/g, "/"));
+  const cleaned = raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim() || `preview${ext}`;
+  return cleaned;
+}
+
+function splitRemoteParentAndFile(source) {
+  const match = /^([^:]+):(.*)$/.exec(source);
+  const remote = match[1];
+  const subPath = (match[2] || "").replace(/^\/+/, "").replace(/\\/g, "/");
+  const parts = subPath.split("/").filter(Boolean);
+  const fileName = parts.pop() || "";
+  const parentPath = parts.length ? `${remote}:${parts.join("/")}` : `${remote}:`;
+  return { parentPath, fileName };
+}
+
+function stopPreviewServe() {
+  if (!previewServe) {
+    return;
+  }
+
+  const child = previewServe.child;
+  previewServe = null;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function startPreviewServe(parentPath) {
+  return new Promise((resolve, reject) => {
+    stopPreviewServe();
+
+    // No basic auth: Chromium strips user:pass from media element fetches.
+    // Small VFS chunks avoid the default 128Mi read-ahead that pulled whole MP3s.
+    const child = spawn(
+      "rclone",
+      [
+        "serve",
+        "http",
+        parentPath,
+        "--addr",
+        "127.0.0.1:0",
+        "--vfs-cache-mode",
+        "off",
+        "--vfs-read-chunk-size",
+        "512k",
+        "--vfs-read-chunk-size-limit",
+        "2M",
+        "--buffer-size",
+        "512k",
+      ],
+      {
+        windowsHide: true,
+        shell: false,
+        env: process.env,
+      },
+    );
+
+    let settled = false;
+    let output = "";
+
+    const finish = (handler) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      handler();
+    };
+
+    const timer = setTimeout(() => {
+      finish(() => {
+        try {
+          child.kill();
+        } catch {
+          // ignore
+        }
+        reject(new Error("Timed out starting media preview stream."));
+      });
+    }, 20000);
+
+    const onData = (chunk) => {
+      output += chunk.toString();
+      const match =
+        output.match(/Serving on (https?:\/\/[^\s\]]+)/i) ||
+        output.match(/HTTP Server started on \[(https?:\/\/[^\]]+)\]/i) ||
+        output.match(/HTTP Server started on (https?:\/\/[^\s\]]+)/i);
+      if (!match) {
+        return;
+      }
+
+      finish(() => {
+        const baseUrl = match[1].replace(/\/$/, "");
+        previewServe = { child, baseUrl };
+        resolve(previewServe);
+      });
+    };
+
+    child.stdout.on("data", onData);
+    child.stderr.on("data", onData);
+
+    child.on("error", (error) => {
+      finish(() => reject(error));
+    });
+
+    child.on("close", (code) => {
+      if (previewServe?.child === child) {
+        previewServe = null;
+      }
+      finish(() => {
+        reject(new Error(output.trim() || `Preview stream exited (code ${code ?? "?"}).`));
+      });
+    });
+  });
+}
+
+ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before opening a preview.");
+  }
+
+  const source = normalizeRemoteBrowsePath(remotePath);
+  const meta = previewKindFromPath(source);
+  if (!meta) {
+    throw new Error("Preview supports .txt, .pdf, .mp3, .mp4, .zip, .7z, .jpg, .jpeg, and .png files only.");
+  }
+
+  if (meta.mode === "stream") {
+    const { parentPath, fileName } = splitRemoteParentAndFile(source);
+    if (!fileName) {
+      throw new Error("Invalid media path for preview.");
+    }
+
+    const serve = await startPreviewServe(parentPath);
+    // Avoid encodeURIComponent on the whole name: rclone serves path segments with
+    // percent-encoding for reserved chars only (spaces -> %20 is fine via encodeURI).
+    const streamUrl = `${serve.baseUrl}/${encodeURI(fileName).replace(/#/g, "%23")}`;
+    return {
+      kind: meta.kind,
+      name: fileName,
+      mime: meta.mime,
+      streamUrl,
+      streamed: true,
+    };
+  }
+
+  if (meta.mode === "zip" || meta.mode === "7z") {
+    stopPreviewServe();
+    const { fileName } = splitRemoteParentAndFile(source);
+    if (!fileName) {
+      throw new Error("Invalid archive path for preview.");
+    }
+
+    const hintedSize = Number(options?.size);
+    const archiveSize =
+      Number.isFinite(hintedSize) && hintedSize >= 0 ? hintedSize : await getRemoteObjectSize(source);
+
+    const cacheKey = zipPreviewCacheKey(source, archiveSize);
+    const cached = zipPreviewCache.get(cacheKey);
+    if (cached) {
+      rememberZipPreview(source, archiveSize, cached);
+      return { ...cached };
+    }
+
+    const listed =
+      meta.mode === "7z"
+        ? await listSevenZEntriesFromRemote(source, archiveSize, {
+            fetchRange: fetchRemoteByteRange,
+            fetchTail: fetchRemoteTail,
+          })
+        : await listZipEntriesFromRemote(source, archiveSize);
+
+    const payload = {
+      kind: "zip",
+      name: fileName,
+      entries: listed.entries,
+      totalEntries: listed.totalEntries,
+      truncated: listed.truncated,
+      archiveBytes: archiveSize,
+    };
+    rememberZipPreview(source, archiveSize, payload);
+    return payload;
+  }
+
+  stopPreviewServe();
+
+  const tmpDir = path.join(app.getPath("temp"), "glasswing-preview", randomUUID());
+  const localPath = path.join(tmpDir, sanitizePreviewFileName(source, path.extname(source)));
+
+  try {
+    await fs.mkdir(tmpDir, { recursive: true });
+    const result = await runRclone(["copyto", source, localPath], { timeoutMs: 0 });
+    if (result.code !== 0) {
+      throw new Error(result.stderr || result.stdout || `Failed to fetch "${source}"`);
+    }
+
+    const stat = await fs.stat(localPath);
+    if (meta.maxBytes && stat.size > meta.maxBytes) {
+      const limitMb = Math.round(meta.maxBytes / (1024 * 1024));
+      throw new Error(`Preview is limited to ${limitMb} MB for ${meta.kind} files.`);
+    }
+
+    if (meta.kind === "text") {
+      const text = await fs.readFile(localPath, "utf8");
+      return {
+        kind: meta.kind,
+        name: path.basename(localPath),
+        text,
+      };
+    }
+
+    const data = await fs.readFile(localPath);
+    return {
+      kind: meta.kind,
+      name: path.basename(localPath),
+      mime: meta.mime,
+      data,
+    };
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+ipcMain.handle("close-remote-preview", async () => {
+  stopPreviewServe();
+});
+
 ipcMain.handle("start-job", async (_event, job) => {
   if (activeJob) {
     throw new Error("A job is already running.");
@@ -1069,6 +1611,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   stopActiveJob();
+  stopPreviewServe();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -1076,4 +1619,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopActiveJob();
+  stopPreviewServe();
 });

@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),
   downloadRemoteFile: (payload) => ipcRenderer.invoke("download-remote-file", payload),
+  openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-preview", remotePath, options),
+  closeRemotePreview: () => ipcRenderer.invoke("close-remote-preview"),
   startJob: (job) => ipcRenderer.invoke("start-job", job),
   stopJob: () => ipcRenderer.invoke("stop-job"),
   setMinimumContentSize: (size) => ipcRenderer.invoke("set-minimum-content-size", size),
@@ -43,5 +45,10 @@ contextBridge.exposeInMainWorld("rcloneGui", {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("job-finished", listener);
     return () => ipcRenderer.removeListener("job-finished", listener);
+  },
+  onHistoryNavigate: (callback) => {
+    const listener = (_event, direction) => callback(direction);
+    ipcRenderer.on("history-navigate", listener);
+    return () => ipcRenderer.removeListener("history-navigate", listener);
   },
 });
