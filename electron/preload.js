@@ -46,4 +46,9 @@ contextBridge.exposeInMainWorld("rcloneGui", {
     ipcRenderer.on("job-finished", listener);
     return () => ipcRenderer.removeListener("job-finished", listener);
   },
+  onHistoryNavigate: (callback) => {
+    const listener = (_event, direction) => callback(direction);
+    ipcRenderer.on("history-navigate", listener);
+    return () => ipcRenderer.removeListener("history-navigate", listener);
+  },
 });

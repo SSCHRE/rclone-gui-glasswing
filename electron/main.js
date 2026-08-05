@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const { listSevenZEntriesFromRemote } = require("./7z-preview");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -437,6 +438,21 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
   cacheContentChrome(mainWindow);
 
+  // Windows mouse side buttons arrive as app-command, not reliable mouse events.
+  mainWindow.on("app-command", (event, command) => {
+    if (command !== "browser-backward" && command !== "browser-forward") {
+      return;
+    }
+    event.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    mainWindow.webContents.send(
+      "history-navigate",
+      command === "browser-backward" ? "back" : "forward",
+    );
+  });
+
   if (icon) {
     mainWindow.setIcon(icon);
   }
@@ -504,7 +520,7 @@ function runRclone(args, { interactive = false, timeoutMs = 0, binary = false } 
   });
 }
 
-async function fetchRemoteByteRange(source, offset, count) {
+async function fetchRemoteByteRange(source, offset, count, { timeoutMs = 120000 } = {}) {
   if (count <= 0) {
     return Buffer.alloc(0);
   }
@@ -520,7 +536,7 @@ async function fetchRemoteByteRange(source, offset, count) {
       "--buffer-size",
       "128Ki",
     ],
-    { timeoutMs: 120000, binary: true },
+    { timeoutMs, binary: true },
   );
 
   if (result.code !== 0) {
@@ -528,6 +544,16 @@ async function fetchRemoteByteRange(source, offset, count) {
   }
 
   return result.stdout;
+}
+
+// Prefer end-relative reads. Positive offsets near the end of huge files can make
+// some remotes scan from byte 0; negative offsets map to HTTP suffix ranges.
+async function fetchRemoteTail(source, byteCount, options = {}) {
+  const count = Math.max(0, Math.floor(byteCount));
+  if (count <= 0) {
+    return Buffer.alloc(0);
+  }
+  return fetchRemoteByteRange(source, -count, count, options);
 }
 
 async function getRemoteObjectSize(source) {
@@ -944,6 +970,7 @@ const PREVIEW_KINDS = {
   ".mp3": { kind: "audio", mime: "audio/mpeg", mode: "stream" },
   ".mp4": { kind: "video", mime: "video/mp4", mode: "stream" },
   ".zip": { kind: "zip", mime: "application/zip", mode: "zip" },
+  ".7z": { kind: "zip", mime: "application/x-7z-compressed", mode: "7z" },
   ".jpg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
   ".jpeg": { kind: "image", mime: "image/jpeg", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
   ".png": { kind: "image", mime: "image/png", maxBytes: 40 * 1024 * 1024, mode: "buffer" },
@@ -955,6 +982,12 @@ const ZIP_ZIP64_LOCATOR_SIG = 0x07064b50;
 const ZIP_ZIP64_EOCD_SIG = 0x06064b50;
 const ZIP_PREVIEW_ENTRY_LIMIT = 5000;
 const ZIP_MAX_CENTRAL_DIRECTORY = 64 * 1024 * 1024;
+// EOCD is always within the last 22..65557 bytes (incl. max comment).
+const ZIP_EOCD_PROBE_BYTES = 65557;
+
+// Session cache so reopening the same archive doesn't re-fetch the index.
+const zipPreviewCache = new Map();
+const ZIP_PREVIEW_CACHE_LIMIT = 8;
 
 function parseZipCentralDirectory(central, totalEntriesHint) {
   const entries = [];
@@ -1043,23 +1076,45 @@ function parseZipCentralDirectory(central, totalEntriesHint) {
   };
 }
 
+function zipPreviewCacheKey(source, archiveSize) {
+  return `${source}\0${archiveSize}`;
+}
+
+function rememberZipPreview(source, archiveSize, payload) {
+  const key = zipPreviewCacheKey(source, archiveSize);
+  if (zipPreviewCache.has(key)) {
+    zipPreviewCache.delete(key);
+  }
+  zipPreviewCache.set(key, payload);
+  while (zipPreviewCache.size > ZIP_PREVIEW_CACHE_LIMIT) {
+    const oldest = zipPreviewCache.keys().next().value;
+    zipPreviewCache.delete(oldest);
+  }
+}
+
 async function listZipEntriesFromRemote(source, archiveSize) {
   if (!Number.isFinite(archiveSize) || archiveSize < 22) {
     throw new Error("Not a valid zip archive.");
   }
 
-  // Only fetch the end of the archive (EOCD + usually the central directory).
-  const tailSize = Math.min(archiveSize, 65557);
-  const tailOffset = archiveSize - tailSize;
-  const tail = await fetchRemoteByteRange(source, tailOffset, tailSize);
+  // 1) Tiny end probe for EOCD (always in the last ~64KiB).
+  // 2) If needed, one precise suffix fetch for the central directory.
+  // Never use positive offsets into multi-GB objects.
+  let tail = await fetchRemoteTail(source, Math.min(archiveSize, ZIP_EOCD_PROBE_BYTES), {
+    timeoutMs: 120000,
+  });
+  let tailOffset = archiveSize - tail.length;
 
-  let eocd = -1;
-  for (let i = tail.length - 22; i >= 0; i -= 1) {
-    if (tail.readUInt32LE(i) === ZIP_EOCD_SIG) {
-      eocd = i;
-      break;
+  const findEocd = (buffer) => {
+    for (let i = buffer.length - 22; i >= 0; i -= 1) {
+      if (buffer.readUInt32LE(i) === ZIP_EOCD_SIG) {
+        return i;
+      }
     }
-  }
+    return -1;
+  };
+
+  const eocd = findEocd(tail);
   if (eocd < 0) {
     throw new Error("Invalid or unsupported zip (missing central directory).");
   }
@@ -1086,10 +1141,12 @@ async function listZipEntriesFromRemote(source, archiveSize) {
       const local = zip64EocdOffset - tailOffset;
       zip64Header = tail.subarray(local, local + 56);
     } else {
-      zip64Header = await fetchRemoteByteRange(source, zip64EocdOffset, 56);
+      const fromEnd = archiveSize - zip64EocdOffset;
+      const slice = await fetchRemoteTail(source, fromEnd, { timeoutMs: 180000 });
+      zip64Header = slice.subarray(0, 56);
     }
 
-    if (zip64Header.readUInt32LE(0) !== ZIP_ZIP64_EOCD_SIG) {
+    if (zip64Header.length < 56 || zip64Header.readUInt32LE(0) !== ZIP_ZIP64_EOCD_SIG) {
       throw new Error("Unsupported zip64 archive.");
     }
 
@@ -1104,16 +1161,24 @@ async function listZipEntriesFromRemote(source, archiveSize) {
   if (cdSize > ZIP_MAX_CENTRAL_DIRECTORY) {
     throw new Error("Zip central directory is too large to preview.");
   }
+  if (cdOffset > archiveSize || cdOffset + cdSize > archiveSize) {
+    throw new Error("Invalid zip central directory offsets.");
+  }
 
   let central;
   if (cdSize === 0) {
     central = Buffer.alloc(0);
-  } else if (cdOffset >= tailOffset && cdOffset + cdSize <= archiveSize) {
+  } else if (cdOffset >= tailOffset && cdOffset + cdSize <= tailOffset + tail.length) {
     const local = cdOffset - tailOffset;
     central = Buffer.from(tail.subarray(local, local + cdSize));
   } else {
-    // Directory starts earlier than the EOCD tail window — fetch only that slice.
-    central = await fetchRemoteByteRange(source, cdOffset, cdSize);
+    // Exact suffix covering central directory → end of file.
+    const fromEnd = archiveSize - cdOffset;
+    const slice = await fetchRemoteTail(source, fromEnd, { timeoutMs: 300000 });
+    if (slice.length < cdSize) {
+      throw new Error("Failed to read zip central directory.");
+    }
+    central = Buffer.from(slice.subarray(0, cdSize));
   }
 
   return parseZipCentralDirectory(central, totalEntries);
@@ -1255,7 +1320,7 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
   const source = normalizeRemoteBrowsePath(remotePath);
   const meta = previewKindFromPath(source);
   if (!meta) {
-    throw new Error("Preview supports .txt, .pdf, .mp3, .mp4, .zip, .jpg, .jpeg, and .png files only.");
+    throw new Error("Preview supports .txt, .pdf, .mp3, .mp4, .zip, .7z, .jpg, .jpeg, and .png files only.");
   }
 
   if (meta.mode === "stream") {
@@ -1277,18 +1342,33 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
     };
   }
 
-  if (meta.mode === "zip") {
+  if (meta.mode === "zip" || meta.mode === "7z") {
     stopPreviewServe();
     const { fileName } = splitRemoteParentAndFile(source);
     if (!fileName) {
-      throw new Error("Invalid zip path for preview.");
+      throw new Error("Invalid archive path for preview.");
     }
 
     const hintedSize = Number(options?.size);
     const archiveSize =
       Number.isFinite(hintedSize) && hintedSize >= 0 ? hintedSize : await getRemoteObjectSize(source);
-    const listed = await listZipEntriesFromRemote(source, archiveSize);
-    return {
+
+    const cacheKey = zipPreviewCacheKey(source, archiveSize);
+    const cached = zipPreviewCache.get(cacheKey);
+    if (cached) {
+      rememberZipPreview(source, archiveSize, cached);
+      return { ...cached };
+    }
+
+    const listed =
+      meta.mode === "7z"
+        ? await listSevenZEntriesFromRemote(source, archiveSize, {
+            fetchRange: fetchRemoteByteRange,
+            fetchTail: fetchRemoteTail,
+          })
+        : await listZipEntriesFromRemote(source, archiveSize);
+
+    const payload = {
       kind: "zip",
       name: fileName,
       entries: listed.entries,
@@ -1296,6 +1376,8 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
       truncated: listed.truncated,
       archiveBytes: archiveSize,
     };
+    rememberZipPreview(source, archiveSize, payload);
+    return payload;
   }
 
   stopPreviewServe();

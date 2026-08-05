@@ -321,7 +321,14 @@
             <audio id="preview-audio" class="preview-audio" controls preload="none"></audio>
           </div>
           <div id="preview-zip" class="preview-zip hidden">
-            <div id="preview-zip-summary" class="preview-zip-summary"></div>
+            <div class="preview-zip-toolbar">
+              <nav id="preview-zip-breadcrumbs" class="preview-zip-breadcrumbs" aria-label="Archive path"></nav>
+              <div id="preview-zip-summary" class="preview-zip-summary"></div>
+            </div>
+            <div id="preview-zip-loading" class="preview-zip-loading hidden" aria-live="polite">
+              <span class="browse-loading-spinner" aria-hidden="true"></span>
+              <span class="preview-zip-loading-text">Reading archive index…</span>
+            </div>
             <div class="preview-zip-scroll">
               <table class="preview-zip-table">
                 <thead>

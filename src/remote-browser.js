@@ -28,12 +28,14 @@ const previewUi = {
   audioWrap: document.getElementById("preview-audio-wrap"),
   audio: document.getElementById("preview-audio"),
   zip: document.getElementById("preview-zip"),
+  zipBreadcrumbs: document.getElementById("preview-zip-breadcrumbs"),
   zipSummary: document.getElementById("preview-zip-summary"),
+  zipLoading: document.getElementById("preview-zip-loading"),
   zipEntries: document.getElementById("preview-zip-entries"),
   closeBtn: document.getElementById("preview-close"),
 };
 
-const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".jpg", ".jpeg", ".png"]);
+const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".7z", ".jpg", ".jpeg", ".png"]);
 
 let browseRemotes = [];
 let currentRemote = "";
@@ -47,6 +49,9 @@ let loadToken = 0;
 let onUsePath = null;
 let onNotify = null;
 let previewBlobUrl = null;
+let zipPreviewState = null;
+let browseHistory = [];
+let browseHistoryIndex = -1;
 
 function notify(payload) {
   if (typeof onNotify === "function") {
@@ -386,11 +391,75 @@ async function loadListing() {
   }
 }
 
-async function navigateTo(subPath) {
+function pushBrowseHistory(remote, subPath) {
+  if (!remote) {
+    return;
+  }
+
+  const entry = {
+    remote,
+    subPath: String(subPath || "")
+      .replace(/\\/g, "/")
+      .replace(/^\/+|\/+$/g, ""),
+  };
+  const current = browseHistory[browseHistoryIndex];
+  if (current && current.remote === entry.remote && current.subPath === entry.subPath) {
+    return;
+  }
+
+  browseHistory = browseHistory.slice(0, browseHistoryIndex + 1);
+  browseHistory.push(entry);
+  browseHistoryIndex = browseHistory.length - 1;
+}
+
+function resetBrowseHistory(remote, subPath = "") {
+  browseHistory = [];
+  browseHistoryIndex = -1;
+  if (remote) {
+    pushBrowseHistory(remote, subPath);
+  }
+}
+
+async function navigateTo(subPath, { recordHistory = true } = {}) {
   currentSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
+  if (recordHistory) {
+    pushBrowseHistory(currentRemote, currentSubPath);
+  }
   await loadListing();
+}
+
+async function browseHistoryBack() {
+  if (browseHistoryIndex <= 0 || loading) {
+    return false;
+  }
+
+  browseHistoryIndex -= 1;
+  const entry = browseHistory[browseHistoryIndex];
+  currentRemote = entry.remote;
+  if (remoteBrowser.remotePicker) {
+    remoteBrowser.remotePicker.value = entry.remote;
+  }
+  currentSubPath = entry.subPath;
+  await loadListing();
+  return true;
+}
+
+async function browseHistoryForward() {
+  if (browseHistoryIndex < 0 || browseHistoryIndex >= browseHistory.length - 1 || loading) {
+    return false;
+  }
+
+  browseHistoryIndex += 1;
+  const entry = browseHistory[browseHistoryIndex];
+  currentRemote = entry.remote;
+  if (remoteBrowser.remotePicker) {
+    remoteBrowser.remotePicker.value = entry.remote;
+  }
+  currentSubPath = entry.subPath;
+  await loadListing();
+  return true;
 }
 
 function fillRemotePicker() {
@@ -416,6 +485,7 @@ function fillRemotePicker() {
     selectedPath = null;
     selectedIsDir = false;
     selectedSize = null;
+    resetBrowseHistory("");
   }
 
   renderBreadcrumbs();
@@ -507,13 +577,21 @@ function clearPreviewContent() {
   }
   if (previewUi.zip) {
     previewUi.zip.classList.add("hidden");
+    previewUi.zip.classList.remove("is-loading");
+  }
+  if (previewUi.zipBreadcrumbs) {
+    previewUi.zipBreadcrumbs.innerHTML = "";
   }
   if (previewUi.zipSummary) {
     previewUi.zipSummary.textContent = "";
   }
+  if (previewUi.zipLoading) {
+    previewUi.zipLoading.classList.add("hidden");
+  }
   if (previewUi.zipEntries) {
     previewUi.zipEntries.innerHTML = "";
   }
+  zipPreviewState = null;
   previewCard()?.classList.remove("is-video");
 }
 
@@ -566,8 +644,29 @@ function openPreviewDialog(payload) {
     }
     previewUi.video.classList.remove("hidden");
   } else if (payload.kind === "zip") {
-    renderZipPreview(payload);
     previewUi.zip.classList.remove("hidden");
+    if (payload.pending) {
+      previewUi.zip.classList.add("is-loading");
+      if (previewUi.zipLoading) {
+        previewUi.zipLoading.classList.remove("hidden");
+      }
+      if (previewUi.zipSummary) {
+        previewUi.zipSummary.textContent = payload.statusText || "Reading archive index…";
+      }
+      if (previewUi.zipBreadcrumbs) {
+        previewUi.zipBreadcrumbs.innerHTML = "";
+        const root = document.createElement("span");
+        root.className = "preview-zip-crumb";
+        root.textContent = payload.name || "archive";
+        previewUi.zipBreadcrumbs.appendChild(root);
+      }
+    } else {
+      previewUi.zip.classList.remove("is-loading");
+      if (previewUi.zipLoading) {
+        previewUi.zipLoading.classList.add("hidden");
+      }
+      renderZipPreview(payload);
+    }
   } else {
     throw new Error("Unsupported preview type.");
   }
@@ -576,37 +675,267 @@ function openPreviewDialog(payload) {
   previewUi.dialog.setAttribute("aria-hidden", "false");
 }
 
-function renderZipPreview(payload) {
-  const entries = Array.isArray(payload.entries) ? payload.entries : [];
-  const total = typeof payload.totalEntries === "number" ? payload.totalEntries : entries.length;
-  const archiveLabel = formatBytes(payload.archiveBytes);
-  const shown = entries.length;
-  const parts = [`${total.toLocaleString()} item${total === 1 ? "" : "s"}`, archiveLabel];
-  if (payload.truncated && shown < total) {
-    parts.push(`showing first ${shown.toLocaleString()}`);
+function normalizeZipEntryPath(name) {
+  return String(name || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+}
+
+function buildZipFolderListing(allEntries, currentPath) {
+  const prefix = currentPath ? `${currentPath}/` : "";
+  const folders = new Map();
+  const files = [];
+
+  for (const entry of allEntries) {
+    const fullPath = normalizeZipEntryPath(entry.name);
+    if (!fullPath) {
+      continue;
+    }
+
+    if (prefix) {
+      if (fullPath === currentPath) {
+        continue;
+      }
+      if (!fullPath.startsWith(prefix)) {
+        continue;
+      }
+    }
+
+    const relative = prefix ? fullPath.slice(prefix.length) : fullPath;
+    if (!relative) {
+      continue;
+    }
+
+    const slash = relative.indexOf("/");
+    if (slash >= 0) {
+      const folderName = relative.slice(0, slash);
+      if (!folders.has(folderName)) {
+        folders.set(folderName, {
+          name: folderName,
+          path: prefix ? `${currentPath}/${folderName}` : folderName,
+          isDir: true,
+          size: null,
+          compressedSize: null,
+        });
+      }
+      continue;
+    }
+
+    if (entry.isDir) {
+      if (!folders.has(relative)) {
+        folders.set(relative, {
+          name: relative,
+          path: fullPath,
+          isDir: true,
+          size: null,
+          compressedSize: null,
+        });
+      }
+      continue;
+    }
+
+    files.push({
+      name: relative,
+      path: fullPath,
+      isDir: false,
+      size: entry.size,
+      compressedSize: entry.compressedSize,
+    });
+  }
+
+  return [...folders.values(), ...files].sort((left, right) => {
+    if (left.isDir !== right.isDir) {
+      return left.isDir ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
+}
+
+function renderZipBreadcrumbs() {
+  if (!previewUi.zipBreadcrumbs || !zipPreviewState) {
+    return;
+  }
+
+  previewUi.zipBreadcrumbs.innerHTML = "";
+  const root = document.createElement("button");
+  root.type = "button";
+  root.className = "preview-zip-crumb";
+  root.textContent = zipPreviewState.name || "archive";
+  root.title = zipPreviewState.name || "archive";
+  root.disabled = !zipPreviewState.currentPath;
+  root.addEventListener("click", () => {
+    if (zipPreviewState.currentPath) {
+      navigateZipTo("");
+    }
+  });
+  previewUi.zipBreadcrumbs.appendChild(root);
+
+  const parts = zipPreviewState.currentPath ? zipPreviewState.currentPath.split("/").filter(Boolean) : [];
+  let path = "";
+  for (const part of parts) {
+    path = path ? `${path}/${part}` : part;
+    const sep = document.createElement("span");
+    sep.className = "preview-zip-crumb-sep";
+    sep.textContent = "/";
+    sep.setAttribute("aria-hidden", "true");
+    previewUi.zipBreadcrumbs.appendChild(sep);
+
+    const crumbPath = path;
+    const crumb = document.createElement("button");
+    crumb.type = "button";
+    crumb.className = "preview-zip-crumb";
+    crumb.textContent = part;
+    crumb.title = crumbPath;
+    crumb.disabled = crumbPath === zipPreviewState.currentPath;
+    crumb.addEventListener("click", () => {
+      if (zipPreviewState.currentPath !== crumbPath) {
+        navigateZipTo(crumbPath);
+      }
+    });
+    previewUi.zipBreadcrumbs.appendChild(crumb);
+  }
+}
+
+function navigateZipTo(path, { recordHistory = true } = {}) {
+  if (!zipPreviewState) {
+    return;
+  }
+
+  const next = String(path || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
+
+  if (recordHistory) {
+    const history = Array.isArray(zipPreviewState.history) ? zipPreviewState.history : [""];
+    let index = Number.isInteger(zipPreviewState.historyIndex) ? zipPreviewState.historyIndex : 0;
+    const current = history[index];
+    if (current !== next) {
+      const trimmed = history.slice(0, index + 1);
+      trimmed.push(next);
+      zipPreviewState.history = trimmed;
+      zipPreviewState.historyIndex = trimmed.length - 1;
+    }
+  }
+
+  zipPreviewState.currentPath = next;
+  renderZipFolderView();
+}
+
+function zipHistoryBack() {
+  if (!zipPreviewState || !Array.isArray(zipPreviewState.history)) {
+    return false;
+  }
+  if (zipPreviewState.historyIndex <= 0) {
+    return false;
+  }
+  zipPreviewState.historyIndex -= 1;
+  zipPreviewState.currentPath = zipPreviewState.history[zipPreviewState.historyIndex] || "";
+  renderZipFolderView();
+  return true;
+}
+
+function zipHistoryForward() {
+  if (!zipPreviewState || !Array.isArray(zipPreviewState.history)) {
+    return false;
+  }
+  if (zipPreviewState.historyIndex >= zipPreviewState.history.length - 1) {
+    return false;
+  }
+  zipPreviewState.historyIndex += 1;
+  zipPreviewState.currentPath = zipPreviewState.history[zipPreviewState.historyIndex] || "";
+  renderZipFolderView();
+  return true;
+}
+
+function isZipPreviewOpen() {
+  return Boolean(
+    zipPreviewState &&
+      previewUi.dialog &&
+      !previewUi.dialog.classList.contains("hidden") &&
+      previewUi.zip &&
+      !previewUi.zip.classList.contains("hidden") &&
+      !previewUi.zip.classList.contains("is-loading"),
+  );
+}
+
+function isBrowseViewVisible() {
+  return Boolean(remoteBrowser.view && !remoteBrowser.view.classList.contains("hidden") && !remoteBrowser.view.hidden);
+}
+
+function handleHistoryNavigate(direction) {
+  if (direction === "back") {
+    if (isZipPreviewOpen()) {
+      zipHistoryBack();
+      return;
+    }
+    if (isBrowseViewVisible()) {
+      void browseHistoryBack();
+    }
+    return;
+  }
+
+  if (direction === "forward") {
+    if (isZipPreviewOpen()) {
+      zipHistoryForward();
+      return;
+    }
+    if (isBrowseViewVisible()) {
+      void browseHistoryForward();
+    }
+  }
+}
+
+function renderZipFolderView() {
+  if (!zipPreviewState || !previewUi.zipEntries) {
+    return;
+  }
+
+  const listing = buildZipFolderListing(zipPreviewState.entries, zipPreviewState.currentPath);
+  const total = zipPreviewState.totalEntries;
+  const archiveLabel = formatBytes(zipPreviewState.archiveBytes);
+  const parts = [
+    `${listing.length.toLocaleString()} item${listing.length === 1 ? "" : "s"} here`,
+    `${total.toLocaleString()} in archive`,
+    archiveLabel,
+  ];
+  if (zipPreviewState.truncated) {
+    parts.push("index truncated");
   }
   if (previewUi.zipSummary) {
     previewUi.zipSummary.textContent = parts.filter(Boolean).join(" · ");
   }
 
-  if (!previewUi.zipEntries) {
-    return;
-  }
-
+  renderZipBreadcrumbs();
   previewUi.zipEntries.innerHTML = "";
-  if (entries.length === 0) {
+
+  if (listing.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 3;
-    cell.textContent = "This archive is empty.";
+    cell.textContent = zipPreviewState.currentPath ? "This folder is empty." : "This archive is empty.";
     cell.style.color = "var(--muted)";
     row.appendChild(cell);
     previewUi.zipEntries.appendChild(row);
     return;
   }
 
-  for (const entry of entries) {
+  for (const entry of listing) {
     const row = document.createElement("tr");
+    row.className = `preview-zip-row${entry.isDir ? " is-dir" : " is-file"}`;
+    if (entry.isDir) {
+      row.tabIndex = 0;
+      const openFolder = () => {
+        navigateZipTo(entry.path);
+      };
+      row.addEventListener("click", openFolder);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openFolder();
+        }
+      });
+    }
 
     const nameCell = document.createElement("td");
     nameCell.className = "preview-zip-col-name";
@@ -618,7 +947,7 @@ function renderZipPreview(payload) {
     const nameText = document.createElement("span");
     nameText.className = "preview-zip-name-text";
     nameText.textContent = entry.name;
-    nameText.title = entry.name;
+    nameText.title = entry.path || entry.name;
     nameWrap.append(icon, nameText);
     nameCell.appendChild(nameWrap);
 
@@ -633,6 +962,20 @@ function renderZipPreview(payload) {
     row.append(nameCell, sizeCell, packedCell);
     previewUi.zipEntries.appendChild(row);
   }
+}
+
+function renderZipPreview(payload) {
+  zipPreviewState = {
+    name: payload.name || "archive",
+    entries: Array.isArray(payload.entries) ? payload.entries : [],
+    totalEntries: typeof payload.totalEntries === "number" ? payload.totalEntries : (payload.entries || []).length,
+    truncated: Boolean(payload.truncated),
+    archiveBytes: payload.archiveBytes,
+    currentPath: "",
+    history: [""],
+    historyIndex: 0,
+  };
+  renderZipFolderView();
 }
 
 function bindStreamMedia(kind, streamUrl, mime) {
@@ -718,7 +1061,34 @@ async function previewSelectedFile() {
     return;
   }
 
-  setLoading(true, ext === ".zip" ? "Reading zip index…" : "Preparing preview…");
+  if (ext === ".zip" || ext === ".7z") {
+    openPreviewDialog({
+      kind: "zip",
+      name: selectedFileName(),
+      pending: true,
+      statusText: ext === ".7z" ? "Reading 7z index…" : "Reading zip index…",
+    });
+    updateActionState();
+    try {
+      const payload = await window.rcloneGui.openRemotePreview(remotePath, { size: fileSize });
+      if (previewUi.subtitle) {
+        previewUi.subtitle.textContent = selectedPath || "";
+      }
+      openPreviewDialog(payload);
+    } catch (error) {
+      closePreview();
+      notify({
+        title: "Preview failed",
+        message: error.message || "Could not open a preview.",
+        type: "error",
+      });
+    } finally {
+      updateActionState();
+    }
+    return;
+  }
+
+  setLoading(true, "Preparing preview…");
   updateActionState();
 
   try {
@@ -799,6 +1169,7 @@ function bindEvents() {
     selectedPath = null;
     selectedIsDir = false;
     selectedSize = null;
+    resetBrowseHistory(currentRemote, "");
     void loadListing();
   });
 
@@ -834,6 +1205,23 @@ function bindEvents() {
       closePreview();
     }
   });
+
+  // Mouse 4/5 (back/forward). Also covered by Electron app-command on Windows.
+  document.addEventListener("mousedown", (event) => {
+    if (event.button === 3 || event.button === 4) {
+      event.preventDefault();
+    }
+  });
+  document.addEventListener("mouseup", (event) => {
+    if (event.button === 3) {
+      event.preventDefault();
+      handleHistoryNavigate("back");
+    } else if (event.button === 4) {
+      event.preventDefault();
+      handleHistoryNavigate("forward");
+    }
+  });
+  window.rcloneGui?.onHistoryNavigate?.(handleHistoryNavigate);
 }
 
 function init(options = {}) {
@@ -861,6 +1249,9 @@ function show() {
   remoteBrowser.view.hidden = false;
   restartEnterAnimations();
   if (currentRemote) {
+    if (browseHistoryIndex < 0) {
+      resetBrowseHistory(currentRemote, currentSubPath);
+    }
     void loadListing();
   } else {
     renderBreadcrumbs();
