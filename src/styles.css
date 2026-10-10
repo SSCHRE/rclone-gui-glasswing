@@ -1357,7 +1357,8 @@ button:disabled {
 }
 
 .popup-actions .primary,
-.popup-actions .secondary {
+.popup-actions .secondary,
+.popup-actions .danger {
   width: auto;
   min-width: 96px;
 }

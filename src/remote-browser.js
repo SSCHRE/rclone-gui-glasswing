@@ -18,6 +18,44 @@ const remoteBrowser = {
   useDestBtn: document.getElementById("browse-use-dest"),
 };
 
+const deleteConfirmUi = {
+  dialog: document.getElementById("delete-confirm-dialog"),
+  title: document.getElementById("delete-confirm-title"),
+  message: document.getElementById("delete-confirm-message"),
+  acceptBtn: document.getElementById("delete-confirm-accept"),
+  cancelBtn: document.getElementById("delete-confirm-cancel"),
+};
+
+let deleteConfirmResolve = null;
+
+function closeDeleteConfirm(result = false) {
+  if (deleteConfirmResolve) {
+    const resolve = deleteConfirmResolve;
+    deleteConfirmResolve = null;
+    resolve(result);
+  }
+  if (!deleteConfirmUi.dialog) {
+    return;
+  }
+  deleteConfirmUi.dialog.classList.add("hidden");
+  deleteConfirmUi.dialog.setAttribute("aria-hidden", "true");
+}
+
+function confirmDelete(message) {
+  return new Promise((resolve) => {
+    if (!deleteConfirmUi.dialog) {
+      resolve(false);
+      return;
+    }
+    deleteConfirmResolve = resolve;
+    deleteConfirmUi.title.textContent = "Delete";
+    deleteConfirmUi.message.textContent = message;
+    deleteConfirmUi.dialog.classList.remove("hidden");
+    deleteConfirmUi.dialog.setAttribute("aria-hidden", "false");
+    deleteConfirmUi.cancelBtn?.focus();
+  });
+}
+
 const previewUi = {
   dialog: document.getElementById("preview-dialog"),
   title: document.getElementById("preview-title"),
@@ -1180,7 +1218,9 @@ async function deleteSelectedEntry() {
   }
 
   const kind = selectedIsDir ? "folder and all of its contents" : "file";
-  const confirmed = window.confirm(`Delete ${kind}\n\n${selectedPath}\n\nThis cannot be undone.`);
+  const confirmed = await confirmDelete(
+    `Delete ${kind}?\n\n${selectedPath}\n\nThis cannot be undone.`,
+  );
   if (!confirmed) {
     return;
   }
@@ -1259,7 +1299,22 @@ function bindEvents() {
     if (event.key === "Escape" && previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
       closePreview();
     }
+    if (event.key === "Escape" && deleteConfirmUi.dialog && !deleteConfirmUi.dialog.classList.contains("hidden")) {
+      closeDeleteConfirm(false);
+    }
   });
+
+  deleteConfirmUi.acceptBtn?.addEventListener("click", () => {
+    closeDeleteConfirm(true);
+  });
+  deleteConfirmUi.cancelBtn?.addEventListener("click", () => {
+    closeDeleteConfirm(false);
+  });
+  for (const closer of deleteConfirmUi.dialog?.querySelectorAll("[data-delete-confirm-close]") || []) {
+    closer.addEventListener("click", () => {
+      closeDeleteConfirm(false);
+    });
+  }
 
   // Mouse 4/5 (back/forward). Also covered by Electron app-command on Windows.
   document.addEventListener("mousedown", (event) => {

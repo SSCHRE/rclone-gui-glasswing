@@ -366,6 +366,17 @@
       </div>
     </div>
 
+    <div id="delete-confirm-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-delete-confirm-close></div>
+      <div class="popup-card popup-card-form" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-message">
+        <p id="delete-confirm-title" class="popup-title">Delete</p>
+        <p id="delete-confirm-message" class="popup-message"></p>
+        <div class="popup-actions">
+          <button id="delete-confirm-cancel" type="button" class="secondary">Cancel</button>
+          <button id="delete-confirm-accept" type="button" class="danger">Delete</button>
+        </div>
+      </div>
+    </div>
     <div id="save-job-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-save-dialog-close></div>
       <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="save-job-title">
