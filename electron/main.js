@@ -964,6 +964,25 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   return { source, localPath: localPath.trim() };
 });
 
+ipcMain.handle("delete-remote-path", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before deleting.");
+  }
+  const remotePath = payload?.remotePath;
+  const isDir = Boolean(payload?.isDir);
+  const target = normalizeRemoteBrowsePath(remotePath);
+  if (target.endsWith(":")) {
+    throw new Error("Select a file or folder to delete.");
+  }
+  const result = await runRclone([isDir ? "purge" : "deletefile", target], {
+    timeoutMs: 0,
+  });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to delete "${target}"`);
+  }
+  return { path: target };
+});
+
 const PREVIEW_KINDS = {
   ".txt": { kind: "text", mime: "text/plain", maxBytes: 2 * 1024 * 1024, mode: "buffer" },
   ".pdf": { kind: "pdf", mime: "application/pdf", maxBytes: 40 * 1024 * 1024, mode: "buffer" },

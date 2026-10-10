@@ -17,6 +17,7 @@ A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live p
 - **Refresh remotes** — reload your rclone config with clear success/error feedback
 - **Save jobs** - Save a job for quick re-use later on
 - **Browse remotes** — open a remote in the Browse tab, navigate folders, copy paths, or send them to a job as source/destination
+- **Delete from Browse** — remove a selected file or folder (and its contents) directly from the Browse tab, with confirmation
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 

@@ -12,6 +12,7 @@ const remoteBrowser = {
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
+  deleteBtn: document.getElementById("browse-delete"),
   copyPathBtn: document.getElementById("browse-copy-path"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
@@ -180,6 +181,9 @@ function updateActionState() {
   }
   if (remoteBrowser.downloadBtn) {
     remoteBrowser.downloadBtn.disabled = !canDownload;
+  }
+  if (remoteBrowser.deleteBtn) {
+    remoteBrowser.deleteBtn.disabled = !selectedPath || loading;
   }
   remoteBrowser.copyPathBtn.disabled = !hasPath || loading;
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
@@ -1162,6 +1166,53 @@ async function downloadSelectedFile() {
   }
 }
 
+async function deleteSelectedEntry() {
+  if (!selectedPath || loading) {
+    return;
+  }
+  if (!window.rcloneGui?.deleteRemotePath) {
+    notify({
+      title: "Delete unavailable",
+      message: "App bridge does not support deleting.",
+      type: "error",
+    });
+    return;
+  }
+
+  const kind = selectedIsDir ? "folder and all of its contents" : "file";
+  const confirmed = window.confirm(`Delete ${kind}\n\n${selectedPath}\n\nThis cannot be undone.`);
+  if (!confirmed) {
+    return;
+  }
+
+  const deletedPath = selectedPath;
+  const wasDir = selectedIsDir;
+  setLoading(true, "Deleting…");
+  updateActionState();
+
+  try {
+    await window.rcloneGui.deleteRemotePath({
+      remotePath: deletedPath,
+      isDir: wasDir,
+    });
+    selectEntry(null);
+    notify({
+      title: "Deleted",
+      message: deletedPath,
+      type: "success",
+    });
+  } catch (error) {
+    notify({
+      title: "Delete failed",
+      message: error.message || "Could not delete the selected item.",
+      type: "error",
+    });
+  } finally {
+    setLoading(false);
+    await loadListing();
+  }
+}
+
 function bindEvents() {
   remoteBrowser.remotePicker.addEventListener("change", () => {
     currentRemote = remoteBrowser.remotePicker.value;
@@ -1191,6 +1242,10 @@ function bindEvents() {
 
   remoteBrowser.downloadBtn?.addEventListener("click", () => {
     void downloadSelectedFile();
+  });
+
+  remoteBrowser.deleteBtn?.addEventListener("click", () => {
+    void deleteSelectedEntry();
   });
 
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
