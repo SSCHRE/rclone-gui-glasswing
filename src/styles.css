@@ -2607,3 +2607,83 @@ button:disabled {
     padding: 18px;
   }
 }
+
+/* Context menu for browse view */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  display: none;
+  pointer-events: none;
+}
+
+.context-menu[aria-hidden="false"] {
+  display: block;
+  pointer-events: auto;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  pointer-events: none;
+}
+
+.context-menu-card {
+  position: absolute;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(24, 31, 42, 0.98), rgba(12, 16, 22, 0.98));
+  box-shadow: var(--shadow-soft);
+  animation: popupEnter 0.18s var(--ease-out);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  margin: 2px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s var(--ease-out);
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.context-menu-item:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.context-menu-item:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.context-menu-item-danger {
+  color: var(--danger);
+}
+
+.context-menu-item-danger:hover {
+  background: rgba(255, 123, 123, 0.12);
+}
+
+.context-menu-icon {
+  font-size: 1rem;
+  width: 20px;
+  text-align: center;
+}
+
+.context-menu-label {
+  flex: 1;
+}

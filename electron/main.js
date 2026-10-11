@@ -989,6 +989,32 @@ ipcMain.handle("delete-remote-file", async (_event, payload) => {
   return { source };
 });
 
+ipcMain.handle("create-remote-folder", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before creating a folder.");
+  }
+
+  const { remotePath, folderName } = payload;
+  if (!remotePath?.trim() || !folderName?.trim()) {
+    throw new Error("Remote path and folder name are required.");
+  }
+
+  const source = normalizeRemoteBrowsePath(remotePath);
+  // Build the folder path: remote:current/path/newFolder
+  const folderPath = source.endsWith(":") ? `${source}${folderName}` : `${source}/${folderName}`;
+  
+  // Use rclone mkdir to create the directory
+  const result = await runRclone(["mkdir", folderPath], {
+    timeoutMs: 0,
+  });
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || `Failed to create folder "${folderName}"`);
+  }
+
+  return { folderPath };
+});
+
 const PREVIEW_KINDS = {
   ".txt": { kind: "text", mime: "text/plain", maxBytes: 2 * 1024 * 1024, mode: "buffer" },
   ".pdf": { kind: "pdf", mime: "application/pdf", maxBytes: 40 * 1024 * 1024, mode: "buffer" },

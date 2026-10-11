@@ -12,7 +12,7 @@ const remoteBrowser = {
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
-  copyPathBtn: document.getElementById("browse-copy-path"),
+  newFolderBtn: document.getElementById("browse-new-folder"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
   deleteBtn: document.getElementById("browse-delete"),
@@ -182,7 +182,9 @@ function updateActionState() {
   if (remoteBrowser.downloadBtn) {
     remoteBrowser.downloadBtn.disabled = !canDownload;
   }
-  remoteBrowser.copyPathBtn.disabled = !hasPath || loading;
+  if (remoteBrowser.newFolderBtn) {
+    remoteBrowser.newFolderBtn.disabled = !currentRemote || loading || !window.rcloneGui?.createRemoteFolder;
+  }
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
   remoteBrowser.useDestBtn.disabled = !hasPath || loading;
   if (remoteBrowser.deleteBtn) {
@@ -1261,13 +1263,13 @@ async function deleteSelectedFile() {
         remotePath: selectedPath,
         isDir: selectedIsDir,
       });
-      // Format the deleted path with remote in bold and proper spacing
+      // Format the deleted path with folder in bold
       const deletedParts = result.source.split(':');
       const deletedRemote = deletedParts[0];
       const deletedPath = deletedParts.length > 1 ? deletedParts.slice(1).join(':') : '';
       notify({
         title: "Delete complete",
-        message: `<strong>${deletedRemote}</strong>: ${deletedPath}`,
+        message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
         type: "success",
       });
       await loadListing();
@@ -1283,6 +1285,113 @@ async function deleteSelectedFile() {
     }
   });
 }
+
+function showNewFolderDialog() {
+  const newFolderDialog = document.getElementById("new-folder-dialog");
+  const newFolderNameInput = document.getElementById("new-folder-name");
+  const newFolderTitle = document.getElementById("new-folder-title");
+  const newFolderCreateBtn = document.getElementById("new-folder-create");
+  const newFolderCancelBtn = document.getElementById("new-folder-cancel");
+
+  if (!newFolderDialog || !newFolderNameInput || !newFolderTitle || !newFolderCreateBtn || !newFolderCancelBtn) {
+    notify({
+      title: "Error",
+      message: "New folder dialog elements not found.",
+      type: "error",
+    });
+    return;
+  }
+
+  // Set up the dialog
+  newFolderNameInput.value = "Untitled folder";
+  newFolderNameInput.select();
+  newFolderDialog.classList.remove("hidden");
+  newFolderDialog.setAttribute("aria-hidden", "false");
+  newFolderCreateBtn.focus();
+
+  const cleanup = () => {
+    newFolderDialog.classList.add("hidden");
+    newFolderDialog.setAttribute("aria-hidden", "true");
+    newFolderCreateBtn.removeEventListener("click", handleCreate);
+    newFolderCancelBtn.removeEventListener("click", handleCancel);
+    const backdrop = newFolderDialog.querySelector("[data-new-folder-close]");
+    if (backdrop) {
+      backdrop.removeEventListener("click", handleCancel);
+    }
+  };
+
+  const handleCreate = async () => {
+    const folderName = newFolderNameInput.value.trim();
+    if (!folderName) {
+      notify({
+        title: "Error",
+        message: "Folder name cannot be empty.",
+        type: "error",
+      });
+      return;
+    }
+
+    cleanup();
+
+    if (!currentRemote) {
+      notify({
+        title: "Error",
+        message: "Please select a remote first.",
+        type: "error",
+      });
+      return;
+    }
+
+    setLoading(true, "Creating folder…");
+    updateActionState();
+
+    try {
+      const result = await window.rcloneGui.createRemoteFolder({
+        remotePath: currentPath(),
+        folderName,
+      });
+      notify({
+        title: "Folder created",
+        message: result.folderPath,
+        type: "success",
+      });
+      await loadListing();
+    } catch (error) {
+      notify({
+        title: "Failed to create folder",
+        message: error.message || "Could not create the folder.",
+        type: "error",
+      });
+    } finally {
+      setLoading(false);
+      updateActionState();
+    }
+  };
+
+  const handleCancel = () => {
+    cleanup();
+  };
+
+  newFolderCreateBtn.addEventListener("click", handleCreate, { once: true });
+  newFolderCancelBtn.addEventListener("click", handleCancel, { once: true });
+
+  const backdrop = newFolderDialog.querySelector("[data-new-folder-close]");
+  if (backdrop) {
+    backdrop.addEventListener("click", handleCancel, { once: true });
+  }
+
+  // Handle Enter key
+  newFolderNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleCreate();
+    }
+    if (event.key === "Escape") {
+      cleanup();
+    }
+  }, { once: false });
+}
+
 function bindEvents() {
   remoteBrowser.remotePicker.addEventListener("change", () => {
     currentRemote = remoteBrowser.remotePicker.value;
@@ -1302,9 +1411,13 @@ function bindEvents() {
     void loadListing();
   });
 
-  remoteBrowser.copyPathBtn.addEventListener("click", () => {
-    void copyActivePath();
-  });
+  if (remoteBrowser.newFolderBtn) {
+    remoteBrowser.newFolderBtn.addEventListener("click", () => {
+      if (currentRemote && !loading && window.rcloneGui?.createRemoteFolder) {
+        void showNewFolderDialog();
+      }
+    });
+  }
 
   remoteBrowser.previewBtn?.addEventListener("click", () => {
     void previewSelectedFile();
@@ -1347,6 +1460,196 @@ function bindEvents() {
     }
   });
   window.rcloneGui?.onHistoryNavigate?.(handleHistoryNavigate);
+
+  // Context menu handling
+  const contextMenu = document.getElementById("browse-context-menu");
+  const contextDownloadBtn = document.getElementById("context-download");
+  const contextDeleteBtn = document.getElementById("context-delete");
+  const contextPreviewBtn = document.getElementById("context-preview");
+
+  if (contextMenu && contextDownloadBtn && contextPreviewBtn && contextDeleteBtn) {
+    let contextTargetPath = null;
+    let contextTargetIsDir = false;
+
+    // Close context menu helper
+    const closeContextMenu = () => {
+      contextMenu.classList.add("hidden");
+      contextMenu.setAttribute("aria-hidden", "true");
+      contextTargetPath = null;
+      contextTargetIsDir = false;
+    };
+
+    // Close context menu when clicking backdrop
+    const backdrop = contextMenu.querySelector("[data-context-close]");
+    if (backdrop) {
+      backdrop.addEventListener("click", closeContextMenu);
+    }
+
+    // Close context menu when clicking ANYWHERE outside of it
+    document.addEventListener("click", (event) => {
+      if (!contextMenu.classList.contains("hidden")) {
+        const isClickInsideMenu = contextMenu.contains(event.target);
+        if (!isClickInsideMenu) {
+          closeContextMenu();
+        }
+      }
+    });
+
+    // Close context menu on right-click to allow opening a new menu on a different row
+    contextMenu.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      closeContextMenu();
+      // Dispatch a new contextmenu event to entriesBody so a new menu can open
+      const entriesBodyEvent = new MouseEvent("contextmenu", {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        bubbles: true,
+        cancelable: true,
+      });
+      remoteBrowser.entriesBody.dispatchEvent(entriesBodyEvent);
+    });
+
+    // Close on escape key
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !contextMenu.classList.contains("hidden")) {
+        closeContextMenu();
+      }
+    });
+
+
+    // Close menu when clicking on a row in the entries table
+    remoteBrowser.entriesBody.addEventListener("click", (event) => {
+      if (!contextMenu.classList.contains("hidden")) {
+        const row = event.target.closest("tr");
+        if (row) {
+          closeContextMenu();
+        }
+      }
+    });
+
+
+    // Show context menu on right-click
+    remoteBrowser.entriesBody.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      
+      // Find the row that was clicked
+      const row = event.target.closest("tr");
+
+      // Close any existing menu before showing new one
+      closeContextMenu();
+
+      if (row) {
+        // Get the path from the row
+        const path = row.dataset.path;
+        const isDir = row.dataset.isdir === "1";
+        
+        if (!path) return;
+
+        // Store the target for the menu actions
+        contextTargetPath = path;
+        contextTargetIsDir = isDir;
+
+        // Select the row
+        const entryIndex = entries.findIndex(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
+        if (entryIndex >= 0) {
+          selectEntry(entries[entryIndex]);
+        }
+      } else {
+        // Clicked on blank space - clear selection but allow new folder creation
+        contextTargetPath = null;
+        contextTargetIsDir = false;
+        selectedPath = null;
+        selectedIsDir = false;
+        selectedSize = null;
+        updateActionState();
+      }
+
+      // Position the menu near the mouse
+      // Make sure it doesn't go off-screen
+      const menuWidth = 220;
+      const menuHeight = 120;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let left = event.clientX;
+      let top = event.clientY;
+
+      // Adjust if menu would go off right edge
+      if (left + menuWidth > viewportWidth) {
+        left = viewportWidth - menuWidth - 10;
+      }
+      
+      // Adjust if menu would go off bottom edge
+      if (top + menuHeight > viewportHeight) {
+        top = viewportHeight - menuHeight - 10;
+      }
+
+      contextMenu.style.left = left + "px";
+      contextMenu.style.top = top + "px";
+
+      // Show the menu
+      contextMenu.classList.remove("hidden");
+      contextMenu.setAttribute("aria-hidden", "false");
+
+      // Hide/unhide and disable menu items based on availability
+      // Preview: hide for directories, unsupported file types, or blank space
+      const canPreview = selectedPath && canPreviewSelection();
+      contextPreviewBtn.classList.toggle("hidden", !canPreview || loading);
+      contextPreviewBtn.disabled = !canPreview || loading;
+      
+      // Download: hide for directories, blank space, or if not supported
+      const canDownload = selectedPath && !selectedIsDir && window.rcloneGui?.downloadRemoteFile && !loading;
+      contextDownloadBtn.classList.toggle("hidden", !canDownload);
+      contextDownloadBtn.disabled = !canDownload;
+      
+      // Delete: hide if nothing selected or on blank space
+      const canDelete = selectedPath && !loading;
+      contextDeleteBtn.classList.toggle("hidden", !canDelete);
+      contextDeleteBtn.disabled = !canDelete;
+    });
+
+    // Preview action
+    contextPreviewBtn.addEventListener("click", () => {
+      closeContextMenu();
+      // Use selectedPath which was set when right-clicking
+      if (selectedPath && !selectedIsDir && !loading && canPreviewSelection()) {
+        void previewSelectedFile();
+      }
+    });
+
+    // Context menu actions
+    contextDownloadBtn.addEventListener("click", () => {
+      if (selectedPath && !selectedIsDir && !loading && window.rcloneGui?.downloadRemoteFile) {
+        closeContextMenu();
+        // Find the file name from the path
+        const fileName = selectedFileName();
+        void window.rcloneGui.pickSaveFile(fileName).then(localPath => {
+          if (localPath) {
+            setLoading(true, "Downloading…");
+            updateActionState();
+            return window.rcloneGui.downloadRemoteFile({ remotePath: selectedPath, localPath });
+          }
+        }).then(result => {
+          if (result) {
+            notify({ title: "Download complete", message: result.localPath, type: "success" });
+          }
+        }).catch(error => {
+          notify({ title: "Download failed", message: error.message || "Could not download the file.", type: "error" });
+        }).finally(() => {
+          setLoading(false);
+          updateActionState();
+        });
+      }
+    });
+
+    contextDeleteBtn.addEventListener("click", () => {
+      if (selectedPath && !loading) {
+        closeContextMenu();
+        // Entry is already selected from the contextmenu handler
+        void deleteSelectedFile();
+      }
+    });
+  }
 }
 
 function init(options = {}) {
