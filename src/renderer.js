@@ -563,6 +563,20 @@ function measureRequiredContentSize() {
   };
 }
 
+async function checkRcloneVersion(retries = 3, delayMs = 1000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const rcloneVersion = await window.rcloneGui.getRcloneVersion();
+      return rcloneVersion;
+    } catch (error) {
+      if (attempt === retries) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function syncMinimumWindowSize(forceSnap = false) {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -675,9 +689,10 @@ async function init() {
     await window.rcloneGui.showMainWindow();
 
     let rcloneVersion = "";
+    elements.version.textContent = "Checking rclone…";
     try {
       elements.appVersion.textContent = `v${await window.rcloneGui.getAppVersion()}`;
-      rcloneVersion = await window.rcloneGui.getRcloneVersion();
+      rcloneVersion = await checkRcloneVersion();
       elements.version.textContent = `${rcloneVersion} · loading remotes…`;
     } catch (error) {
       elements.version.textContent = "rclone not found on PATH";
