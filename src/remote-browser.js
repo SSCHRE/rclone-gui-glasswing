@@ -12,7 +12,7 @@ const remoteBrowser = {
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
-  copyPathBtn: document.getElementById("browse-copy-path"),
+  newFolderBtn: document.getElementById("browse-new-folder"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
   deleteBtn: document.getElementById("browse-delete"),
@@ -182,7 +182,9 @@ function updateActionState() {
   if (remoteBrowser.downloadBtn) {
     remoteBrowser.downloadBtn.disabled = !canDownload;
   }
-  remoteBrowser.copyPathBtn.disabled = !hasPath || loading;
+  if (remoteBrowser.newFolderBtn) {
+    remoteBrowser.newFolderBtn.disabled = !currentRemote || loading || !window.rcloneGui?.createRemoteFolder;
+  }
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
   remoteBrowser.useDestBtn.disabled = !hasPath || loading;
   if (remoteBrowser.deleteBtn) {
@@ -1409,9 +1411,13 @@ function bindEvents() {
     void loadListing();
   });
 
-  remoteBrowser.copyPathBtn.addEventListener("click", () => {
-    void copyActivePath();
-  });
+  if (remoteBrowser.newFolderBtn) {
+    remoteBrowser.newFolderBtn.addEventListener("click", () => {
+      if (currentRemote && !loading && window.rcloneGui?.createRemoteFolder) {
+        void showNewFolderDialog();
+      }
+    });
+  }
 
   remoteBrowser.previewBtn?.addEventListener("click", () => {
     void previewSelectedFile();
@@ -1457,12 +1463,11 @@ function bindEvents() {
 
   // Context menu handling
   const contextMenu = document.getElementById("browse-context-menu");
-  const contextNewFolderBtn = document.getElementById("context-new-folder");
   const contextDownloadBtn = document.getElementById("context-download");
   const contextDeleteBtn = document.getElementById("context-delete");
   const contextPreviewBtn = document.getElementById("context-preview");
 
-  if (contextMenu && contextNewFolderBtn && contextDownloadBtn && contextPreviewBtn && contextDeleteBtn) {
+  if (contextMenu && contextDownloadBtn && contextPreviewBtn && contextDeleteBtn) {
     let contextTargetPath = null;
     let contextTargetIsDir = false;
 
@@ -1587,11 +1592,6 @@ function bindEvents() {
       contextMenu.setAttribute("aria-hidden", "false");
 
       // Hide/unhide and disable menu items based on availability
-      // New folder: show when we have a remote selected and not loading
-      const canNewFolder = currentRemote && !loading && window.rcloneGui?.createRemoteFolder;
-      contextNewFolderBtn.classList.toggle("hidden", !canNewFolder);
-      contextNewFolderBtn.disabled = !canNewFolder;
-      
       // Preview: hide for directories, unsupported file types, or blank space
       const canPreview = selectedPath && canPreviewSelection();
       contextPreviewBtn.classList.toggle("hidden", !canPreview || loading);
@@ -1618,14 +1618,6 @@ function bindEvents() {
     });
 
     // Context menu actions
-    // New folder action
-    contextNewFolderBtn.addEventListener("click", () => {
-      if (currentRemote && !loading && window.rcloneGui?.createRemoteFolder) {
-        closeContextMenu();
-        void showNewFolderDialog();
-      }
-    });
-
     contextDownloadBtn.addEventListener("click", () => {
       if (selectedPath && !selectedIsDir && !loading && window.rcloneGui?.downloadRemoteFile) {
         closeContextMenu();
