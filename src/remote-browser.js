@@ -1379,15 +1379,6 @@ function bindEvents() {
       }
     });
 
-    // Close menu when clicking anywhere outside of it
-    document.addEventListener("click", (event) => {
-      if (!contextMenu.classList.contains("hidden")) {
-        const isClickInsideMenu = contextMenu.contains(event.target);
-        if (!isClickInsideMenu) {
-          closeContextMenu();
-        }
-      }
-    });
 
     // Show context menu on right-click
     remoteBrowser.entriesBody.addEventListener("contextmenu", (event) => {
