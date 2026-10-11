@@ -2625,6 +2625,7 @@ button:disabled {
   position: fixed;
   inset: 0;
   z-index: 99;
+  pointer-events: none;
 }
 
 .context-menu-card {
