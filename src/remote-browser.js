@@ -1347,6 +1347,156 @@ function bindEvents() {
     }
   });
   window.rcloneGui?.onHistoryNavigate?.(handleHistoryNavigate);
+
+  // Context menu handling
+  const contextMenu = document.getElementById("browse-context-menu");
+  const contextDownloadBtn = document.getElementById("context-download");
+  const contextCopyPathBtn = document.getElementById("context-copy-path");
+  const contextDeleteBtn = document.getElementById("context-delete");
+
+  if (contextMenu && contextDownloadBtn && contextCopyPathBtn && contextDeleteBtn) {
+    let contextTargetPath = null;
+    let contextTargetIsDir = false;
+
+    // Close context menu helper
+    const closeContextMenu = () => {
+      contextMenu.classList.add("hidden");
+      contextMenu.setAttribute("aria-hidden", "true");
+      contextTargetPath = null;
+      contextTargetIsDir = false;
+    };
+
+    // Close context menu when clicking backdrop
+    const backdrop = contextMenu.querySelector("[data-context-close]");
+    if (backdrop) {
+      backdrop.addEventListener("click", closeContextMenu);
+    }
+
+    // Close on escape key
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !contextMenu.classList.contains("hidden")) {
+        closeContextMenu();
+      }
+    });
+
+    // Close menu when clicking anywhere outside of it
+    document.addEventListener("click", (event) => {
+      if (!contextMenu.classList.contains("hidden")) {
+        const isClickInsideMenu = contextMenu.contains(event.target);
+        if (!isClickInsideMenu) {
+          closeContextMenu();
+        }
+      }
+    });
+
+    // Show context menu on right-click
+    remoteBrowser.entriesBody.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      
+      // Find the row that was clicked
+      const row = event.target.closest("tr");
+      if (!row) return;
+
+      // Get the path from the row
+      const path = row.dataset.path;
+      const isDir = row.dataset.isdir === "1";
+      
+      if (!path) return;
+
+      // Close any existing menu before showing new one
+      closeContextMenu();
+
+      // Store the target for the menu actions
+      contextTargetPath = path;
+      contextTargetIsDir = isDir;
+
+      // Select the row
+      const entryIndex = entries.findIndex(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
+      if (entryIndex >= 0) {
+        selectEntry(entries[entryIndex]);
+      }
+
+      // Position the menu near the mouse
+      // Make sure it doesn't go off-screen
+      const menuWidth = 220;
+      const menuHeight = 120;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let left = event.clientX;
+      let top = event.clientY;
+
+      // Adjust if menu would go off right edge
+      if (left + menuWidth > viewportWidth) {
+        left = viewportWidth - menuWidth - 10;
+      }
+      
+      // Adjust if menu would go off bottom edge
+      if (top + menuHeight > viewportHeight) {
+        top = viewportHeight - menuHeight - 10;
+      }
+
+      contextMenu.style.left = left + "px";
+      contextMenu.style.top = top + "px";
+
+      // Show the menu
+      contextMenu.classList.remove("hidden");
+      contextMenu.setAttribute("aria-hidden", "false");
+
+      // Update button states based on selection
+      contextDownloadBtn.disabled = contextTargetIsDir || !window.rcloneGui?.downloadRemoteFile;
+      contextCopyPathBtn.disabled = !contextTargetPath;
+      contextDeleteBtn.disabled = !contextTargetPath;
+    });
+
+    // Context menu actions
+    contextDownloadBtn.addEventListener("click", () => {
+      closeContextMenu();
+      if (contextTargetPath && !contextTargetIsDir && window.rcloneGui?.downloadRemoteFile) {
+        // Find the file name from the path
+        const fileName = contextTargetPath.split('/').pop() || contextTargetPath.split(':').pop() || "download";
+        void window.rcloneGui.pickSaveFile(fileName).then(localPath => {
+          if (localPath) {
+            setLoading(true, "Downloading…");
+            updateActionState();
+            return window.rcloneGui.downloadRemoteFile({ remotePath: contextTargetPath, localPath });
+          }
+        }).then(result => {
+          if (result) {
+            notify({ title: "Download complete", message: result.localPath, type: "success" });
+          }
+        }).catch(error => {
+          notify({ title: "Download failed", message: error.message || "Could not download the file.", type: "error" });
+        }).finally(() => {
+          setLoading(false);
+          updateActionState();
+        });
+      }
+    });
+
+    contextCopyPathBtn.addEventListener("click", () => {
+      closeContextMenu();
+      if (contextTargetPath) {
+        navigator.clipboard.writeText(contextTargetPath).then(() => {
+          notify({ title: "Path copied", message: contextTargetPath, type: "success" });
+        }).catch(() => {
+          notify({ title: "Copy failed", message: "Could not copy path to the clipboard.", type: "error" });
+        });
+      }
+    });
+
+    contextDeleteBtn.addEventListener("click", () => {
+      closeContextMenu();
+      if (contextTargetPath) {
+        // Find the entry and select it
+        const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === contextTargetPath);
+        if (entry) {
+          selectEntry(entry);
+          void deleteSelectedFile();
+        }
+      }
+    });
+  }
 }
 
 function init(options = {}) {
