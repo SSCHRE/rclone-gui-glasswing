@@ -1353,8 +1353,9 @@ function bindEvents() {
   const contextDownloadBtn = document.getElementById("context-download");
   const contextCopyPathBtn = document.getElementById("context-copy-path");
   const contextDeleteBtn = document.getElementById("context-delete");
+  const contextPreviewBtn = document.getElementById("context-preview");
 
-  if (contextMenu && contextDownloadBtn && contextCopyPathBtn && contextDeleteBtn) {
+  if (contextMenu && contextDownloadBtn && contextCopyPathBtn && contextPreviewBtn && contextDeleteBtn) {
     let contextTargetPath = null;
     let contextTargetIsDir = false;
 
@@ -1448,7 +1449,20 @@ function bindEvents() {
       // Update button states based on selection
       contextDownloadBtn.disabled = contextTargetIsDir || !window.rcloneGui?.downloadRemoteFile;
       contextCopyPathBtn.disabled = !contextTargetPath;
+      // Check if file can be previewed
+      const fileName = contextTargetPath ? (contextTargetPath.split("/").pop() || contextTargetPath) : "";
+      const extIndex = fileName.lastIndexOf(".");
+      const ext = extIndex >= 0 ? fileName.slice(extIndex).toLowerCase() : "";
+      contextPreviewBtn.disabled = contextTargetIsDir || !contextTargetPath || !PREVIEW_EXTENSIONS.has(ext);
       contextDeleteBtn.disabled = !contextTargetPath;
+    });
+
+    // Preview action
+    contextPreviewBtn.addEventListener("click", () => {
+      closeContextMenu();
+      if (contextTargetPath) {
+        void previewSelectedFile();
+      }
     });
 
     // Context menu actions
