@@ -1261,13 +1261,13 @@ async function deleteSelectedFile() {
         remotePath: selectedPath,
         isDir: selectedIsDir,
       });
-      // Format the deleted path with remote in bold and proper spacing
+      // Format the deleted path with folder in bold
       const deletedParts = result.source.split(':');
       const deletedRemote = deletedParts[0];
       const deletedPath = deletedParts.length > 1 ? deletedParts.slice(1).join(':') : '';
       notify({
         title: "Delete complete",
-        message: `<strong>${deletedRemote}</strong>: ${deletedPath}`,
+        message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
         type: "success",
       });
       await loadListing();
@@ -1373,6 +1373,20 @@ function bindEvents() {
       backdrop.addEventListener("click", closeContextMenu);
     }
 
+    // Close context menu on right-click to allow opening a new menu on a different row
+    contextMenu.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      closeContextMenu();
+      // Dispatch a new contextmenu event to entriesBody so a new menu can open
+      const entriesBodyEvent = new MouseEvent("contextmenu", {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        bubbles: true,
+        cancelable: true,
+      });
+      remoteBrowser.entriesBody.dispatchEvent(entriesBodyEvent);
+    });
+
     // Close on escape key
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !contextMenu.classList.contains("hidden")) {
@@ -1449,11 +1463,12 @@ function bindEvents() {
       // Update button states based on selection
       contextDownloadBtn.disabled = contextTargetIsDir || !window.rcloneGui?.downloadRemoteFile;
       contextCopyPathBtn.disabled = !contextTargetPath;
-      // Check if file can be previewed
-      const fileName = contextTargetPath ? (contextTargetPath.split("/").pop() || contextTargetPath) : "";
-      const extIndex = fileName.lastIndexOf(".");
-      const ext = extIndex >= 0 ? fileName.slice(extIndex).toLowerCase() : "";
-      contextPreviewBtn.disabled = contextTargetIsDir || !contextTargetPath || !PREVIEW_EXTENSIONS.has(ext);
+      // Check if file can be previewed - use same logic as selectedExtension()
+      const contextFileName = contextTargetPath && !contextTargetIsDir ? 
+        (contextTargetPath.split(":")[1] || contextTargetPath).split("/").filter(Boolean).pop() || "" : "";
+      const contextExtIndex = contextFileName.lastIndexOf(".");
+      const contextExt = contextExtIndex >= 0 ? contextFileName.slice(contextExtIndex).toLowerCase() : "";
+      contextPreviewBtn.disabled = contextTargetIsDir || !contextTargetPath || !PREVIEW_EXTENSIONS.has(contextExt);
       contextDeleteBtn.disabled = !contextTargetPath;
     });
 
