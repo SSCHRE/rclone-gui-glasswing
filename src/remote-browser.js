@@ -1460,49 +1460,33 @@ function bindEvents() {
       contextMenu.classList.remove("hidden");
       contextMenu.setAttribute("aria-hidden", "false");
 
-      // Update button states based on selection
-      contextDownloadBtn.disabled = contextTargetIsDir || !window.rcloneGui?.downloadRemoteFile;
-      contextCopyPathBtn.disabled = !contextTargetPath;
-      // Check if file can be previewed - use same logic as selectedExtension()
-      const contextFileName = contextTargetPath && !contextTargetIsDir ? 
-        (contextTargetPath.split(":")[1] || contextTargetPath).split("/").filter(Boolean).pop() || "" : "";
-      const contextExtIndex = contextFileName.lastIndexOf(".");
-      const contextExt = contextExtIndex >= 0 ? contextFileName.slice(contextExtIndex).toLowerCase() : "";
-      contextPreviewBtn.disabled = contextTargetIsDir || !contextTargetPath || !PREVIEW_EXTENSIONS.has(contextExt);
-      contextDeleteBtn.disabled = !contextTargetPath;
+      // Update button states based on selected entry (uses selectedPath from selectEntry)
+      contextDownloadBtn.disabled = selectedIsDir || !window.rcloneGui?.downloadRemoteFile || loading;
+      contextCopyPathBtn.disabled = !selectedPath || loading;
+      contextPreviewBtn.disabled = !canPreviewSelection() || loading;
+      contextDeleteBtn.disabled = !selectedPath || loading;
     });
 
     // Preview action
     contextPreviewBtn.addEventListener("click", () => {
-      if (contextTargetPath) {
-        const path = contextTargetPath;
-        const isDir = contextTargetIsDir;
-        closeContextMenu();
-        if (!isDir && !loading && PREVIEW_EXTENSIONS.has(
-          (() => {
-            const fileName = path && !isDir ? 
-              (path.split(":")[1] || path).split("/").filter(Boolean).pop() || "" : "";
-            const extIndex = fileName.lastIndexOf(".");
-            return extIndex >= 0 ? fileName.slice(extIndex).toLowerCase() : "";
-          })()
-        )) {
-          void previewSelectedFile();
-        }
+      closeContextMenu();
+      // Use selectedPath which was set when right-clicking
+      if (selectedPath && !selectedIsDir && !loading && canPreviewSelection()) {
+        void previewSelectedFile();
       }
     });
 
     // Context menu actions
     contextDownloadBtn.addEventListener("click", () => {
-      if (contextTargetPath && !contextTargetIsDir && window.rcloneGui?.downloadRemoteFile) {
-        const path = contextTargetPath;
+      if (selectedPath && !selectedIsDir && !loading && window.rcloneGui?.downloadRemoteFile) {
         closeContextMenu();
         // Find the file name from the path
-        const fileName = path.split('/').pop() || path.split(':').pop() || "download";
+        const fileName = selectedFileName();
         void window.rcloneGui.pickSaveFile(fileName).then(localPath => {
           if (localPath) {
             setLoading(true, "Downloading…");
             updateActionState();
-            return window.rcloneGui.downloadRemoteFile({ remotePath: path, localPath });
+            return window.rcloneGui.downloadRemoteFile({ remotePath: selectedPath, localPath });
           }
         }).then(result => {
           if (result) {
@@ -1518,9 +1502,9 @@ function bindEvents() {
     });
 
     contextCopyPathBtn.addEventListener("click", () => {
-      if (contextTargetPath) {
-        const path = contextTargetPath;
+      if (selectedPath && !loading) {
         closeContextMenu();
+        const path = activePath();
         navigator.clipboard.writeText(path).then(() => {
           notify({ title: "Path copied", message: path, type: "success" });
         }).catch(() => {
@@ -1530,15 +1514,10 @@ function bindEvents() {
     });
 
     contextDeleteBtn.addEventListener("click", () => {
-      if (contextTargetPath) {
-        const path = contextTargetPath;
+      if (selectedPath && !loading) {
         closeContextMenu();
-        // Find the entry and select it
-        const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
-        if (entry) {
-          selectEntry(entry);
-          void deleteSelectedFile();
-        }
+        // Entry is already selected from the contextmenu handler
+        void deleteSelectedFile();
       }
     });
   }
