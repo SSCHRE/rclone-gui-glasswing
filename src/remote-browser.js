@@ -1373,6 +1373,16 @@ function bindEvents() {
       backdrop.addEventListener("click", closeContextMenu);
     }
 
+    // Close context menu when clicking ANYWHERE outside of it
+    document.addEventListener("click", (event) => {
+      if (!contextMenu.classList.contains("hidden")) {
+        const isClickInsideMenu = contextMenu.contains(event.target);
+        if (!isClickInsideMenu) {
+          closeContextMenu();
+        }
+      }
+    });
+
     // Close context menu on right-click to allow opening a new menu on a different row
     contextMenu.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -1460,11 +1470,26 @@ function bindEvents() {
       contextMenu.classList.remove("hidden");
       contextMenu.setAttribute("aria-hidden", "false");
 
-      // Update button states based on selected entry (uses selectedPath from selectEntry)
-      contextDownloadBtn.disabled = selectedIsDir || !window.rcloneGui?.downloadRemoteFile || loading;
-      contextCopyPathBtn.disabled = !selectedPath || loading;
-      contextPreviewBtn.disabled = !canPreviewSelection() || loading;
-      contextDeleteBtn.disabled = !selectedPath || loading;
+      // Hide/unhide and disable menu items based on availability
+      // Preview: hide for directories or unsupported file types
+      const canPreview = canPreviewSelection();
+      contextPreviewBtn.classList.toggle("hidden", !canPreview || loading);
+      contextPreviewBtn.disabled = !canPreview || loading;
+      
+      // Download: hide for directories or if not supported
+      const canDownload = selectedPath && !selectedIsDir && window.rcloneGui?.downloadRemoteFile && !loading;
+      contextDownloadBtn.classList.toggle("hidden", !canDownload);
+      contextDownloadBtn.disabled = !canDownload;
+      
+      // Copy path: hide if nothing selected
+      const canCopyPath = selectedPath && !loading;
+      contextCopyPathBtn.classList.toggle("hidden", !canCopyPath);
+      contextCopyPathBtn.disabled = !canCopyPath;
+      
+      // Delete: hide if nothing selected
+      const canDelete = selectedPath && !loading;
+      contextDeleteBtn.classList.toggle("hidden", !canDelete);
+      contextDeleteBtn.disabled = !canDelete;
     });
 
     // Preview action
