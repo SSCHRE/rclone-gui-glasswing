@@ -1380,6 +1380,17 @@ function bindEvents() {
     });
 
 
+    // Close menu when clicking on a row in the entries table
+    remoteBrowser.entriesBody.addEventListener("click", (event) => {
+      if (!contextMenu.classList.contains("hidden")) {
+        const row = event.target.closest("tr");
+        if (row) {
+          closeContextMenu();
+        }
+      }
+    });
+
+
     // Show context menu on right-click
     remoteBrowser.entriesBody.addEventListener("contextmenu", (event) => {
       event.preventDefault();
