@@ -363,11 +363,9 @@ async function loadListing() {
   selectedPath = null;
   selectedIsDir = false;
   selectedSize = null;
-  entries = [];
   setStatus("");
   setLoading(true, "Loading folder…");
   renderBreadcrumbs();
-  renderEntries();
   updateActionState();
 
   try {
