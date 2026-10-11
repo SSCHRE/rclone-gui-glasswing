@@ -1459,14 +1459,12 @@ function bindEvents() {
   const contextMenu = document.getElementById("browse-context-menu");
   const contextNewFolderBtn = document.getElementById("context-new-folder");
   const contextDownloadBtn = document.getElementById("context-download");
-  const contextCopyPathBtn = document.getElementById("context-copy-path");
   const contextDeleteBtn = document.getElementById("context-delete");
   const contextPreviewBtn = document.getElementById("context-preview");
 
-  if (contextMenu && contextNewFolderBtn && contextDownloadBtn && contextCopyPathBtn && contextPreviewBtn && contextDeleteBtn) {
+  if (contextMenu && contextNewFolderBtn && contextDownloadBtn && contextPreviewBtn && contextDeleteBtn) {
     let contextTargetPath = null;
     let contextTargetIsDir = false;
-    let contextOnBlankSpace = false;
 
     // Close context menu helper
     const closeContextMenu = () => {
@@ -1474,7 +1472,6 @@ function bindEvents() {
       contextMenu.setAttribute("aria-hidden", "true");
       contextTargetPath = null;
       contextTargetIsDir = false;
-      contextOnBlankSpace = false;
     };
 
     // Close context menu when clicking backdrop
@@ -1537,9 +1534,6 @@ function bindEvents() {
       closeContextMenu();
 
       if (row) {
-        // Clicked on a row
-        contextOnBlankSpace = false;
-
         // Get the path from the row
         const path = row.dataset.path;
         const isDir = row.dataset.isdir === "1";
@@ -1556,8 +1550,7 @@ function bindEvents() {
           selectEntry(entries[entryIndex]);
         }
       } else {
-        // Clicked on blank space
-        contextOnBlankSpace = true;
+        // Clicked on blank space - clear selection but allow new folder creation
         contextTargetPath = null;
         contextTargetIsDir = false;
         selectedPath = null;
@@ -1594,8 +1587,8 @@ function bindEvents() {
       contextMenu.setAttribute("aria-hidden", "false");
 
       // Hide/unhide and disable menu items based on availability
-      // New folder: show only when on blank space (not on a file/folder) and not loading
-      const canNewFolder = contextOnBlankSpace && currentRemote && !loading && window.rcloneGui?.createRemoteFolder;
+      // New folder: show when we have a remote selected and not loading
+      const canNewFolder = currentRemote && !loading && window.rcloneGui?.createRemoteFolder;
       contextNewFolderBtn.classList.toggle("hidden", !canNewFolder);
       contextNewFolderBtn.disabled = !canNewFolder;
       
@@ -1608,11 +1601,6 @@ function bindEvents() {
       const canDownload = selectedPath && !selectedIsDir && window.rcloneGui?.downloadRemoteFile && !loading;
       contextDownloadBtn.classList.toggle("hidden", !canDownload);
       contextDownloadBtn.disabled = !canDownload;
-      
-      // Copy path: hide if nothing selected or on blank space
-      const canCopyPath = selectedPath && !loading;
-      contextCopyPathBtn.classList.toggle("hidden", !canCopyPath);
-      contextCopyPathBtn.disabled = !canCopyPath;
       
       // Delete: hide if nothing selected or on blank space
       const canDelete = selectedPath && !loading;
@@ -1658,18 +1646,6 @@ function bindEvents() {
         }).finally(() => {
           setLoading(false);
           updateActionState();
-        });
-      }
-    });
-
-    contextCopyPathBtn.addEventListener("click", () => {
-      if (selectedPath && !loading) {
-        closeContextMenu();
-        const path = activePath();
-        navigator.clipboard.writeText(path).then(() => {
-          notify({ title: "Path copied", message: path, type: "success" });
-        }).catch(() => {
-          notify({ title: "Copy failed", message: "Could not copy path to the clipboard.", type: "error" });
         });
       }
     });
