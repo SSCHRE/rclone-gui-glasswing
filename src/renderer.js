@@ -114,7 +114,7 @@ function showSnackbar({ title, message, type = "success" }) {
   };
   elements.snackbarIcon.textContent = icons[type] || "•";
   elements.snackbarTitle.textContent = title;
-  elements.snackbarMessage.textContent = message;
+  elements.snackbarMessage.innerHTML = message;
   elements.snackbar.classList.add(type);
   elements.snackbarRoot.classList.remove("hidden");
   elements.snackbarRoot.setAttribute("aria-hidden", "false");

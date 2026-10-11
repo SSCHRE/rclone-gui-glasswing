@@ -15,6 +15,7 @@ const remoteBrowser = {
   copyPathBtn: document.getElementById("browse-copy-path"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
+  deleteBtn: document.getElementById("browse-delete"),
 };
 
 const previewUi = {
@@ -184,6 +185,9 @@ function updateActionState() {
   remoteBrowser.copyPathBtn.disabled = !hasPath || loading;
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
   remoteBrowser.useDestBtn.disabled = !hasPath || loading;
+  if (remoteBrowser.deleteBtn) {
+    remoteBrowser.deleteBtn.disabled = !selectedPath || loading;
+  }
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
   remoteBrowser.remotePicker.disabled = loading;
@@ -1162,6 +1166,123 @@ async function downloadSelectedFile() {
   }
 }
 
+
+async function deleteSelectedFile() {
+  if (!selectedPath || loading) {
+    return;
+  }
+  
+  if (!window.rcloneGui?.deleteRemoteFile) {
+    notify({
+      title: "Delete unavailable",
+      message: "App bridge does not support deleting.",
+      type: "error",
+    });
+    return;
+  }
+
+  // Show built-in confirmation dialog
+  const deleteDialog = document.getElementById("delete-dialog");
+  const deleteTitle = document.getElementById("delete-title");
+  const deleteMessage = document.getElementById("delete-message");
+  const deleteConfirmBtn = document.getElementById("delete-confirm");
+  const deleteCancelBtn = document.getElementById("delete-cancel");
+  
+  if (!deleteDialog || !deleteTitle || !deleteMessage || !deleteConfirmBtn || !deleteCancelBtn) {
+    notify({
+      title: "Delete unavailable",
+      message: "Delete dialog not available.",
+      type: "error",
+    });
+    return;
+  }
+
+  // Set up the dialog
+  deleteTitle.textContent = "Delete file";
+  // Extract just the path part without the remote name
+  const pathOnly = selectedPath.includes(':') ? selectedPath.split(':').slice(1).join(':') : selectedPath;
+  deleteMessage.innerHTML = `Are you sure you want to delete <strong>${pathOnly}</strong>? This cannot be undone.`;
+  deleteDialog.classList.remove("hidden");
+  deleteDialog.setAttribute("aria-hidden", "false");
+  
+  // Focus the confirm button for accessibility
+  deleteConfirmBtn.focus();
+
+  // Return a promise that resolves when the user makes a choice
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      deleteDialog.classList.add("hidden");
+      deleteDialog.setAttribute("aria-hidden", "true");
+      deleteConfirmBtn.removeEventListener("click", handleConfirm);
+      deleteCancelBtn.removeEventListener("click", handleCancel);
+      // Remove backdrop click handler
+      const backdrop = deleteDialog.querySelector("[data-delete-close]");
+      if (backdrop) {
+        backdrop.removeEventListener("click", handleCancel);
+      }
+    };
+
+    const handleConfirm = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    deleteConfirmBtn.addEventListener("click", handleConfirm, { once: true });
+    deleteCancelBtn.addEventListener("click", handleCancel, { once: true });
+    
+    const backdrop = deleteDialog.querySelector("[data-delete-close]");
+    if (backdrop) {
+      backdrop.addEventListener("click", handleCancel, { once: true });
+    }
+    
+    // Also handle Escape key
+    const handleKeydown = (event) => {
+      if (event.key === "Escape") {
+        cleanup();
+        resolve(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeydown, { once: true });
+  }).then(async (confirmed) => {
+    if (!confirmed) {
+      return;
+    }
+
+    setLoading(true, "Deleting…");
+    updateActionState();
+
+    try {
+      const result = await window.rcloneGui.deleteRemoteFile({
+        remotePath: selectedPath,
+        isDir: selectedIsDir,
+      });
+      // Format the deleted path with remote in bold and proper spacing
+      const deletedParts = result.source.split(':');
+      const deletedRemote = deletedParts[0];
+      const deletedPath = deletedParts.length > 1 ? deletedParts.slice(1).join(':') : '';
+      notify({
+        title: "Delete complete",
+        message: `<strong>${deletedRemote}</strong>: ${deletedPath}`,
+        type: "success",
+      });
+      await loadListing();
+    } catch (error) {
+      notify({
+        title: "Delete failed",
+        message: error.message || "Could not delete the file.",
+        type: "error",
+      });
+    } finally {
+      setLoading(false);
+      updateActionState();
+    }
+  });
+}
 function bindEvents() {
   remoteBrowser.remotePicker.addEventListener("change", () => {
     currentRemote = remoteBrowser.remotePicker.value;
@@ -1191,6 +1312,10 @@ function bindEvents() {
 
   remoteBrowser.downloadBtn?.addEventListener("click", () => {
     void downloadSelectedFile();
+  });
+
+  remoteBrowser.deleteBtn?.addEventListener("click", () => {
+    void deleteSelectedFile();
   });
 
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
