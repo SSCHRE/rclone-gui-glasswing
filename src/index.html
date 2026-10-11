@@ -458,10 +458,23 @@
       </div>
     </div>
 
-    <script src="job-output.js"></script>
-    <script src="remote-manager.js"></script>
-    <script src="remote-browser.js"></script>
-    
+    <div id="browse-context-menu" class="context-menu hidden" aria-hidden="true">
+      <div class="context-menu-backdrop" data-context-close></div>
+      <div class="context-menu-card" role="menu" aria-label="File actions">
+        <button id="context-download" type="button" class="context-menu-item" data-action="download">
+          <span class="context-menu-icon" aria-hidden="true">↓</span>
+          <span class="context-menu-label">Download</span>
+        </button>
+        <button id="context-copy-path" type="button" class="context-menu-item" data-action="copy-path">
+          <span class="context-menu-icon" aria-hidden="true">📋</span>
+          <span class="context-menu-label">Copy path</span>
+        </button>
+        <button id="context-delete" type="button" class="context-menu-item context-menu-item-danger" data-action="delete">
+          <span class="context-menu-icon" aria-hidden="true">🗑</span>
+          <span class="context-menu-label">Delete</span>
+        </button>
+      </div>
+    </div>
     <div id="delete-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-delete-close></div>
       <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="delete-title">
@@ -472,6 +485,10 @@
           <button id="delete-confirm" type="button" class="danger">Delete</button>
         </div>
       </div>
-    </div><script src="renderer.js"></script>
+    </div>
+    <script src="job-output.js"></script>
+    <script src="remote-manager.js"></script>
+    <script src="remote-browser.js"></script>
+    <script src="renderer.js"></script>
   </body>
 </html>
