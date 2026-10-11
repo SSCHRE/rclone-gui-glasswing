@@ -1474,23 +1474,35 @@ function bindEvents() {
 
     // Preview action
     contextPreviewBtn.addEventListener("click", () => {
-      closeContextMenu();
       if (contextTargetPath) {
-        void previewSelectedFile();
+        const path = contextTargetPath;
+        const isDir = contextTargetIsDir;
+        closeContextMenu();
+        if (!isDir && !loading && PREVIEW_EXTENSIONS.has(
+          (() => {
+            const fileName = path && !isDir ? 
+              (path.split(":")[1] || path).split("/").filter(Boolean).pop() || "" : "";
+            const extIndex = fileName.lastIndexOf(".");
+            return extIndex >= 0 ? fileName.slice(extIndex).toLowerCase() : "";
+          })()
+        )) {
+          void previewSelectedFile();
+        }
       }
     });
 
     // Context menu actions
     contextDownloadBtn.addEventListener("click", () => {
-      closeContextMenu();
       if (contextTargetPath && !contextTargetIsDir && window.rcloneGui?.downloadRemoteFile) {
+        const path = contextTargetPath;
+        closeContextMenu();
         // Find the file name from the path
-        const fileName = contextTargetPath.split('/').pop() || contextTargetPath.split(':').pop() || "download";
+        const fileName = path.split('/').pop() || path.split(':').pop() || "download";
         void window.rcloneGui.pickSaveFile(fileName).then(localPath => {
           if (localPath) {
             setLoading(true, "Downloading…");
             updateActionState();
-            return window.rcloneGui.downloadRemoteFile({ remotePath: contextTargetPath, localPath });
+            return window.rcloneGui.downloadRemoteFile({ remotePath: path, localPath });
           }
         }).then(result => {
           if (result) {
@@ -1506,10 +1518,11 @@ function bindEvents() {
     });
 
     contextCopyPathBtn.addEventListener("click", () => {
-      closeContextMenu();
       if (contextTargetPath) {
-        navigator.clipboard.writeText(contextTargetPath).then(() => {
-          notify({ title: "Path copied", message: contextTargetPath, type: "success" });
+        const path = contextTargetPath;
+        closeContextMenu();
+        navigator.clipboard.writeText(path).then(() => {
+          notify({ title: "Path copied", message: path, type: "success" });
         }).catch(() => {
           notify({ title: "Copy failed", message: "Could not copy path to the clipboard.", type: "error" });
         });
@@ -1517,10 +1530,11 @@ function bindEvents() {
     });
 
     contextDeleteBtn.addEventListener("click", () => {
-      closeContextMenu();
       if (contextTargetPath) {
+        const path = contextTargetPath;
+        closeContextMenu();
         // Find the entry and select it
-        const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === contextTargetPath);
+        const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
         if (entry) {
           selectEntry(entry);
           void deleteSelectedFile();
