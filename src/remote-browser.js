@@ -1283,6 +1283,113 @@ async function deleteSelectedFile() {
     }
   });
 }
+
+function showNewFolderDialog() {
+  const newFolderDialog = document.getElementById("new-folder-dialog");
+  const newFolderNameInput = document.getElementById("new-folder-name");
+  const newFolderTitle = document.getElementById("new-folder-title");
+  const newFolderCreateBtn = document.getElementById("new-folder-create");
+  const newFolderCancelBtn = document.getElementById("new-folder-cancel");
+
+  if (!newFolderDialog || !newFolderNameInput || !newFolderTitle || !newFolderCreateBtn || !newFolderCancelBtn) {
+    notify({
+      title: "Error",
+      message: "New folder dialog elements not found.",
+      type: "error",
+    });
+    return;
+  }
+
+  // Set up the dialog
+  newFolderNameInput.value = "Untitled folder";
+  newFolderNameInput.select();
+  newFolderDialog.classList.remove("hidden");
+  newFolderDialog.setAttribute("aria-hidden", "false");
+  newFolderCreateBtn.focus();
+
+  const cleanup = () => {
+    newFolderDialog.classList.add("hidden");
+    newFolderDialog.setAttribute("aria-hidden", "true");
+    newFolderCreateBtn.removeEventListener("click", handleCreate);
+    newFolderCancelBtn.removeEventListener("click", handleCancel);
+    const backdrop = newFolderDialog.querySelector("[data-new-folder-close]");
+    if (backdrop) {
+      backdrop.removeEventListener("click", handleCancel);
+    }
+  };
+
+  const handleCreate = async () => {
+    const folderName = newFolderNameInput.value.trim();
+    if (!folderName) {
+      notify({
+        title: "Error",
+        message: "Folder name cannot be empty.",
+        type: "error",
+      });
+      return;
+    }
+
+    cleanup();
+
+    if (!currentRemote) {
+      notify({
+        title: "Error",
+        message: "Please select a remote first.",
+        type: "error",
+      });
+      return;
+    }
+
+    setLoading(true, "Creating folder…");
+    updateActionState();
+
+    try {
+      const result = await window.rcloneGui.createRemoteFolder({
+        remotePath: currentPath(),
+        folderName,
+      });
+      notify({
+        title: "Folder created",
+        message: result.folderPath,
+        type: "success",
+      });
+      await loadListing();
+    } catch (error) {
+      notify({
+        title: "Failed to create folder",
+        message: error.message || "Could not create the folder.",
+        type: "error",
+      });
+    } finally {
+      setLoading(false);
+      updateActionState();
+    }
+  };
+
+  const handleCancel = () => {
+    cleanup();
+  };
+
+  newFolderCreateBtn.addEventListener("click", handleCreate, { once: true });
+  newFolderCancelBtn.addEventListener("click", handleCancel, { once: true });
+
+  const backdrop = newFolderDialog.querySelector("[data-new-folder-close]");
+  if (backdrop) {
+    backdrop.addEventListener("click", handleCancel, { once: true });
+  }
+
+  // Handle Enter key
+  newFolderNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleCreate();
+    }
+    if (event.key === "Escape") {
+      cleanup();
+    }
+  }, { once: false });
+}
+
 function bindEvents() {
   remoteBrowser.remotePicker.addEventListener("change", () => {
     currentRemote = remoteBrowser.remotePicker.value;
@@ -1350,14 +1457,16 @@ function bindEvents() {
 
   // Context menu handling
   const contextMenu = document.getElementById("browse-context-menu");
+  const contextNewFolderBtn = document.getElementById("context-new-folder");
   const contextDownloadBtn = document.getElementById("context-download");
   const contextCopyPathBtn = document.getElementById("context-copy-path");
   const contextDeleteBtn = document.getElementById("context-delete");
   const contextPreviewBtn = document.getElementById("context-preview");
 
-  if (contextMenu && contextDownloadBtn && contextCopyPathBtn && contextPreviewBtn && contextDeleteBtn) {
+  if (contextMenu && contextNewFolderBtn && contextDownloadBtn && contextCopyPathBtn && contextPreviewBtn && contextDeleteBtn) {
     let contextTargetPath = null;
     let contextTargetIsDir = false;
+    let contextOnBlankSpace = false;
 
     // Close context menu helper
     const closeContextMenu = () => {
@@ -1365,6 +1474,7 @@ function bindEvents() {
       contextMenu.setAttribute("aria-hidden", "true");
       contextTargetPath = null;
       contextTargetIsDir = false;
+      contextOnBlankSpace = false;
     };
 
     // Close context menu when clicking backdrop
@@ -1422,25 +1532,38 @@ function bindEvents() {
       
       // Find the row that was clicked
       const row = event.target.closest("tr");
-      if (!row) return;
-
-      // Get the path from the row
-      const path = row.dataset.path;
-      const isDir = row.dataset.isdir === "1";
-      
-      if (!path) return;
 
       // Close any existing menu before showing new one
       closeContextMenu();
 
-      // Store the target for the menu actions
-      contextTargetPath = path;
-      contextTargetIsDir = isDir;
+      if (row) {
+        // Clicked on a row
+        contextOnBlankSpace = false;
 
-      // Select the row
-      const entryIndex = entries.findIndex(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
-      if (entryIndex >= 0) {
-        selectEntry(entries[entryIndex]);
+        // Get the path from the row
+        const path = row.dataset.path;
+        const isDir = row.dataset.isdir === "1";
+        
+        if (!path) return;
+
+        // Store the target for the menu actions
+        contextTargetPath = path;
+        contextTargetIsDir = isDir;
+
+        // Select the row
+        const entryIndex = entries.findIndex(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
+        if (entryIndex >= 0) {
+          selectEntry(entries[entryIndex]);
+        }
+      } else {
+        // Clicked on blank space
+        contextOnBlankSpace = true;
+        contextTargetPath = null;
+        contextTargetIsDir = false;
+        selectedPath = null;
+        selectedIsDir = false;
+        selectedSize = null;
+        updateActionState();
       }
 
       // Position the menu near the mouse
@@ -1471,22 +1594,27 @@ function bindEvents() {
       contextMenu.setAttribute("aria-hidden", "false");
 
       // Hide/unhide and disable menu items based on availability
-      // Preview: hide for directories or unsupported file types
-      const canPreview = canPreviewSelection();
+      // New folder: show only when on blank space (not on a file/folder) and not loading
+      const canNewFolder = contextOnBlankSpace && currentRemote && !loading && window.rcloneGui?.createRemoteFolder;
+      contextNewFolderBtn.classList.toggle("hidden", !canNewFolder);
+      contextNewFolderBtn.disabled = !canNewFolder;
+      
+      // Preview: hide for directories, unsupported file types, or blank space
+      const canPreview = selectedPath && canPreviewSelection();
       contextPreviewBtn.classList.toggle("hidden", !canPreview || loading);
       contextPreviewBtn.disabled = !canPreview || loading;
       
-      // Download: hide for directories or if not supported
+      // Download: hide for directories, blank space, or if not supported
       const canDownload = selectedPath && !selectedIsDir && window.rcloneGui?.downloadRemoteFile && !loading;
       contextDownloadBtn.classList.toggle("hidden", !canDownload);
       contextDownloadBtn.disabled = !canDownload;
       
-      // Copy path: hide if nothing selected
+      // Copy path: hide if nothing selected or on blank space
       const canCopyPath = selectedPath && !loading;
       contextCopyPathBtn.classList.toggle("hidden", !canCopyPath);
       contextCopyPathBtn.disabled = !canCopyPath;
       
-      // Delete: hide if nothing selected
+      // Delete: hide if nothing selected or on blank space
       const canDelete = selectedPath && !loading;
       contextDeleteBtn.classList.toggle("hidden", !canDelete);
       contextDeleteBtn.disabled = !canDelete;
@@ -1502,6 +1630,14 @@ function bindEvents() {
     });
 
     // Context menu actions
+    // New folder action
+    contextNewFolderBtn.addEventListener("click", () => {
+      if (currentRemote && !loading && window.rcloneGui?.createRemoteFolder) {
+        closeContextMenu();
+        void showNewFolderDialog();
+      }
+    });
+
     contextDownloadBtn.addEventListener("click", () => {
       if (selectedPath && !selectedIsDir && !loading && window.rcloneGui?.downloadRemoteFile) {
         closeContextMenu();

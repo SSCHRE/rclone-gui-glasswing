@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),
   downloadRemoteFile: (payload) => ipcRenderer.invoke("download-remote-file", payload),
     deleteRemoteFile: (payload) => ipcRenderer.invoke("delete-remote-file", payload),
+    createRemoteFolder: (payload) => ipcRenderer.invoke("create-remote-folder", payload),
 openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-preview", remotePath, options),
   closeRemotePreview: () => ipcRenderer.invoke("close-remote-preview"),
   startJob: (job) => ipcRenderer.invoke("start-job", job),

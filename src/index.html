@@ -461,6 +461,10 @@
     <div id="browse-context-menu" class="context-menu hidden" aria-hidden="true">
       <div class="context-menu-backdrop" data-context-close></div>
       <div class="context-menu-card" role="menu" aria-label="File actions">
+        <button id="context-new-folder" type="button" class="context-menu-item" data-action="new-folder">
+          <span class="context-menu-icon" aria-hidden="true">📁</span>
+          <span class="context-menu-label">New folder</span>
+        </button>
         <button id="context-preview" type="button" class="context-menu-item" data-action="preview">
           <span class="context-menu-icon" aria-hidden="true">👁</span>
           <span class="context-menu-label">Preview</span>
@@ -487,6 +491,20 @@
         <div class="popup-actions">
           <button id="delete-cancel" type="button" class="secondary">Cancel</button>
           <button id="delete-confirm" type="button" class="danger">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div id="new-folder-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-new-folder-close></div>
+      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="new-folder-title">
+        <p id="new-folder-title" class="popup-title">Create new folder</p>
+        <label class="field popup-field">
+          <span>Folder name</span>
+          <input id="new-folder-name" type="text" placeholder="Enter folder name" autocomplete="off" />
+        </label>
+        <div class="popup-actions">
+          <button id="new-folder-cancel" type="button" class="secondary">Cancel</button>
+          <button id="new-folder-create" type="button" class="primary">Create</button>
         </div>
       </div>
     </div>
