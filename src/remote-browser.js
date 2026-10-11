@@ -47,6 +47,8 @@ let selectedIsDir = false;
 let selectedSize = null;
 let loading = false;
 let loadToken = 0;
+let loadingContext = "";
+let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
 let previewBlobUrl = null;
@@ -138,28 +140,43 @@ function activePath() {
 function setStatus(message = "", isError = false) {
   if (!message) {
     remoteBrowser.status.textContent = "";
-    remoteBrowser.status.classList.add("hidden");
+    remoteBrowser.status.classList.remove("visible");
     remoteBrowser.status.classList.remove("is-error");
+    setTimeout(() => {
+      remoteBrowser.status.classList.add("hidden");
+    }, 300);
     return;
   }
 
   remoteBrowser.status.textContent = message;
   remoteBrowser.status.classList.toggle("is-error", isError);
   remoteBrowser.status.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    remoteBrowser.status.classList.add("visible");
+  });
 }
 
-function setLoading(isLoading, label = "Loading…") {
+function setLoading(isLoading, label = "Loading…", context = "") {
   loading = isLoading;
+  loadingContext = context;
   if (!remoteBrowser.loading) {
     return;
   }
 
+  const textEl = remoteBrowser.loading.querySelector(".browse-loading-text");
+  const spinnerEl = remoteBrowser.loading.querySelector(".browse-loading-spinner");
+
+  if (textEl) {
+    textEl.textContent = label;
+  }
+
+  if (spinnerEl) {
+    spinnerEl.classList.toggle("pulse", context === "delete");
+  }
+
+  remoteBrowser.loading.classList.toggle("visible", isLoading);
   remoteBrowser.loading.classList.toggle("hidden", !isLoading);
   remoteBrowser.loading.setAttribute("aria-busy", String(isLoading));
-  const text = remoteBrowser.loading.querySelector(".browse-loading-text");
-  if (text) {
-    text.textContent = label;
-  }
 }
 
 function selectedExtension() {
@@ -269,6 +286,9 @@ function selectEntry(entry) {
 }
 
 function renderEntries() {
+  const scrollContainer = remoteBrowser.entriesBody.parentElement;
+  const wasAtBottom = scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
+  
   remoteBrowser.entriesBody.innerHTML = "";
 
   if (!currentRemote) {
@@ -283,10 +303,12 @@ function renderEntries() {
     remoteBrowser.empty.classList.add("hidden");
   }
 
-  for (const entry of entries) {
+  for (const [index, entry] of entries.entries()) {
     const row = document.createElement("tr");
     const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
     row.dataset.path = entryPath;
+    row.dataset.index = index;
+    row.style.setProperty("--row-index", index);
     row.dataset.isdir = entry.isDir ? "1" : "0";
     row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}`;
     row.tabIndex = 0;
@@ -347,9 +369,15 @@ function renderEntries() {
   }
 
   updateActionState();
+
+  if (scrollContainer && wasAtBottom) {
+    requestAnimationFrame(() => {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    });
+  }
 }
 
-async function loadListing() {
+async function loadListing(context = "") {
   if (!currentRemote || !window.rcloneGui?.listRemotePath) {
     entries = [];
     setLoading(false);
@@ -364,7 +392,17 @@ async function loadListing() {
   selectedIsDir = false;
   selectedSize = null;
   setStatus("");
-  setLoading(true, "Loading folder…");
+  
+  let loadingMessage = "Loading folder…";
+  if (context === "refresh") {
+    loadingMessage = "Refreshing…";
+  } else if (context === "navigate") {
+    loadingMessage = "Loading…";
+  } else if (context === "delete") {
+    loadingMessage = "Updating list…";
+  }
+  
+  setLoading(true, loadingMessage, context);
   renderBreadcrumbs();
   updateActionState();
 
@@ -431,7 +469,7 @@ async function navigateTo(subPath, { recordHistory = true } = {}) {
   if (recordHistory) {
     pushBrowseHistory(currentRemote, currentSubPath);
   }
-  await loadListing();
+  await loadListing("navigate");
 }
 
 async function browseHistoryBack() {
@@ -446,7 +484,7 @@ async function browseHistoryBack() {
     remoteBrowser.remotePicker.value = entry.remote;
   }
   currentSubPath = entry.subPath;
-  await loadListing();
+  await loadListing("navigate");
   return true;
 }
 
@@ -462,7 +500,7 @@ async function browseHistoryForward() {
     remoteBrowser.remotePicker.value = entry.remote;
   }
   currentSubPath = entry.subPath;
-  await loadListing();
+  await loadListing("navigate");
   return true;
 }
 
@@ -1253,7 +1291,14 @@ async function deleteSelectedFile() {
       return;
     }
 
-    setLoading(true, "Deleting…");
+    const selectedRow = remoteBrowser.entriesBody.querySelector("tr.is-selected");
+    
+    if (selectedRow) {
+      selectedRow.classList.add("is-deleting");
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    setLoading(true, "Deleting…", "delete");
     updateActionState();
 
     try {
@@ -1270,7 +1315,7 @@ async function deleteSelectedFile() {
         message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
         type: "success",
       });
-      await loadListing();
+      await loadListing("delete");
     } catch (error) {
       notify({
         title: "Delete failed",
@@ -1353,7 +1398,7 @@ function showNewFolderDialog() {
         message: result.folderPath,
         type: "success",
       });
-      await loadListing();
+      await loadListing("refresh");
     } catch (error) {
       notify({
         title: "Failed to create folder",
@@ -1398,7 +1443,7 @@ function bindEvents() {
     selectedIsDir = false;
     selectedSize = null;
     resetBrowseHistory(currentRemote, "");
-    void loadListing();
+    void loadListing("navigate");
   });
 
   remoteBrowser.upBtn.addEventListener("click", () => {
@@ -1406,7 +1451,7 @@ function bindEvents() {
   });
 
   remoteBrowser.refreshBtn.addEventListener("click", () => {
-    void loadListing();
+    void loadListing("refresh");
   });
 
   if (remoteBrowser.newFolderBtn) {
@@ -1678,7 +1723,7 @@ function show() {
     if (browseHistoryIndex < 0) {
       resetBrowseHistory(currentRemote, currentSubPath);
     }
-    void loadListing();
+    void loadListing("navigate");
   } else {
     renderBreadcrumbs();
     renderEntries();
@@ -1696,6 +1741,6 @@ window.RemoteBrowser = {
   setRemotes,
   show,
   hide,
-  reload: loadListing,
+  reload: (context) => loadListing(context || "refresh"),
 };
 })();
