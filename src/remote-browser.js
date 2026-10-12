@@ -34,6 +34,8 @@ const previewUi = {
   zipLoading: document.getElementById("preview-zip-loading"),
   zipEntries: document.getElementById("preview-zip-entries"),
   closeBtn: document.getElementById("preview-close"),
+  prevBtn: document.getElementById("preview-prev"),
+  nextBtn: document.getElementById("preview-next"),
 };
 
 const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".7z", ".jpg", ".jpeg", ".png"]);
@@ -55,6 +57,65 @@ let previewBlobUrl = null;
 let zipPreviewState = null;
 let browseHistory = [];
 let browseHistoryIndex = -1;
+let sortKey = "name";
+let sortDirection = "asc";
+let previewEntries = [];
+let previewCurrentIndex = -1;
+
+function sortEntries(entriesToSort = entries) {
+  const sorted = [...entriesToSort];
+  sorted.sort((a, b) => {
+    let comparison = 0;
+    
+    if (sortKey === "name") {
+      comparison = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    } else if (sortKey === "size") {
+      const aSize = a.isDir ? -1 : (a.size || 0);
+      const bSize = b.isDir ? -1 : (b.size || 0);
+      comparison = aSize - bSize;
+    } else if (sortKey === "modified") {
+      const aTime = a.modTime ? new Date(a.modTime).getTime() : 0;
+      const bTime = b.modTime ? new Date(b.modTime).getTime() : 0;
+      comparison = aTime - bTime;
+    }
+    
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+  return sorted;
+}
+
+function setSort(key) {
+  if (sortKey === key) {
+    sortDirection = sortDirection === "asc" ? "desc" : "asc";
+  } else {
+    sortKey = key;
+    sortDirection = "asc";
+  }
+  
+  const sortHeaders = document.querySelectorAll(".sort-header");
+  sortHeaders.forEach(header => {
+    header.removeAttribute("data-sort-direction");
+    if (header.dataset.sort === key) {
+      header.setAttribute("data-sort-direction", sortDirection);
+    }
+  });
+  
+  if (!loading) {
+    renderEntries();
+  }
+}
+
+function initSortHeaders() {
+  const sortHeaders = document.querySelectorAll(".sort-header");
+  sortHeaders.forEach(header => {
+    header.addEventListener("click", () => {
+      const sortType = header.dataset.sort;
+      if (sortType) {
+        setSort(sortType);
+      }
+    });
+  });
+}
 
 function notify(payload) {
   if (typeof onNotify === "function") {
@@ -210,6 +271,8 @@ function updateActionState() {
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
   remoteBrowser.remotePicker.disabled = loading;
+  
+  updatePreviewNavButtons();
 
   if (!currentRemote) {
     remoteBrowser.selectionLabel.textContent = "Nothing selected";
@@ -289,6 +352,8 @@ function renderEntries() {
   const scrollContainer = remoteBrowser.entriesBody.parentElement;
   const wasAtBottom = scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
   
+  const sortedEntries = sortEntries();
+  
   remoteBrowser.entriesBody.innerHTML = "";
 
   if (!currentRemote) {
@@ -296,14 +361,14 @@ function renderEntries() {
     remoteBrowser.empty.classList.remove("hidden");
   } else if (loading) {
     remoteBrowser.empty.classList.add("hidden");
-  } else if (entries.length === 0) {
+  } else if (sortedEntries.length === 0) {
     remoteBrowser.empty.textContent = "This folder is empty.";
     remoteBrowser.empty.classList.remove("hidden");
   } else {
     remoteBrowser.empty.classList.add("hidden");
   }
 
-  for (const [index, entry] of entries.entries()) {
+  for (const [index, entry] of sortedEntries.entries()) {
     const row = document.createElement("tr");
     const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
     row.dataset.path = entryPath;
@@ -645,6 +710,68 @@ function closePreview() {
   }
   previewUi.dialog.classList.add("hidden");
   previewUi.dialog.setAttribute("aria-hidden", "true");
+  previewEntries = [];
+  previewCurrentIndex = -1;
+  updatePreviewNavButtons();
+}
+
+function updatePreviewNavButtons() {
+  if (!previewUi.prevBtn || !previewUi.nextBtn) {
+    return;
+  }
+  
+  const hasEntries = previewEntries.length > 0;
+  const canNavigate = hasEntries && previewCurrentIndex >= 0;
+  
+  previewUi.prevBtn.disabled = !canNavigate || previewCurrentIndex <= 0;
+  previewUi.nextBtn.disabled = !canNavigate || previewCurrentIndex >= previewEntries.length - 1;
+}
+
+function populatePreviewEntries() {
+  if (!currentRemote) {
+    previewEntries = [];
+    previewCurrentIndex = -1;
+    return;
+  }
+  
+  const sorted = sortEntries();
+  previewEntries = sorted.filter(entry => {
+    if (entry.isDir) return false;
+    const name = entry.name;
+    const dot = name.lastIndexOf(".");
+    const ext = dot >= 0 ? name.slice(dot).toLowerCase() : "";
+    return PREVIEW_EXTENSIONS.has(ext);
+  });
+  
+  const currentPathWithoutRemote = selectedPath ? selectedPath.split(":").slice(1).join(":") : "";
+  previewCurrentIndex = previewEntries.findIndex(entry => 
+    joinSubPath(currentSubPath, entry.name) === currentPathWithoutRemote
+  );
+}
+
+function previewNavigate(direction) {
+  if (previewEntries.length === 0 || previewCurrentIndex < 0) {
+    return;
+  }
+  
+  const newIndex = previewCurrentIndex + direction;
+  if (newIndex < 0 || newIndex >= previewEntries.length) {
+    return;
+  }
+  
+  previewCurrentIndex = newIndex;
+  const entry = previewEntries[previewCurrentIndex];
+  const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
+  
+  selectedPath = entryPath;
+  selectedIsDir = false;
+  selectedSize = typeof entry.size === "number" ? entry.size : null;
+  
+  selectEntry(entry);
+  updateActionState();
+  updatePreviewNavButtons();
+  
+  void previewSelectedFile();
 }
 
 function openPreviewDialog(payload) {
@@ -1068,6 +1195,8 @@ async function previewSelectedFile() {
     });
     return;
   }
+  
+  populatePreviewEntries();
 
   const remotePath = selectedPath;
   const fileSize = selectedSize;
@@ -1481,6 +1610,21 @@ function bindEvents() {
   for (const closer of previewUi.dialog?.querySelectorAll("[data-preview-close]") || []) {
     closer.addEventListener("click", closePreview);
   }
+  
+  previewUi.prevBtn?.addEventListener("click", () => previewNavigate(-1));
+  previewUi.nextBtn?.addEventListener("click", () => previewNavigate(1));
+  
+  document.addEventListener("keydown", (event) => {
+    if (previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
+      if (event.key === "ArrowLeft") {
+        previewNavigate(-1);
+        event.preventDefault();
+      } else if (event.key === "ArrowRight") {
+        previewNavigate(1);
+        event.preventDefault();
+      }
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
       closePreview();
@@ -1700,6 +1844,7 @@ function init(options = {}) {
   onNotify = options.onNotify || null;
   bindEvents();
   fillRemotePicker();
+  initSortHeaders();
 }
 
 function restartEnterAnimations() {
