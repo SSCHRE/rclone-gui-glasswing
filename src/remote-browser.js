@@ -369,9 +369,10 @@ function updateActionState() {
   }
 
   if (selectedPath) {
+    const displayPath = selectedPath.includes(":") ? selectedPath.split(":").slice(1).join(":") : selectedPath;
     remoteBrowser.selectionLabel.textContent = selectedIsDir
-      ? `Folder: ${selectedPath}`
-      : `File: ${selectedPath}`;
+      ? `Folder: ${displayPath || "/"}`
+      : `File: ${displayPath || "root"}`;
     return;
   }
 
