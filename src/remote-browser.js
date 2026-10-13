@@ -52,6 +52,7 @@ let loading = false;
 let loadToken = 0;
 let loadingContext = "";
 let loadingCancelled = false;
+let loadingPreviousPath = "";
 let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
@@ -254,10 +255,12 @@ function setLoading(isLoading, label = "Loading…", context = "") {
 function cancelLoading() {
   loadingCancelled = true;
   loadToken++;
+  currentSubPath = loadingPreviousPath;
   setLoading(false);
   selectedPath = null;
   selectedIsDir = false;
   selectedSize = null;
+  renderBreadcrumbs();
   renderEntries();
   updateActionState();
 }
@@ -514,6 +517,7 @@ async function loadListing(context = "") {
     });
   } finally {
     if (token === loadToken && !loadingCancelled) {
+      loadingPreviousPath = currentSubPath;
       setLoading(false);
       renderEntries();
       updateActionState();
@@ -555,9 +559,11 @@ function resetBrowseHistory(remote, subPath = "") {
 }
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
-  currentSubPath = String(subPath || "")
+  loadingPreviousPath = currentSubPath;
+  const newSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
+  currentSubPath = newSubPath;
   if (recordHistory) {
     pushBrowseHistory(currentRemote, currentSubPath);
   }
