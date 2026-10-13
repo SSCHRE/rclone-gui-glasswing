@@ -272,7 +272,18 @@ function cancelLoading() {
   
   setLoading(false);
   renderBreadcrumbs();
-  renderEntries();
+  
+  if (selectedPath) {
+    const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
+    if (entry) {
+      selectEntry(entry);
+    } else {
+      selectEntry(null);
+    }
+  } else {
+    selectEntry(null);
+  }
+  
   updateActionState();
 }
 
@@ -534,8 +545,6 @@ async function loadListing(context = "") {
       updateActionState();
     } else if (loadingCancelled) {
       setLoading(false);
-      renderEntries();
-      updateActionState();
     }
   }
 }
