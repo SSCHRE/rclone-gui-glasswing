@@ -1973,9 +1973,12 @@ function restartEnterAnimations() {
 }
 
 function show() {
+  const wasHidden = remoteBrowser.view.classList.contains("hidden") || remoteBrowser.view.hidden;
   remoteBrowser.view.classList.remove("hidden");
   remoteBrowser.view.hidden = false;
-  restartEnterAnimations();
+  if (wasHidden) {
+    restartEnterAnimations();
+  }
   if (currentRemote) {
     if (browseHistoryIndex < 0) {
       resetBrowseHistory(currentRemote, currentSubPath);
