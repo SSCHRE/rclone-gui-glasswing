@@ -9,7 +9,6 @@ const remoteBrowser = {
   empty: document.getElementById("browse-empty"),
   status: document.getElementById("browse-status"),
   loading: document.getElementById("browse-loading"),
-  cancelBtn: document.getElementById("browse-cancel"),
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
@@ -17,6 +16,7 @@ const remoteBrowser = {
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
   deleteBtn: document.getElementById("browse-delete"),
+  tableHead: document.querySelector(".browse-table thead"),
 };
 
 const previewUi = {
@@ -35,7 +35,7 @@ const previewUi = {
   zipLoading: document.getElementById("preview-zip-loading"),
   zipEntries: document.getElementById("preview-zip-entries"),
   closeBtn: document.getElementById("preview-close"),
-  prevBtn: document.getElementById("preview-prev"),
+  previousBtn: document.getElementById("preview-previous"),
   nextBtn: document.getElementById("preview-next"),
 };
 
@@ -51,10 +51,6 @@ let selectedSize = null;
 let loading = false;
 let loadToken = 0;
 let loadingContext = "";
-let loadingCancelled = false;
-let loadingPreviousPath = "";
-let loadingPreviousEntries = [];
-let loadingPreviousSelectedPath = null;
 let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
@@ -62,70 +58,133 @@ let previewBlobUrl = null;
 let zipPreviewState = null;
 let browseHistory = [];
 let browseHistoryIndex = -1;
-let sortKey = "name";
+let sortBy = "name";
 let sortDirection = "asc";
-let previewEntries = [];
-let previewCurrentIndex = -1;
-
-function sortEntries(entriesToSort = entries) {
-  const sorted = [...entriesToSort];
-  sorted.sort((a, b) => {
-    let comparison = 0;
-    
-    if (sortKey === "name") {
-      comparison = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    } else if (sortKey === "size") {
-      const aSize = a.isDir ? -1 : (a.size || 0);
-      const bSize = b.isDir ? -1 : (b.size || 0);
-      comparison = aSize - bSize;
-    } else if (sortKey === "modified") {
-      const aTime = a.modTime ? new Date(a.modTime).getTime() : 0;
-      const bTime = b.modTime ? new Date(b.modTime).getTime() : 0;
-      comparison = aTime - bTime;
-    }
-    
-    return sortDirection === "asc" ? comparison : -comparison;
-  });
-  return sorted;
-}
-
-function setSort(key) {
-  if (sortKey === key) {
-    sortDirection = sortDirection === "asc" ? "desc" : "asc";
-  } else {
-    sortKey = key;
-    sortDirection = "asc";
-  }
-  
-  const sortHeaders = document.querySelectorAll(".sort-header");
-  sortHeaders.forEach(header => {
-    header.removeAttribute("data-sort-direction");
-    if (header.dataset.sort === key) {
-      header.setAttribute("data-sort-direction", sortDirection);
-    }
-  });
-  
-  if (!loading) {
-    renderEntries();
-  }
-}
-
-function initSortHeaders() {
-  const sortHeaders = document.querySelectorAll(".sort-header");
-  sortHeaders.forEach(header => {
-    header.addEventListener("click", () => {
-      const sortType = header.dataset.sort;
-      if (sortType) {
-        setSort(sortType);
-      }
-    });
-  });
-}
+let previewableFiles = [];
+let currentPreviewIndex = -1;
 
 function notify(payload) {
   if (typeof onNotify === "function") {
     onNotify(payload);
   }
+}
+
+function getSortedEntries() {
+  const sorted = [...entries];
+  
+  sorted.sort((a, b) => {
+    const dirA = a.isDir || false;
+    const dirB = b.isDir || false;
+    
+    if (dirA && !dirB) return -1;
+    if (!dirA && dirB) return 1;
+    
+    const reverse = sortDirection === "desc" ? -1 : 1;
+    
+    if (sortBy === "name") {
+      return reverse * a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+    
+    if (sortBy === "size") {
+      const sizeA = typeof a.size === "number" ? a.size : 0;
+      const sizeB = typeof b.size === "number" ? b.size : 0;
+      if (sizeA !== sizeB) return reverse * (sizeA - sizeB);
+      return reverse * a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+    
+    if (sortBy === "modified") {
+      const timeA = a.modTime ? new Date(a.modTime).getTime() : 0;
+      const timeB = b.modTime ? new Date(b.modTime).getTime() : 0;
+      if (timeA !== timeB) return reverse * (timeA - timeB);
+      return reverse * a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+    
+    return 0;
+  });
+  
+  return sorted;
+}
+
+function setSort(criteria, direction) {
+  if (criteria === sortBy) {
+    sortDirection = direction || (sortDirection === "asc" ? "desc" : "asc");
+  } else {
+    sortBy = criteria;
+    sortDirection = direction || "asc";
+  }
+  
+  updateTableSortIndicators();
+  renderEntries();
+}
+
+function updateTableSortIndicators() {
+  if (!remoteBrowser.tableHead) return;
+  
+  const headers = remoteBrowser.tableHead.querySelectorAll(".browse-col-sortable");
+  for (const header of headers) {
+    const criteria = header.dataset.sort;
+    header.classList.remove("is-sorted-asc", "is-sorted-desc");
+    
+    if (criteria === sortBy) {
+      header.classList.add(sortDirection === "asc" ? "is-sorted-asc" : "is-sorted-desc");
+    }
+  }
+}
+
+function getPreviewableFiles() {
+  if (!currentRemote) return [];
+  
+  const sortedEntriesList = getSortedEntries();
+  return sortedEntriesList.filter(entry => {
+    if (entry.isDir) return false;
+    const ext = entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase();
+    return PREVIEW_EXTENSIONS.has(ext);
+  });
+}
+
+function updatePreviewNavigation() {
+  previewableFiles = getPreviewableFiles();
+  
+  if (!selectedPath || selectedIsDir) {
+    currentPreviewIndex = -1;
+    updatePreviewButtons();
+    return;
+  }
+  
+  const selectedFileName = selectedPath.split("/").pop() || selectedPath;
+  currentPreviewIndex = previewableFiles.findIndex(f => 
+    formatRemotePath(currentRemote, joinSubPath(currentSubPath, f.name)) === selectedPath
+  );
+  
+  updatePreviewButtons();
+}
+
+function updatePreviewButtons() {
+  if (!previewUi.previousBtn || !previewUi.nextBtn) return;
+  
+  const hasPreviewable = previewableFiles.length > 0 && currentPreviewIndex >= 0;
+  const hasPrevious = hasPreviewable && currentPreviewIndex > 0;
+  const hasNext = hasPreviewable && currentPreviewIndex < previewableFiles.length - 1;
+  
+  previewUi.previousBtn.disabled = !hasPrevious;
+  previewUi.nextBtn.disabled = !hasNext;
+}
+
+function navigatePreview(direction) {
+  if (previewableFiles.length === 0 || currentPreviewIndex < 0) return;
+  
+  const newIndex = currentPreviewIndex + direction;
+  if (newIndex < 0 || newIndex >= previewableFiles.length) return;
+  
+  const targetFile = previewableFiles[newIndex];
+  if (!targetFile) return;
+  
+  currentPreviewIndex = newIndex;
+  selectEntry(targetFile);
+  
+  updatePreviewButtons();
+  
+  void previewSelectedFile();
 }
 
 function formatRemotePath(remote, subPath = "") {
@@ -225,10 +284,6 @@ function setStatus(message = "", isError = false) {
 function setLoading(isLoading, label = "Loading…", context = "") {
   loading = isLoading;
   loadingContext = context;
-  if (!isLoading) {
-    loadingCancelled = false;
-  }
-  
   if (!remoteBrowser.loading) {
     return;
   }
@@ -247,46 +302,6 @@ function setLoading(isLoading, label = "Loading…", context = "") {
   remoteBrowser.loading.classList.toggle("visible", isLoading);
   remoteBrowser.loading.classList.toggle("hidden", !isLoading);
   remoteBrowser.loading.setAttribute("aria-busy", String(isLoading));
-  
-  if (remoteBrowser.cancelBtn) {
-    remoteBrowser.cancelBtn.disabled = !isLoading;
-    remoteBrowser.cancelBtn.classList.toggle("hidden", !isLoading);
-  }
-}
-
-function cancelLoading() {
-  loadingCancelled = true;
-  loadToken++;
-  currentSubPath = loadingPreviousPath;
-  entries = loadingPreviousEntries;
-  selectedPath = loadingPreviousSelectedPath;
-  
-  let selectedEntry = null;
-  if (selectedPath) {
-    selectedEntry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
-    if (selectedEntry) {
-      selectedIsDir = selectedEntry.isDir;
-      selectedSize = selectedEntry.size;
-    } else {
-      selectedPath = null;
-      selectedIsDir = false;
-      selectedSize = null;
-    }
-  } else {
-    selectedIsDir = false;
-    selectedSize = null;
-  }
-  
-  setLoading(false);
-  renderBreadcrumbs();
-  
-  if (selectedEntry) {
-    selectEntry(selectedEntry);
-  } else {
-    selectEntry(null);
-  }
-  
-  updateActionState();
 }
 
 function selectedExtension() {
@@ -320,8 +335,6 @@ function updateActionState() {
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
   remoteBrowser.remotePicker.disabled = loading;
-  
-  updatePreviewNavButtons();
 
   if (!currentRemote) {
     remoteBrowser.selectionLabel.textContent = "Nothing selected";
@@ -395,13 +408,14 @@ function selectEntry(entry) {
     row.classList.toggle("is-selected", row.dataset.path === selectedPath);
   }
   updateActionState();
+  updatePreviewNavigation();
 }
 
 function renderEntries() {
   const scrollContainer = remoteBrowser.entriesBody.parentElement;
   const wasAtBottom = scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
   
-  const sortedEntries = sortEntries();
+  const sortedEntries = getSortedEntries();
   
   remoteBrowser.entriesBody.innerHTML = "";
 
@@ -502,7 +516,6 @@ async function loadListing(context = "") {
   }
 
   const token = ++loadToken;
-  loadingCancelled = false;
   selectedPath = null;
   selectedIsDir = false;
   selectedSize = null;
@@ -523,13 +536,13 @@ async function loadListing(context = "") {
 
   try {
     const result = await window.rcloneGui.listRemotePath(currentPath());
-    if (token !== loadToken || loadingCancelled) {
+    if (token !== loadToken) {
       return;
     }
     entries = result.entries || [];
     setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
   } catch (error) {
-    if (token !== loadToken || loadingCancelled) {
+    if (token !== loadToken) {
       return;
     }
     entries = [];
@@ -540,13 +553,11 @@ async function loadListing(context = "") {
       type: "error",
     });
   } finally {
-    if (token === loadToken && !loadingCancelled) {
-      loadingPreviousPath = currentSubPath;
+    if (token === loadToken) {
       setLoading(false);
+      currentPreviewIndex = -1;
       renderEntries();
       updateActionState();
-    } else if (loadingCancelled) {
-      setLoading(false);
     }
   }
 }
@@ -581,13 +592,9 @@ function resetBrowseHistory(remote, subPath = "") {
 }
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
-  loadingPreviousPath = currentSubPath;
-  loadingPreviousEntries = [...entries];
-  loadingPreviousSelectedPath = selectedPath;
-  const newSubPath = String(subPath || "")
+  currentSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
-  currentSubPath = newSubPath;
   if (recordHistory) {
     pushBrowseHistory(currentRemote, currentSubPath);
   }
@@ -767,68 +774,6 @@ function closePreview() {
   }
   previewUi.dialog.classList.add("hidden");
   previewUi.dialog.setAttribute("aria-hidden", "true");
-  previewEntries = [];
-  previewCurrentIndex = -1;
-  updatePreviewNavButtons();
-}
-
-function updatePreviewNavButtons() {
-  if (!previewUi.prevBtn || !previewUi.nextBtn) {
-    return;
-  }
-  
-  const hasEntries = previewEntries.length > 0;
-  const canNavigate = hasEntries && previewCurrentIndex >= 0;
-  
-  previewUi.prevBtn.disabled = !canNavigate || previewCurrentIndex <= 0;
-  previewUi.nextBtn.disabled = !canNavigate || previewCurrentIndex >= previewEntries.length - 1;
-}
-
-function populatePreviewEntries() {
-  if (!currentRemote) {
-    previewEntries = [];
-    previewCurrentIndex = -1;
-    return;
-  }
-  
-  const sorted = sortEntries();
-  previewEntries = sorted.filter(entry => {
-    if (entry.isDir) return false;
-    const name = entry.name;
-    const dot = name.lastIndexOf(".");
-    const ext = dot >= 0 ? name.slice(dot).toLowerCase() : "";
-    return PREVIEW_EXTENSIONS.has(ext);
-  });
-  
-  const currentPathWithoutRemote = selectedPath ? selectedPath.split(":").slice(1).join(":") : "";
-  previewCurrentIndex = previewEntries.findIndex(entry => 
-    joinSubPath(currentSubPath, entry.name) === currentPathWithoutRemote
-  );
-}
-
-function previewNavigate(direction) {
-  if (previewEntries.length === 0 || previewCurrentIndex < 0) {
-    return;
-  }
-  
-  const newIndex = previewCurrentIndex + direction;
-  if (newIndex < 0 || newIndex >= previewEntries.length) {
-    return;
-  }
-  
-  previewCurrentIndex = newIndex;
-  const entry = previewEntries[previewCurrentIndex];
-  const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
-  
-  selectedPath = entryPath;
-  selectedIsDir = false;
-  selectedSize = typeof entry.size === "number" ? entry.size : null;
-  
-  selectEntry(entry);
-  updateActionState();
-  updatePreviewNavButtons();
-  
-  void previewSelectedFile();
 }
 
 function openPreviewDialog(payload) {
@@ -1252,8 +1197,6 @@ async function previewSelectedFile() {
     });
     return;
   }
-  
-  populatePreviewEntries();
 
   const remotePath = selectedPath;
   const fileSize = selectedSize;
@@ -1660,33 +1603,47 @@ function bindEvents() {
     void deleteSelectedFile();
   });
 
-  remoteBrowser.cancelBtn?.addEventListener("click", cancelLoading);
-
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
   remoteBrowser.useDestBtn.addEventListener("click", () => useActivePath("destination"));
+
+  document.addEventListener("click", (event) => {
+    const header = event.target.closest(".browse-col-sortable");
+    if (header) {
+      event.preventDefault();
+      const criteria = header.dataset.sort;
+      if (criteria) {
+        setSort(criteria);
+      }
+    }
+  });
+
+  if (previewUi.previousBtn) {
+    previewUi.previousBtn.addEventListener("click", () => {
+      navigatePreview(-1);
+    });
+  }
+  
+  if (previewUi.nextBtn) {
+    previewUi.nextBtn.addEventListener("click", () => {
+      navigatePreview(1);
+    });
+  }
 
   previewUi.closeBtn?.addEventListener("click", closePreview);
   for (const closer of previewUi.dialog?.querySelectorAll("[data-preview-close]") || []) {
     closer.addEventListener("click", closePreview);
   }
-  
-  previewUi.prevBtn?.addEventListener("click", () => previewNavigate(-1));
-  previewUi.nextBtn?.addEventListener("click", () => previewNavigate(1));
-  
-  document.addEventListener("keydown", (event) => {
-    if (previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
-      if (event.key === "ArrowLeft") {
-        previewNavigate(-1);
-        event.preventDefault();
-      } else if (event.key === "ArrowRight") {
-        previewNavigate(1);
-        event.preventDefault();
-      }
-    }
-  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
       closePreview();
+    }
+    
+    if (previewUi.dialog && !previewUi.dialog.classList.contains("hidden")) {
+      if (event.key === "ArrowLeft") {
+        navigatePreview(-1);
+      } else if (event.key === "ArrowRight") {
+        navigatePreview(1);
+      }
     }
   });
 
@@ -1903,7 +1860,7 @@ function init(options = {}) {
   onNotify = options.onNotify || null;
   bindEvents();
   fillRemotePicker();
-  initSortHeaders();
+  updateTableSortIndicators();
 }
 
 function restartEnterAnimations() {

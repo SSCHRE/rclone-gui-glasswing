@@ -269,24 +269,9 @@
               <table class="browse-table" aria-label="Remote contents">
                 <thead>
                   <tr>
-                    <th scope="col" class="browse-col-name sort-header" data-sort="name">
-                      <button type="button" class="sort-btn" aria-label="Sort by name">
-                        <span class="sort-label">Name</span>
-                        <span class="sort-icon" aria-hidden="true"></span>
-                      </button>
-                    </th>
-                    <th scope="col" class="browse-col-size sort-header" data-sort="size">
-                      <button type="button" class="sort-btn" aria-label="Sort by size">
-                        <span class="sort-label">Size</span>
-                        <span class="sort-icon" aria-hidden="true"></span>
-                      </button>
-                    </th>
-                    <th scope="col" class="browse-col-modified sort-header" data-sort="modified">
-                      <button type="button" class="sort-btn" aria-label="Sort by modified date">
-                        <span class="sort-label">Modified</span>
-                        <span class="sort-icon" aria-hidden="true"></span>
-                      </button>
-                    </th>
+                    <th scope="col" class="browse-col-sortable" data-sort="name">Name</th>
+                    <th scope="col" class="browse-col-size browse-col-sortable" data-sort="size">Size</th>
+                    <th scope="col" class="browse-col-modified browse-col-sortable" data-sort="modified">Modified</th>
                   </tr>
                 </thead>
                 <tbody id="browse-entries"></tbody>
@@ -296,7 +281,6 @@
             <div id="browse-loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
               <span class="browse-loading-spinner" aria-hidden="true"></span>
               <span class="browse-loading-text">Loading…</span>
-              <button id="browse-cancel" type="button" class="secondary" disabled>Cancel</button>
             </div>
           </div>
 
@@ -322,19 +306,15 @@
       <div class="popup-backdrop" data-preview-close></div>
       <div class="popup-card popup-card-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title">
         <div class="preview-header">
-          <div class="preview-nav">
-            <button id="preview-prev" type="button" class="icon-button preview-nav-btn" aria-label="Previous file" disabled>
-              <span aria-hidden="true">←</span>
-            </button>
-            <button id="preview-next" type="button" class="icon-button preview-nav-btn" aria-label="Next file" disabled>
-              <span aria-hidden="true">→</span>
-            </button>
-          </div>
           <div>
             <h2 id="preview-title" class="popup-title preview-title">Preview</h2>
             <p id="preview-subtitle" class="preview-subtitle"></p>
           </div>
-          <button id="preview-close" type="button" class="icon-button" aria-label="Close preview">×</button>
+          <div class="preview-header-actions">
+            <button id="preview-previous" type="button" class="icon-button secondary" aria-label="Previous file" disabled>←</button>
+            <button id="preview-next" type="button" class="icon-button secondary" aria-label="Next file" disabled>→</button>
+            <button id="preview-close" type="button" class="icon-button" aria-label="Close preview">×</button>
+          </div>
         </div>
         <div id="preview-body" class="preview-body">
           <pre id="preview-text" class="preview-text hidden"></pre>
