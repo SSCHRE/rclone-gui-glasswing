@@ -9,6 +9,7 @@ const remoteBrowser = {
   empty: document.getElementById("browse-empty"),
   status: document.getElementById("browse-status"),
   loading: document.getElementById("browse-loading"),
+  loadingCancelBtn: document.getElementById("browse-cancel"),
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
@@ -51,6 +52,7 @@ let selectedSize = null;
 let loading = false;
 let loadToken = 0;
 let loadingContext = "";
+let loadingAbortController = null;
 let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
@@ -281,6 +283,26 @@ function setStatus(message = "", isError = false) {
   });
 }
 
+function cancelLoading() {
+  if (loadingAbortController) {
+    loadingAbortController.abort();
+    loadingAbortController = null;
+  }
+  
+  if (loadingContext === "navigate") {
+    if (browseHistoryIndex >= 0) {
+      const current = browseHistory[browseHistoryIndex];
+      currentSubPath = current.subPath;
+    } else {
+      currentSubPath = "";
+    }
+  }
+  
+  loadToken++;
+  setLoading(false);
+  setStatus("Loading cancelled.", false);
+}
+
 function setLoading(isLoading, label = "Loading…", context = "") {
   loading = isLoading;
   loadingContext = context;
@@ -290,6 +312,7 @@ function setLoading(isLoading, label = "Loading…", context = "") {
 
   const textEl = remoteBrowser.loading.querySelector(".browse-loading-text");
   const spinnerEl = remoteBrowser.loading.querySelector(".browse-loading-spinner");
+  const cancelBtn = remoteBrowser.loadingCancelBtn;
 
   if (textEl) {
     textEl.textContent = label;
@@ -297,6 +320,10 @@ function setLoading(isLoading, label = "Loading…", context = "") {
 
   if (spinnerEl) {
     spinnerEl.classList.toggle("pulse", context === "delete");
+  }
+
+  if (cancelBtn) {
+    cancelBtn.classList.toggle("hidden", !isLoading);
   }
 
   remoteBrowser.loading.classList.toggle("visible", isLoading);
@@ -505,6 +532,41 @@ function renderEntries() {
   }
 }
 
+async function loadListingForPath(subPath, token) {
+  selectedPath = null;
+  selectedIsDir = false;
+  selectedSize = null;
+  
+  const path = formatRemotePath(currentRemote, subPath);
+  
+  loadingAbortController = new AbortController();
+  const signal = loadingAbortController.signal;
+  
+  try {
+    const result = await window.rcloneGui.listRemotePath(path, { signal });
+    if (token !== loadToken) {
+      return;
+    }
+    entries = result.entries || [];
+    setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
+  } catch (error) {
+    if (token !== loadToken) {
+      return;
+    }
+    if (error.name === "AbortError") {
+      entries = [];
+      return;
+    }
+    entries = [];
+    setStatus(error.message || "Failed to list remote path.", true);
+    notify({
+      title: "Browse failed",
+      message: error.message || "Failed to list remote path.",
+      type: "error",
+    });
+  }
+}
+
 async function loadListing(context = "") {
   if (!currentRemote || !window.rcloneGui?.listRemotePath) {
     entries = [];
@@ -534,8 +596,11 @@ async function loadListing(context = "") {
   renderBreadcrumbs();
   updateActionState();
 
+  loadingAbortController = new AbortController();
+  const signal = loadingAbortController.signal;
+
   try {
-    const result = await window.rcloneGui.listRemotePath(currentPath());
+    const result = await window.rcloneGui.listRemotePath(currentPath(), { signal });
     if (token !== loadToken) {
       return;
     }
@@ -543,6 +608,11 @@ async function loadListing(context = "") {
     setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
   } catch (error) {
     if (token !== loadToken) {
+      return;
+    }
+    if (error.name === "AbortError") {
+      entries = [];
+      setStatus("Loading cancelled.", false);
       return;
     }
     entries = [];
@@ -553,6 +623,7 @@ async function loadListing(context = "") {
       type: "error",
     });
   } finally {
+    loadingAbortController = null;
     if (token === loadToken) {
       setLoading(false);
       currentPreviewIndex = -1;
@@ -592,13 +663,32 @@ function resetBrowseHistory(remote, subPath = "") {
 }
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
-  currentSubPath = String(subPath || "")
+  const targetSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
-  if (recordHistory) {
-    pushBrowseHistory(currentRemote, currentSubPath);
+  
+  const token = ++loadToken;
+  setLoading(true, "Loading…", "navigate");
+  updateActionState();
+  
+  try {
+    await loadListingForPath(targetSubPath, token);
+    
+    if (token === loadToken) {
+      currentSubPath = targetSubPath;
+      if (recordHistory) {
+        pushBrowseHistory(currentRemote, currentSubPath);
+      }
+      renderBreadcrumbs();
+    }
+  } finally {
+    if (token === loadToken) {
+      setLoading(false);
+      currentPreviewIndex = -1;
+      renderEntries();
+      updateActionState();
+    }
   }
-  await loadListing("navigate");
 }
 
 async function browseHistoryBack() {
@@ -1582,6 +1672,12 @@ function bindEvents() {
   remoteBrowser.refreshBtn.addEventListener("click", () => {
     void loadListing("refresh");
   });
+
+  if (remoteBrowser.loadingCancelBtn) {
+    remoteBrowser.loadingCancelBtn.addEventListener("click", () => {
+      cancelLoading();
+    });
+  }
 
   if (remoteBrowser.newFolderBtn) {
     remoteBrowser.newFolderBtn.addEventListener("click", () => {
