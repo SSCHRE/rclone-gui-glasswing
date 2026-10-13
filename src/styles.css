@@ -2511,6 +2511,11 @@ button:disabled {
   cursor: pointer;
   transition: color 0.15s ease;
   text-align: left;
+  position: relative;
+}
+
+.sort-btn::after {
+  display: none;
 }
 
 .sort-btn:hover {
@@ -3035,4 +3040,10 @@ button:disabled {
 
 .browse-table-scroll::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+
+.browse-loading #browse-cancel {
+  margin-top: 8px;
+  min-width: 100px;
 }

@@ -9,6 +9,7 @@ const remoteBrowser = {
   empty: document.getElementById("browse-empty"),
   status: document.getElementById("browse-status"),
   loading: document.getElementById("browse-loading"),
+  cancelBtn: document.getElementById("browse-cancel"),
   selectionLabel: document.getElementById("browse-selection"),
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
@@ -50,6 +51,7 @@ let selectedSize = null;
 let loading = false;
 let loadToken = 0;
 let loadingContext = "";
+let loadingCancelled = false;
 let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
@@ -220,6 +222,10 @@ function setStatus(message = "", isError = false) {
 function setLoading(isLoading, label = "Loading…", context = "") {
   loading = isLoading;
   loadingContext = context;
+  if (!isLoading) {
+    loadingCancelled = false;
+  }
+  
   if (!remoteBrowser.loading) {
     return;
   }
@@ -238,6 +244,22 @@ function setLoading(isLoading, label = "Loading…", context = "") {
   remoteBrowser.loading.classList.toggle("visible", isLoading);
   remoteBrowser.loading.classList.toggle("hidden", !isLoading);
   remoteBrowser.loading.setAttribute("aria-busy", String(isLoading));
+  
+  if (remoteBrowser.cancelBtn) {
+    remoteBrowser.cancelBtn.disabled = !isLoading;
+    remoteBrowser.cancelBtn.classList.toggle("hidden", !isLoading);
+  }
+}
+
+function cancelLoading() {
+  loadingCancelled = true;
+  loadToken++;
+  setLoading(false);
+  selectedPath = null;
+  selectedIsDir = false;
+  selectedSize = null;
+  renderEntries();
+  updateActionState();
 }
 
 function selectedExtension() {
@@ -453,6 +475,7 @@ async function loadListing(context = "") {
   }
 
   const token = ++loadToken;
+  loadingCancelled = false;
   selectedPath = null;
   selectedIsDir = false;
   selectedSize = null;
@@ -473,13 +496,13 @@ async function loadListing(context = "") {
 
   try {
     const result = await window.rcloneGui.listRemotePath(currentPath());
-    if (token !== loadToken) {
+    if (token !== loadToken || loadingCancelled) {
       return;
     }
     entries = result.entries || [];
     setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
   } catch (error) {
-    if (token !== loadToken) {
+    if (token !== loadToken || loadingCancelled) {
       return;
     }
     entries = [];
@@ -490,7 +513,11 @@ async function loadListing(context = "") {
       type: "error",
     });
   } finally {
-    if (token === loadToken) {
+    if (token === loadToken && !loadingCancelled) {
+      setLoading(false);
+      renderEntries();
+      updateActionState();
+    } else if (loadingCancelled) {
       setLoading(false);
       renderEntries();
       updateActionState();
@@ -1602,6 +1629,8 @@ function bindEvents() {
   remoteBrowser.deleteBtn?.addEventListener("click", () => {
     void deleteSelectedFile();
   });
+
+  remoteBrowser.cancelBtn?.addEventListener("click", cancelLoading);
 
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
   remoteBrowser.useDestBtn.addEventListener("click", () => useActivePath("destination"));
