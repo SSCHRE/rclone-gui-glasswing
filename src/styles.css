@@ -1440,7 +1440,7 @@ button:disabled {
   transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease;
 }
 
-.popup-card:hover {
+.popup-card:not(.popup-card-preview):hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-soft), 0 20px 60px rgba(0, 0, 0, 0.28);
 }
@@ -2306,6 +2306,7 @@ button:disabled {
   border-bottom: 1px solid rgba(120, 145, 180, 0.14);
   padding: 10px 14px;
   transition: background 0.2s ease;
+  cursor: pointer;
 }
 
 .browse-row {
@@ -2505,6 +2506,20 @@ button:disabled {
   font-size: 0.92rem;
   color: var(--muted);
   transition: opacity 0.2s ease;
+}
+
+#browse-cancel {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 123, 123, 0.35);
+  color: var(--danger);
+}
+
+#browse-cancel:hover {
+  background: rgba(255, 123, 123, 0.08);
+  border-color: var(--danger);
+  color: var(--danger);
+  transform: none;
 }
 
 @keyframes browseSpin {
@@ -2878,4 +2893,128 @@ button:disabled {
 
 .browse-table-scroll::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* Sorting controls */
+.browse-sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.browse-sort-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.browse-sort-controls select {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.browse-sort-controls select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.browse-sort-controls select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.browse-sort-controls select option {
+  background: var(--panel-elevated);
+  color: var(--text);
+}
+
+#browse-sort-direction {
+  padding: 6px 10px;
+  font-size: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  min-width: 36px;
+}
+
+#browse-sort-direction:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Table sortable headers */
+.browse-col-sortable {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+
+.browse-col-sortable:hover {
+  color: var(--text);
+  background: var(--panel-highlight);
+}
+
+.browse-col-sortable.is-sorted-asc,
+.browse-col-sortable.is-sorted-desc {
+  color: var(--accent);
+}
+
+.browse-col-sortable.is-sorted-asc::after {
+  content: " ↓";
+  margin-left: 2px;
+  color: var(--accent);
+  font-size: 0.8em;
+}
+
+.browse-col-sortable.is-sorted-desc::after {
+  content: " ↑";
+  margin-left: 2px;
+  color: var(--accent);
+  font-size: 0.8em;
+}
+
+/* Preview navigation */
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.preview-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.preview-header-actions .icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transform: none;
+}
+
+.preview-header-actions .icon-button.secondary {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+}
+
+.preview-header-actions .icon-button.secondary:hover:not(:disabled) {
+  background: var(--panel-highlight);
+  color: var(--text);
+}
+
+.preview-header-actions .icon-button.secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
