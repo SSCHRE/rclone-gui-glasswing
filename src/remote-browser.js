@@ -261,10 +261,17 @@ function cancelLoading() {
   entries = loadingPreviousEntries;
   selectedPath = loadingPreviousSelectedPath;
   
+  let selectedEntry = null;
   if (selectedPath) {
-    const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
-    selectedIsDir = entry?.isDir || false;
-    selectedSize = entry?.size || null;
+    selectedEntry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
+    if (selectedEntry) {
+      selectedIsDir = selectedEntry.isDir;
+      selectedSize = selectedEntry.size;
+    } else {
+      selectedPath = null;
+      selectedIsDir = false;
+      selectedSize = null;
+    }
   } else {
     selectedIsDir = false;
     selectedSize = null;
@@ -273,13 +280,8 @@ function cancelLoading() {
   setLoading(false);
   renderBreadcrumbs();
   
-  if (selectedPath) {
-    const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
-    if (entry) {
-      selectEntry(entry);
-    } else {
-      selectEntry(null);
-    }
+  if (selectedEntry) {
+    selectEntry(selectedEntry);
   } else {
     selectEntry(null);
   }
