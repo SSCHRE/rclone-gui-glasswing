@@ -1440,8 +1440,10 @@ button:disabled {
   transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease;
 }
 
-.popup-card:hover {
+.popup-card:hover:not(.popup-card-preview) {
   transform: translateY(-2px);
+  box-shadow: var(--shadow-soft), 0 20px 60px rgba(0, 0, 0, 0.28);
+.popup-card-preview:hover {
   box-shadow: var(--shadow-soft), 0 20px 60px rgba(0, 0, 0, 0.28);
 }
 
