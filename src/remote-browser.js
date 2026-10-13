@@ -53,6 +53,8 @@ let loadToken = 0;
 let loadingContext = "";
 let loadingCancelled = false;
 let loadingPreviousPath = "";
+let loadingPreviousEntries = [];
+let loadingPreviousSelectedPath = null;
 let scrollPosition = 0;
 let onUsePath = null;
 let onNotify = null;
@@ -256,10 +258,19 @@ function cancelLoading() {
   loadingCancelled = true;
   loadToken++;
   currentSubPath = loadingPreviousPath;
+  entries = loadingPreviousEntries;
+  selectedPath = loadingPreviousSelectedPath;
+  
+  if (selectedPath) {
+    const entry = entries.find(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === selectedPath);
+    selectedIsDir = entry?.isDir || false;
+    selectedSize = entry?.size || null;
+  } else {
+    selectedIsDir = false;
+    selectedSize = null;
+  }
+  
   setLoading(false);
-  selectedPath = null;
-  selectedIsDir = false;
-  selectedSize = null;
   renderBreadcrumbs();
   renderEntries();
   updateActionState();
@@ -560,6 +571,8 @@ function resetBrowseHistory(remote, subPath = "") {
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
   loadingPreviousPath = currentSubPath;
+  loadingPreviousEntries = [...entries];
+  loadingPreviousSelectedPath = selectedPath;
   const newSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
