@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, screen, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, screen, nativeImage, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
@@ -635,6 +635,27 @@ function stopActiveJob() {
 
 ipcMain.handle("get-app-version", async () => app.getVersion());
 
+function compareVersions(left, right) {
+  const leftParts = String(left).split(/[.-]/).map((part) => parseInt(part, 10) || 0);
+  const rightParts = String(right).split(/[.-]/).map((part) => parseInt(part, 10) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index++) {
+    const difference = (leftParts[index] || 0) - (rightParts[index] || 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+ipcMain.handle("open-release-page", async (_event, url) => {
+  if (typeof url === "string" && url.startsWith("https://github.com/SSCHRE/rclone-gui-glasswing/")) {
+    await shell.openExternal(url);
+  }
+});
+
 ipcMain.handle("check-for-updates", async () => {
   return new Promise((resolve, reject) => {
     const options = {
@@ -663,9 +684,8 @@ ipcMain.handle("check-for-updates", async () => {
             resolve({
               currentVersion,
               latestVersion,
-              hasUpdate: latestVersion !== currentVersion,
+              hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
               releaseUrl: release.html_url,
-              releaseNotes: release.body,
               publishedAt: release.published_at,
             });
           } catch (error) {
