@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const https = require("https");
 const { listSevenZEntriesFromRemote } = require("./7z-preview");
 
 if (process.platform === "win32") {
@@ -633,6 +634,56 @@ function stopActiveJob() {
 }
 
 ipcMain.handle("get-app-version", async () => app.getVersion());
+
+ipcMain.handle("check-for-updates", async () => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: "/repos/SSCHRE/rclone-gui-glasswing/releases/latest",
+      method: "GET",
+      headers: {
+        "User-Agent": "Glasswing-Rclone",
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      res.on("end", () => {
+        if (res.statusCode === 200) {
+          try {
+            const release = JSON.parse(data);
+            const latestVersion = release.tag_name.replace(/^v/, "");
+            const currentVersion = app.getVersion();
+            
+            resolve({
+              currentVersion,
+              latestVersion,
+              hasUpdate: latestVersion !== currentVersion,
+              releaseUrl: release.html_url,
+              releaseNotes: release.body,
+              publishedAt: release.published_at,
+            });
+          } catch (error) {
+            reject(new Error("Failed to parse GitHub release data"));
+          }
+        } else {
+          reject(new Error(`GitHub API returned status ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+
+    req.end();
+  });
+});
 
 ipcMain.handle("set-minimum-content-size", async () => {
   if (!mainWindow || mainWindow.isDestroyed()) {

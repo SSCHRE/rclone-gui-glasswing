@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("rcloneGui", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
   listRemotes: () => ipcRenderer.invoke("list-remotes"),
   listRemoteEntries: () => ipcRenderer.invoke("list-remote-entries"),

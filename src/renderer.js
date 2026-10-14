@@ -38,6 +38,7 @@ const elements = {
 
   refreshRemotes: document.getElementById("refresh-remotes"),
   manageRemotes: document.getElementById("manage-remotes"),
+  checkForUpdates: document.getElementById("check-for-updates"),
   modeJobs: document.getElementById("mode-jobs"),
   modeBrowse: document.getElementById("mode-browse"),
   jobsView: document.getElementById("jobs-view"),
@@ -592,6 +593,40 @@ async function syncMinimumWindowSize(forceSnap = false) {
 }
 
 
+
+async function checkForUpdates() {
+  try {
+    const result = await window.rcloneGui.checkForUpdates();
+    
+    if (result.hasUpdate) {
+      const updateText = 'Update available: v' + result.latestVersion + ' (current: v' + result.currentVersion + ')';
+      const releaseDate = new Date(result.publishedAt).toLocaleDateString();
+      const notesPreview = result.releaseNotes ? result.releaseNotes.substring(0, 300) + '...' : '';
+      showPopup({
+        title: "Update Available",
+        message: updateText + '\n\nPublished: ' + releaseDate + '\n\n' + notesPreview,
+        type: "success",
+        autoClose: false,
+      });
+      
+      if (result.releaseUrl) {
+        console.log("Release URL:", result.releaseUrl);
+      }
+    } else {
+      showSnackbar({
+        title: "Up to date",
+        message: 'You have the latest version (v' + result.currentVersion + ')',
+        type: "success",
+      });
+    }
+  } catch (error) {
+    showSnackbar({
+      title: "Update check failed",
+      message: error.message || "Could not check for updates",
+      type: "error",
+    });
+  }
+}
 function setAppMode(mode) {
   const nextMode = mode === "browse" ? "browse" : "jobs";
   const browsing = nextMode === "browse";
@@ -921,6 +956,10 @@ elements.stopJob.addEventListener("click", async () => {
     type: "running",
   });
   await window.rcloneGui.stopJob();
+});
+
+elements.checkForUpdates.addEventListener("click", () => {
+  void checkForUpdates();
 });
 
 
