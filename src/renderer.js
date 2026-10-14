@@ -742,8 +742,15 @@ async function init() {
 
     let rcloneVersion = "";
     elements.version.textContent = "Checking rclone…";
+    window.rcloneGui.getAppVersion().then((version) => {
+      elements.appVersion.textContent = `v${version}`;
+    });
+    const historyLoad = refreshJobHistory().catch(() => {});
+    const remotesLoad = window.rcloneGui.listRemotes().then(
+      (names) => ({ names }),
+      (error) => ({ error }),
+    );
     try {
-      elements.appVersion.textContent = `v${await window.rcloneGui.getAppVersion()}`;
       rcloneVersion = await checkRcloneVersion();
       elements.version.textContent = `${rcloneVersion} · loading remotes…`;
     } catch (error) {
@@ -753,7 +760,13 @@ async function init() {
       return;
     }
 
-    await Promise.all([loadRemotes({ showFeedback: false }), refreshJobHistory()]);
+    const [remotesResult] = await Promise.all([remotesLoad, historyLoad]);
+    if (remotesResult.error) {
+      await loadRemotes({ showFeedback: false });
+    } else {
+      remotes = remotesResult.names;
+      fillRemotePicker();
+    }
     window.RemoteBrowser?.setRemotes(remotes);
     elements.version.textContent = rcloneVersion;
     elements.operation.dispatchEvent(new Event("change"));

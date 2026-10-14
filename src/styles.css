@@ -2338,7 +2338,7 @@ button:disabled {
 .browse-row {
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease;
-  animation: browseRowFadeIn 0.2s var(--ease-out) both;
+  animation: browseRowFadeIn 0.14s var(--ease-out) both;
 }
 
 .browse-row:active {
@@ -2378,8 +2378,12 @@ button:disabled {
 }
 
 .browse-row[data-index] {
-  animation: browseRowFadeIn 0.2s var(--ease-out) both;
-  animation-delay: calc(var(--row-index) * 0.02s);
+  animation: browseRowFadeIn 0.14s var(--ease-out) both;
+  animation-delay: calc(var(--row-index) * 0.01s);
+}
+
+.browse-row.is-static[data-index] {
+  animation: none;
 }
 
 .browse-table td {
