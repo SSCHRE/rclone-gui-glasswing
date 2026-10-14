@@ -64,6 +64,95 @@ let sortBy = "name";
 let sortDirection = "asc";
 let previewableFiles = [];
 let currentPreviewIndex = -1;
+let statusHideTimer = null;
+
+const LISTING_CACHE_KEY = "glasswing.browseCache.v1";
+const LISTING_CACHE_MAX_FOLDERS = 150;
+const LISTING_CACHE_MAX_PERSISTED_ENTRIES = 5000;
+const listingCache = readPersistedListingCache();
+let listingCacheSaveTimer = null;
+
+function readPersistedListingCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LISTING_CACHE_KEY) || "[]");
+    return new Map(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Map();
+  }
+}
+
+function persistListingCache() {
+  listingCacheSaveTimer = null;
+  const persisted = [...listingCache].filter(
+    ([, cached]) => cached.entries.length <= LISTING_CACHE_MAX_PERSISTED_ENTRIES,
+  );
+
+  while (persisted.length) {
+    try {
+      localStorage.setItem(LISTING_CACHE_KEY, JSON.stringify(persisted));
+      return;
+    } catch {
+      persisted.splice(0, Math.ceil(persisted.length / 2));
+    }
+  }
+
+  try {
+    localStorage.removeItem(LISTING_CACHE_KEY);
+  } catch {}
+}
+
+function schedulePersistListingCache() {
+  if (listingCacheSaveTimer) {
+    clearTimeout(listingCacheSaveTimer);
+  }
+  listingCacheSaveTimer = setTimeout(persistListingCache, 750);
+}
+
+function getCachedListing(path) {
+  const cached = listingCache.get(path);
+  if (!cached) {
+    return null;
+  }
+  listingCache.delete(path);
+  listingCache.set(path, cached);
+  return cached.entries;
+}
+
+function setCachedListing(path, listing) {
+  listingCache.delete(path);
+  listingCache.set(path, { entries: listing, fetchedAt: Date.now() });
+  while (listingCache.size > LISTING_CACHE_MAX_FOLDERS) {
+    listingCache.delete(listingCache.keys().next().value);
+  }
+  schedulePersistListingCache();
+}
+
+function dropCachedListings(path) {
+  const prefix = path.endsWith(":") ? path : `${path}/`;
+  for (const key of [...listingCache.keys()]) {
+    if (key === path || key.startsWith(prefix)) {
+      listingCache.delete(key);
+    }
+  }
+  schedulePersistListingCache();
+}
+
+function sameListing(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((entry, index) => {
+    const other = right[index];
+    return entry.name === other.name &&
+      entry.isDir === other.isDir &&
+      entry.size === other.size &&
+      entry.modTime === other.modTime;
+  });
+}
+
+function itemCountLabel(list) {
+  return list.length ? `${list.length} item${list.length === 1 ? "" : "s"}` : "";
+}
 
 function notify(payload) {
   if (typeof onNotify === "function") {
@@ -265,11 +354,17 @@ function activePath() {
 }
 
 function setStatus(message = "", isError = false) {
+  if (statusHideTimer) {
+    clearTimeout(statusHideTimer);
+    statusHideTimer = null;
+  }
+
   if (!message) {
     remoteBrowser.status.textContent = "";
     remoteBrowser.status.classList.remove("visible");
     remoteBrowser.status.classList.remove("is-error");
-    setTimeout(() => {
+    statusHideTimer = setTimeout(() => {
+      statusHideTimer = null;
       remoteBrowser.status.classList.add("hidden");
     }, 300);
     return;
@@ -439,9 +534,10 @@ function selectEntry(entry) {
   updatePreviewNavigation();
 }
 
-function renderEntries() {
+function renderEntries({ animate = true } = {}) {
   const scrollContainer = remoteBrowser.entriesBody.parentElement;
-  const wasAtBottom = scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
+  const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+  const wasAtBottom= scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
   
   const sortedEntries = getSortedEntries();
   
@@ -464,9 +560,9 @@ function renderEntries() {
     const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
     row.dataset.path = entryPath;
     row.dataset.index = index;
-    row.style.setProperty("--row-index", index);
+    row.style.setProperty("--row-index", Math.min(index, 20));
     row.dataset.isdir = entry.isDir ? "1" : "0";
-    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}`;
+    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}${animate ? "" : " is-static"}${entryPath === selectedPath ? " is-selected" : ""}`;
     row.tabIndex = 0;
 
     const nameCell = document.createElement("td");
@@ -526,7 +622,9 @@ function renderEntries() {
 
   updateActionState();
 
-  if (scrollContainer && wasAtBottom) {
+  if (scrollContainer && !animate) {
+    scrollContainer.scrollTop = previousScrollTop;
+  } else if (scrollContainer && wasAtBottom) {
     requestAnimationFrame(() => {
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
     });
@@ -545,11 +643,12 @@ async function loadListingForPath(subPath, token) {
   
   try {
     const result = await window.rcloneGui.listRemotePath(path, { signal });
+    setCachedListing(path, result.entries || []);
     if (token !== loadToken) {
       return;
     }
     entries = result.entries || [];
-    setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
+    setStatus(itemCountLabel(entries));
   } catch (error) {
     if (token !== loadToken) {
       return;
@@ -568,6 +667,47 @@ async function loadListingForPath(subPath, token) {
   }
 }
 
+function showCachedListing(path, cached, token) {
+  entries = cached;
+  setLoading(false);
+  currentPreviewIndex = -1;
+  renderBreadcrumbs();
+  renderEntries();
+  updateActionState();
+  setStatus(itemCountLabel(entries) ? `${itemCountLabel(entries)} · updating…` : "Updating…");
+  void revalidateListing(path, token);
+}
+
+async function revalidateListing(path, token) {
+  try {
+    const result = await window.rcloneGui.listRemotePath(path);
+    const fresh = result.entries || [];
+    setCachedListing(path, fresh);
+    if (token !== loadToken) {
+      return;
+    }
+
+    if (!sameListing(entries, fresh)) {
+      entries = fresh;
+      if (selectedPath && !fresh.some((entry) => formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name)) === selectedPath)) {
+        selectedPath = null;
+        selectedIsDir = false;
+        selectedSize = null;
+      }
+      currentPreviewIndex = -1;
+      renderEntries({ animate: false });
+      updatePreviewNavigation();
+    }
+    setStatus(itemCountLabel(entries));
+  } catch (error) {
+    dropCachedListings(path);
+    if (token !== loadToken) {
+      return;
+    }
+    setStatus(error.message || "Failed to list remote path.", true);
+  }
+}
+
 async function loadListing(context = "") {
   if (!currentRemote || !window.rcloneGui?.listRemotePath) {
     entries = [];
@@ -583,7 +723,14 @@ async function loadListing(context = "") {
   selectedIsDir = false;
   selectedSize = null;
   setStatus("");
-  
+
+  const listingPath = currentPath();
+  const cached = context === "navigate" ? getCachedListing(listingPath) : null;
+  if (cached) {
+    showCachedListing(listingPath, cached, token);
+    return;
+  }
+
   let loadingMessage = "Loading folder…";
   if (context === "refresh") {
     loadingMessage = "Refreshing…";
@@ -601,12 +748,13 @@ async function loadListing(context = "") {
   const signal = loadingAbortController.signal;
 
   try {
-    const result = await window.rcloneGui.listRemotePath(currentPath(), { signal });
+    const result = await window.rcloneGui.listRemotePath(listingPath, { signal });
+    setCachedListing(listingPath, result.entries || []);
     if (token !== loadToken) {
       return;
     }
     entries = result.entries || [];
-    setStatus(entries.length ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : "");
+    setStatus(itemCountLabel(entries));
   } catch (error) {
     if (token !== loadToken) {
       return;
@@ -669,9 +817,23 @@ async function navigateTo(subPath, { recordHistory = true } = {}) {
     .replace(/^\/+|\/+$/g, "");
   
   const token = ++loadToken;
+  const targetPath = formatRemotePath(currentRemote, targetSubPath);
+  const cached = getCachedListing(targetPath);
+  if (cached) {
+    selectedPath = null;
+    selectedIsDir = false;
+    selectedSize = null;
+    currentSubPath = targetSubPath;
+    if (recordHistory) {
+      pushBrowseHistory(currentRemote, currentSubPath);
+    }
+    showCachedListing(targetPath, cached, token);
+    return;
+  }
+
   setLoading(true, "Loading…", "navigate");
   updateActionState();
-  
+
   try {
     await loadListingForPath(targetSubPath, token);
     
@@ -1522,10 +1684,12 @@ async function deleteSelectedFile() {
     updateActionState();
 
     try {
+      const deletedRemotePath = selectedPath;
       const result = await window.rcloneGui.deleteRemoteFile({
         remotePath: selectedPath,
         isDir: selectedIsDir,
       });
+      dropCachedListings(deletedRemotePath);
       // Format the deleted path with folder in bold
       const deletedParts = result.source.split(':');
       const deletedRemote = deletedParts[0];

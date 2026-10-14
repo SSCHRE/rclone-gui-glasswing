@@ -4,8 +4,6 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
-const https = require("https");
-const { listSevenZEntriesFromRemote } = require("./7z-preview");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -419,7 +417,8 @@ function createWindow() {
     useContentSize: true,
     center: true,
     show: false,
-    icon,
+    backgroundColor: "#080b10",
+icon,
     title: `Rclone GUI v${app.getVersion()}`,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -667,7 +666,7 @@ ipcMain.handle("check-for-updates", async () => {
       },
     };
 
-    const req = https.request(options, (res) => {
+    const req = require("https").request(options, (res) => {
       let data = "";
 
       res.on("data", (chunk) => {
@@ -1484,7 +1483,7 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
 
     const listed =
       meta.mode === "7z"
-        ? await listSevenZEntriesFromRemote(source, archiveSize, {
+        ? await require("./7z-preview").listSevenZEntriesFromRemote(source, archiveSize, {
             fetchRange: fetchRemoteByteRange,
             fetchTail: fetchRemoteTail,
           })
