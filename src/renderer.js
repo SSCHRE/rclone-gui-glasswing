@@ -50,6 +50,12 @@ const elements = {
   popupTitle: document.getElementById("popup-title"),
   popupMessage: document.getElementById("popup-message"),
   popupClose: document.getElementById("popup-close"),
+  updateDialog: document.getElementById("update-dialog"),
+  updateCurrent: document.getElementById("update-current"),
+  updateLatest: document.getElementById("update-latest"),
+  updateDate: document.getElementById("update-date"),
+  updateLater: document.getElementById("update-later"),
+  updateOpen: document.getElementById("update-open"),
   jobHistoryPicker: document.getElementById("job-history-picker"),
   loadJob: document.getElementById("load-job"),
   updateJob: document.getElementById("update-job"),
@@ -594,28 +600,39 @@ async function syncMinimumWindowSize(forceSnap = false) {
 
 
 
+let updateReleaseUrl = "";
+
+function hideUpdateDialog() {
+  elements.updateDialog.classList.add("hidden");
+  elements.updateDialog.setAttribute("aria-hidden", "true");
+}
+
+function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseUrl }) {
+  updateReleaseUrl = releaseUrl || "";
+  elements.updateCurrent.textContent = `v${currentVersion}`;
+  elements.updateLatest.textContent = `v${latestVersion}`;
+
+  const published = publishedAt ? new Date(publishedAt) : null;
+  elements.updateDate.textContent = published && !Number.isNaN(published.getTime())
+    ? `Released ${published.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`
+    : "";
+
+  elements.updateOpen.hidden = !updateReleaseUrl;
+  elements.updateDialog.classList.remove("hidden");
+  elements.updateDialog.setAttribute("aria-hidden", "false");
+  (updateReleaseUrl ? elements.updateOpen : elements.updateLater).focus();
+}
+
 async function checkForUpdates() {
   try {
     const result = await window.rcloneGui.checkForUpdates();
     
     if (result.hasUpdate) {
-      const updateText = 'Update available: v' + result.latestVersion + ' (current: v' + result.currentVersion + ')';
-      const releaseDate = new Date(result.publishedAt).toLocaleDateString();
-      const notesPreview = result.releaseNotes ? result.releaseNotes.substring(0, 300) + '...' : '';
-      showPopup({
-        title: "Update Available",
-        message: updateText + '\n\nPublished: ' + releaseDate + '\n\n' + notesPreview,
-        type: "success",
-        autoClose: false,
-      });
-      
-      if (result.releaseUrl) {
-        console.log("Release URL:", result.releaseUrl);
-      }
+      showUpdateDialog(result);
     } else {
       showSnackbar({
         title: "Up to date",
-        message: 'You have the latest version (v' + result.currentVersion + ')',
+        message: `You're on the latest version (v${result.currentVersion}).`,
         type: "success",
       });
     }
@@ -842,6 +859,14 @@ elements.manageRemotes?.addEventListener("click", () => {
   });
 });
 elements.popupClose.addEventListener("click", hidePopup);
+elements.updateLater.addEventListener("click", hideUpdateDialog);
+elements.updateDialog.querySelector("[data-update-close]").addEventListener("click", hideUpdateDialog);
+elements.updateOpen.addEventListener("click", () => {
+  if (updateReleaseUrl) {
+    void window.rcloneGui.openReleasePage(updateReleaseUrl);
+  }
+  hideUpdateDialog();
+});
 elements.popupRoot.querySelector("[data-popup-close]").addEventListener("click", hidePopup);
 
 elements.jobHistoryPicker.addEventListener("change", updateHistoryActions);
@@ -934,6 +959,11 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!elements.saveJobDialog.classList.contains("hidden")) {
       hideSaveJobDialog();
+      return;
+    }
+
+    if (!elements.updateDialog.classList.contains("hidden")) {
+      hideUpdateDialog();
       return;
     }
 
