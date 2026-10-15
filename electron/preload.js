@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("rcloneGui", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),
   downloadRemoteFile: (payload) => ipcRenderer.invoke("download-remote-file", payload),
+  pickUploadFiles: () => ipcRenderer.invoke("pick-upload-files"),
+  measureLocalPaths: (paths) => ipcRenderer.invoke("measure-local-paths", paths),
+  uploadToRemote: (payload) => ipcRenderer.invoke("upload-to-remote", payload),
+  cancelUpload: () => ipcRenderer.invoke("cancel-upload"),
+getPathForFile: (file) => webUtils.getPathForFile(file),
+  onUploadProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("upload-progress", listener);
+    return () => ipcRenderer.removeListener("upload-progress", listener);
+  },
     deleteRemoteFile: (payload) => ipcRenderer.invoke("delete-remote-file", payload),
     createRemoteFolder: (payload) => ipcRenderer.invoke("create-remote-folder", payload),
 openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-preview", remotePath, options),

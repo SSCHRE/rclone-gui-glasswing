@@ -458,13 +458,14 @@ icon,
   }
 }
 
-function runRclone(args, { interactive = false, timeoutMs = 0, binary = false } = {}) {
+function runRclone(args, { interactive = false, timeoutMs = 0, binary = false, onSpawn = null } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
       windowsHide: !interactive,
       shell: false,
       env: process.env,
     });
+    onSpawn?.(child);
 
     let stdout = binary ? null : "";
     const stdoutChunks = binary ? [] : null;
@@ -997,6 +998,283 @@ ipcMain.handle("pick-folder", async () => {
   return filePaths[0];
 });
 
+ipcMain.handle("pick-upload-files", async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: "Upload files",
+    properties: ["openFile", "multiSelections"],
+  });
+  return canceled ? [] : filePaths;
+});
+
+let activeUpload = null;
+
+function createJsonLogReader(onEntry) {
+  let buffer = "";
+  return (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("{")) {
+        continue;
+      }
+      try {
+        onEntry(JSON.parse(trimmed));
+      } catch {}
+    }
+  };
+}
+
+async function measureLocalPath(localPath) {
+  const name = path.basename(localPath);
+  try {
+    const stat = await fs.stat(localPath);
+    if (!stat.isDirectory()) {
+      return { path: localPath, name, isDir: false, size: stat.size };
+    }
+
+    const children = await fs.readdir(localPath, { recursive: true, withFileTypes: true });
+    const sizes = await Promise.all(
+      children
+        .filter((child) => child.isFile())
+        .map((child) =>
+          fs.stat(path.join(child.parentPath ?? child.path, child.name)).then(
+            (childStat) => childStat.size,
+            () => 0,
+          ),
+        ),
+    );
+    return { path: localPath, name, isDir: true, size: sizes.reduce((sum, size) => sum + size, 0) };
+  } catch {
+    return { path: localPath, name, isDir: false, size: 0 };
+  }
+}
+
+const CHUNK_FINISHED_PATTERN = /^multi-thread copy: chunk \d+\/\d+ \((\d+)-(\d+)\) size \S+ finished/;
+
+function createChunkTracker() {
+  const finishedBytes = new Map();
+
+  return {
+    handle(entry) {
+      const object = entry.object;
+      const message = String(entry.msg || "");
+      if (!object) {
+        return;
+      }
+      if (message.startsWith("Starting multi-thread copy")) {
+        finishedBytes.set(object, 0);
+        return;
+      }
+      const match = CHUNK_FINISHED_PATTERN.exec(message);
+      if (match) {
+        finishedBytes.set(object, (finishedBytes.get(object) || 0) + Number(match[2]) - Number(match[1]));
+      }
+    },
+    confirmed(stats) {
+      const transferring = stats.transferring || [];
+      const bytes = Number(stats.bytes) || 0;
+      let inProgress = 0;
+      let confirmedInProgress = 0;
+      for (const transfer of transferring) {
+        const transferBytes = Number(transfer.bytes) || 0;
+        inProgress += transferBytes;
+        confirmedInProgress += finishedBytes.has(transfer.name)
+          ? Math.min(finishedBytes.get(transfer.name), transferBytes)
+          : transferBytes;
+      }
+      return Math.max(0, bytes - inProgress + confirmedInProgress);
+    },
+  };
+}
+
+const DRIME_ROOT_UPLOAD_ERROR =
+  "Drime doesn't accept large files at the top level of a remote. Open or create a folder and upload into it instead.";
+
+function parseSizeSuffix(value) {
+  const match = /^\s*([\d.]+)\s*([bkmgtp])?i?b?\s*$/i.exec(String(value ?? ""));
+  if (!match) {
+    return null;
+  }
+  const units = { b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3, t: 1024 ** 4, p: 1024 ** 5 };
+  return Math.round(Number(match[1]) * units[(match[2] || "k").toLowerCase()]);
+}
+
+async function getRootUploadLimit(target) {
+  if (!target.endsWith(":")) {
+    return null;
+  }
+  try {
+    const result = await runRclone(["config", "dump"], { timeoutMs: 30000 });
+    if (result.code !== 0) {
+      return null;
+    }
+    const settings = parseConfigDump(result.stdout)[target.slice(0, -1)];
+    if (settings?.type !== "drime") {
+      return null;
+    }
+    return parseSizeSuffix(settings.upload_cutoff) ?? 5 * 1024 * 1024;
+  } catch {
+    return null;
+  }
+}
+
+function describeUploadError(message) {
+  return /parentId/i.test(message) ? DRIME_ROOT_UPLOAD_ERROR : message;
+}
+
+ipcMain.handle("measure-local-paths", async (_event, localPaths) => {
+  const paths = Array.isArray(localPaths)
+    ? localPaths.filter((localPath) => typeof localPath === "string" && localPath.trim())
+    : [];
+  return Promise.all(paths.map(measureLocalPath));
+});
+
+function joinRemoteChild(base, name) {
+  return base.endsWith(":") ? `${base}${name}` : `${base}/${name}`;
+}
+
+function stopActiveUpload() {
+  if (!activeUpload) {
+    return;
+  }
+  activeUpload.cancelled = true;
+  const child = activeUpload.child;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
+ipcMain.handle("upload-to-remote", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before uploading.");
+  }
+  if (activeUpload) {
+    throw new Error("An upload is already running.");
+  }
+
+  const target = normalizeRemoteBrowsePath(payload?.remotePath);
+  const localPaths = Array.isArray(payload?.localPaths)
+    ? payload.localPaths.filter((localPath) => typeof localPath === "string" && localPath.trim())
+    : [];
+  if (!localPaths.length) {
+    throw new Error("Choose at least one file to upload.");
+  }
+
+  const upload = { child: null, cancelled: false };
+  const total = localPaths.length;
+  const failed = [];
+  let uploaded = 0;
+  activeUpload = upload;
+  const rootUploadLimit = await getRootUploadLimit(target);
+
+  try {
+    for (const [index, localPath] of localPaths.entries()) {
+      if (upload.cancelled) {
+        break;
+      }
+
+      const name = path.basename(localPath);
+      let stat;
+      try {
+        stat = await fs.stat(localPath);
+      } catch (error) {
+        failed.push({ name, error: error.message || "File not found." });
+        continue;
+      }
+      const stagingDir = rootUploadLimit != null && !stat.isDirectory() && stat.size > rootUploadLimit
+        ? `${target}glasswing-upload-${randomUUID().slice(0, 8)}`
+        : null;
+      const destination = joinRemoteChild(target, name);
+      send("upload-progress", { index, bytes: 0, confirmed: 0, current: "" });
+
+      const errors = [];
+      const chunks = createChunkTracker();
+      const result = await runRclone(
+        [
+          stat.isDirectory() ? "copy" : "copyto",
+          localPath,
+          stagingDir ? joinRemoteChild(stagingDir, name) : destination,
+          "--stats",
+          "500ms",
+          "--stats-log-level",
+          "NOTICE",
+          "--log-level",
+          "DEBUG",
+          "--multi-thread-cutoff",
+          "16Mi",
+          "--retries",
+          "1",
+          "--use-json-log",
+        ],
+        {
+          timeoutMs: 0,
+          onSpawn: (child) => {
+            upload.child = child;
+            child.stderr.on("data", createJsonLogReader((entry) => {
+              if (entry.level === "error" && entry.msg) {
+                errors.push(String(entry.msg).trim());
+              }
+              if (entry.level === "debug") {
+                chunks.handle(entry);
+                return;
+              }
+              const stats = entry.stats;
+              if (stats) {
+                send("upload-progress", {
+                  index,
+                  bytes: Number(stats.bytes) || 0,
+                  confirmed: chunks.confirmed(stats),
+                  current: stats.transferring?.[0]?.name || "",
+                });
+              }
+            }));
+          },
+        },
+      );
+      upload.child = null;
+
+      let moveError = null;
+      if (stagingDir && result.code === 0 && !upload.cancelled) {
+        const moved = await runRclone(
+          ["moveto", joinRemoteChild(stagingDir, name), destination],
+          { timeoutMs: 0, onSpawn: (child) => { upload.child = child; } },
+        );
+        upload.child = null;
+        if (moved.code !== 0) {
+          moveError = moved.stderr.trim() || `Failed to move "${name}" into place.`;
+        }
+      }
+      if (stagingDir) {
+        await runRclone(["purge", stagingDir], { timeoutMs: 60000 }).catch(() => {});
+      }
+
+      if (upload.cancelled) {
+        break;
+      }
+      if (result.code !== 0 || moveError) {
+        failed.push({
+          name,
+          error: describeUploadError(moveError || errors[errors.length - 1] || `Failed to upload "${name}".`),
+        });
+        continue;
+      }
+      uploaded += 1;
+    }
+  } finally {
+    activeUpload = null;
+  }
+
+  return { uploaded, failed, total, cancelled: upload.cancelled, target };
+});
+
+ipcMain.handle("cancel-upload", async () => {
+  stopActiveUpload();
+});
+
 ipcMain.handle("pick-save-file", async (_event, defaultName) => {
   const suggested = String(defaultName || "download").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -1306,6 +1584,19 @@ async function listZipEntriesFromRemote(source, archiveSize) {
 }
 
 let previewServe = null;
+let previewFetchChild = null;
+const cancelledPreviewFetches = new WeakSet();
+
+function stopPreviewFetch() {
+  const child = previewFetchChild;
+  previewFetchChild = null;
+  if (child && !child.killed) {
+    cancelledPreviewFetches.add(child);
+    try {
+      child.kill();
+    } catch {}
+  }
+}
 
 function previewKindFromPath(remotePath) {
   const base = remotePath.split("/").pop() || remotePath;
@@ -1502,13 +1793,27 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
   }
 
   stopPreviewServe();
+  stopPreviewFetch();
 
   const tmpDir = path.join(app.getPath("temp"), "glasswing-preview", randomUUID());
   const localPath = path.join(tmpDir, sanitizePreviewFileName(source, path.extname(source)));
 
   try {
     await fs.mkdir(tmpDir, { recursive: true });
-    const result = await runRclone(["copyto", source, localPath], { timeoutMs: 0 });
+    let fetchChild = null;
+    const result = await runRclone(["copyto", source, localPath], {
+      timeoutMs: 0,
+      onSpawn: (child) => {
+        fetchChild = child;
+        previewFetchChild = child;
+      },
+    });
+    if (previewFetchChild === fetchChild) {
+      previewFetchChild = null;
+    }
+    if (fetchChild && cancelledPreviewFetches.has(fetchChild)) {
+      return { cancelled: true };
+    }
     if (result.code !== 0) {
       throw new Error(result.stderr || result.stdout || `Failed to fetch "${source}"`);
     }
@@ -1542,6 +1847,7 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
 
 ipcMain.handle("close-remote-preview", async () => {
   stopPreviewServe();
+  stopPreviewFetch();
 });
 
 ipcMain.handle("start-job", async (_event, job) => {
@@ -1741,4 +2047,6 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   stopActiveJob();
   stopPreviewServe();
+  stopPreviewFetch();
+  stopActiveUpload();
 });
