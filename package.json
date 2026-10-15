@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "com.rclone.gui.glasswing",
-    "productName": "Glasswing Rclone",
+    "productName": "Glasswing",
     "icon": "build/icon.ico",
     "electronLanguages": [
       "en-US"
@@ -53,7 +53,7 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Glasswing Rclone",
+      "shortcutName": "Glasswing",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",

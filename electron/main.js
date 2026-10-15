@@ -419,7 +419,7 @@ function createWindow() {
     show: false,
     backgroundColor: "#080b10",
 icon,
-    title: `Rclone GUI v${app.getVersion()}`,
+    title: "Glasswing",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
