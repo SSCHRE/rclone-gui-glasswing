@@ -1,29 +1,44 @@
-# Glasswing (`rclone-gui-glasswing`)
+# Glasswing
 
-A desktop Rclone GUI for **copy**, **sync**, and **move** jobs — with a live progress dashboard, dry-run support, and a clean glass-style UI. Built with Electron; wraps the `rclone` CLI you already have configured.
+A desktop GUI for [rclone](https://rclone.org/). Run rclone jobs with a live progress dashboard, browse and preview, upload and download files and manage remotes, all in one place. Built with Electron; it wraps the `rclone` CLI you already have installed.
 
-> Windows portable builds are supported today. macOS and Linux builds are planned.
+
+## Download
+
+Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (portable) from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases).
 
 ## Features
 
-- **Copy / sync / move** — run common rclone operations from a simple form
-- **Remote picker** — load configured remotes and insert them into source or destination
-- **Dry run** — preview changes without writing anything
-- **Delete excluded** — optional `--delete-excluded` flag for sync jobs
-- **Live progress dashboard** — percent complete, ETA, speed, transferred bytes, checks, and errors
-- **Activity feed** — recent file events parsed from rclone output
-- **Raw log toggle** — switch to verbose output when you need the details
-- **Stop job** — cancel a running transfer
-- **Refresh remotes** — reload your rclone config with clear success/error feedback
-- **Save jobs** - Save a job for quick re-use later on
-- **Browse remotes** — open a remote in the Browse tab, navigate folders, copy paths, or send them to a job as source/destination
+### Jobs
+- **Copy / sync / move**: run the common rclone operations from a simple form
+- **Live progress dashboard**: percent complete, ETA, speed, transferred bytes, checks and errors
+- **Activity feed**: recent file events parsed from rclone output, with a **raw log** toggle for full verbose output
+- **Dry run**: preview changes without writing anything
+- **Delete excluded**: optional `--delete-excluded` for sync jobs
+- **Extra rclone flags**: append your own arguments (e.g. `--transfers 8 --filter "- *.tmp"`)
+- **Saved jobs**: save, load, update and remove jobs for quick re-use
+- **Stop job**: cancel a running transfer
+
+### Browse
+- **Remote browser**: navigate folders on any remote, sort by column, reload or cancel slow listings
+- **Previews**: images (`.jpg`, `.png`), text, PDF, streamed audio/video (`.mp3`, `.mp4`) and archive contents (`.zip`, `.7z`), with previous/next navigation
+- **Upload**: pick files or drag them onto the list, with progress, cancel, and a confirmation before replacing existing files
+- **Download, new folder and delete** directly on the remote
+- **Use as source / destination**: send the current path straight to the job form
+- **Listing cache**: recently visited folders open instantly
+
+### Remotes
+- **Remote manager**: add remotes (including browser sign-in for OAuth providers), reconnect expired tokens, view a redacted config, and delete remotes
+- **Quick insert remote**: drop `remote:path` into source or destination
+- **Refresh remotes**: reload your rclone config with clear success/error feedback
+- **rclone config wizard**: open the classic interactive `rclone config` in a terminal
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
 ## Prerequisites
 
 1. **[rclone](https://rclone.org/install/)** installed and available on your `PATH`
-2. At least one remote configured (`rclone config`) — or local paths only
+2. At least one remote configured (`rclone config` or the in-app remote manager), or local paths only
 3. For development: **[Node.js](https://nodejs.org/)** 18+ and npm
 
 Verify rclone works in a terminal:
@@ -42,32 +57,18 @@ npm install
 npm start
 ```
 
-### npm 11+ / Electron postinstall
+## Build (Windows)
 
-If `npm install` blocks Electron’s postinstall script, approve it once:
+| Command | Output in `dist/` |
+|---------|-------------------|
+| `npm run build` | Portable `.exe` **and** NSIS installer |
+| `npm run build:portable` | Portable `.exe` only |
+| `npm run build:installer` | NSIS installer only |
+| `npm run build:dir` | Unpacked app (`dist/win-unpacked`) for quick testing |
 
-```bash
-npm approve-scripts electron
-npm install
-```
+Icons are regenerated automatically before `npm run build` (`npm run icons`).
 
-## Build (Windows portable)
-
-```bash
-npm run build
-```
-
-The portable executable is written to `dist/`.
-
-## Usage
-
-1. Launch the app (`npm start` or the built executable).
-2. Choose an **operation** — copy, sync, or move.
-3. Set **source** and **destination** — local paths (`C:\folder`, `/home/user/folder`) or remotes (`myremote:path`).
-4. Optionally use **Quick insert remote**, or switch to **Browse** to navigate a remote and send a path to source/destination.
-5. Enable **Dry run** to test first; for sync, **Delete excluded** maps to rclone’s `--delete-excluded`.
-6. Click **Run job** and watch the progress panel.
-7. Use **Stop** to cancel, or **Show raw log** for full verbose output.
+CI builds the portable app and installer on every push to `main`; download them from the workflow run’s artifacts.
 
 ### Path examples
 
@@ -77,15 +78,17 @@ The portable executable is written to `dist/`.
 | Remote | `gdrive:Photos/2024` |
 | Remote + path | Pick `gdrive` + `Photos/2024` via quick insert |
 
-Path **Browse** buttons open a folder picker for local directories only. Use the **Browse** tab to explore remote contents, or type/insert remote paths as `remote:path`.
+The **Browse** buttons next to source/destination open a folder picker for local directories only. Use the **Browse** tab to explore remote contents.
 
 ## How it works
 
-Glasswing spawns `rclone` as a child process with:
+Glasswing spawns `rclone` as a child process. Jobs run with:
 
 - `--stats 1s --stats-one-line --stats-one-line-date --verbose`
 
-Job output is parsed into the dashboard (progress bar, stat cards, activity feed). Your rclone config is read the same way the CLI does — typically:
+Job output is parsed into the dashboard. Audio and video previews are streamed through a temporary `rclone serve http` bound to `127.0.0.1`.
+
+Your rclone config is read the same way the CLI does, typically:
 
 | OS | Config location |
 |----|-----------------|
@@ -93,40 +96,24 @@ Job output is parsed into the dashboard (progress bar, stat cards, activity feed
 | macOS | `~/.config/rclone/rclone.conf` |
 | Linux | `~/.config/rclone/rclone.conf` |
 
+Saved jobs are stored in `job-history.json` in the app’s data folder (`%APPDATA%\rclone-glasswing-gui` on Windows).
+
 Never commit `rclone.conf` or copy it into this repository or any forked repositories; it may contain OAuth tokens and storage keys.
 
 ## Roadmap
-- [x] Job history
+- [x] Saved jobs
 - [x] Custom rclone arguments
 - [x] Remote management UI
 - [x] Browse remotes
+- [x] File previews
+- [x] Upload to remotes
+- [x] Update check
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
 
-
-# Screenshots
+## Screenshots
 ![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
 ![App Screenshot2](https://i.ibb.co/gbSwX4RH/electron-lt-Ori2-HGPQ.png)
-
-# Troubleshooting
-
-**“Checking rclone…” never resolves**
-
-- Ensure `rclone` is on your `PATH` in the same environment the app runs from.
-- Run `rclone version` in a terminal to confirm.
-
-**No remotes in the picker**
-
-- Configure remotes with `rclone config`, then click **Refresh remotes**.
-
-**Job fails immediately**
-
-- Check source/destination syntax (`remote:path` with no leading slash on the remote name).
-- Try the same paths with `rclone copy source dest --dry-run -v` in a terminal.
-
-**npm install issues on Windows**
-
-- Use `npm approve-scripts electron` if postinstall is blocked (npm 11+).
 
 ## License
 
@@ -134,5 +121,5 @@ MIT
 
 ## Acknowledgements
 
-- [rclone](https://rclone.org/) — the engine behind the transfers
-- [Electron](https://www.electronjs.org/) — desktop shell
+- [rclone](https://rclone.org/): the engine behind the transfers
+- [Electron](https://www.electronjs.org/): desktop shell
