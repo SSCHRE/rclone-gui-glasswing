@@ -14,6 +14,19 @@ const remoteBrowser = {
   previewBtn: document.getElementById("browse-preview"),
   downloadBtn: document.getElementById("browse-download"),
   newFolderBtn: document.getElementById("browse-new-folder"),
+  uploadBtn: document.getElementById("browse-upload"),
+  tableWrap: document.querySelector("#browse-view .browse-table-wrap"),
+  replaceDialog: document.getElementById("upload-replace-dialog"),
+  replaceMessage: document.getElementById("upload-replace-message"),
+  replaceCancelBtn: document.getElementById("upload-replace-cancel"),
+  replaceConfirmBtn: document.getElementById("upload-replace-confirm"),
+  uploadPanel: document.getElementById("upload-panel"),
+  uploadPanelTitle: document.getElementById("upload-panel-title"),
+  uploadPanelPercent: document.getElementById("upload-panel-percent"),
+  uploadPanelFile: document.getElementById("upload-panel-file"),
+  uploadPanelBar: document.getElementById("upload-panel-bar"),
+  uploadPanelMeta: document.getElementById("upload-panel-meta"),
+  uploadPanelAction: document.getElementById("upload-panel-action"),
   useSourceBtn: document.getElementById("browse-use-source"),
   useDestBtn: document.getElementById("browse-use-dest"),
   deleteBtn: document.getElementById("browse-delete"),
@@ -65,6 +78,28 @@ let sortDirection = "asc";
 let previewableFiles = [];
 let currentPreviewIndex = -1;
 let statusHideTimer = null;
+let previewToken = 0;
+let activePreviewToken = 0;
+
+function beginPreview() {
+  activePreviewToken = ++previewToken;
+  return activePreviewToken;
+}
+
+function isPreviewCurrent(token) {
+  return activePreviewToken === token;
+}
+
+function abandonPreview() {
+  activePreviewToken = 0;
+  void window.rcloneGui?.closeRemotePreview?.();
+}
+
+function releaseStalePreview() {
+  if (activePreviewToken === 0) {
+    void window.rcloneGui?.closeRemotePreview?.();
+  }
+}
 
 const LISTING_CACHE_KEY = "glasswing.browseCache.v1";
 const LISTING_CACHE_MAX_FOLDERS = 150;
@@ -383,7 +418,11 @@ function cancelLoading() {
     loadingAbortController.abort();
     loadingAbortController = null;
   }
-  
+
+  if (loadingContext === "preview") {
+    abandonPreview();
+  }
+
   if (loadingContext === "navigate") {
     if (browseHistoryIndex >= 0) {
       const current = browseHistory[browseHistoryIndex];
@@ -448,6 +487,9 @@ function updateActionState() {
   }
   if (remoteBrowser.newFolderBtn) {
     remoteBrowser.newFolderBtn.disabled = !currentRemote || loading || !window.rcloneGui?.createRemoteFolder;
+  }
+  if (remoteBrowser.uploadBtn) {
+    remoteBrowser.uploadBtn.disabled = !canUpload();
   }
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
   remoteBrowser.useDestBtn.disabled = !hasPath || loading;
@@ -1020,6 +1062,7 @@ function clearPreviewContent() {
 }
 
 function closePreview() {
+  activePreviewToken = 0;
   clearPreviewContent();
   void window.rcloneGui?.closeRemotePreview?.();
   if (!previewUi.dialog) {
@@ -1465,14 +1508,22 @@ async function previewSelectedFile() {
       streamUrl: null,
       statusText: "Connecting stream…",
     });
+    const token = beginPreview();
     updateActionState();
     try {
       const payload = await window.rcloneGui.openRemotePreview(remotePath);
+      if (!isPreviewCurrent(token)) {
+        releaseStalePreview();
+        return;
+      }
       if (previewUi.subtitle) {
         previewUi.subtitle.textContent = selectedPath || "";
       }
       bindStreamMedia(kind, payload.streamUrl, payload.mime);
     } catch (error) {
+      if (!isPreviewCurrent(token)) {
+        return;
+      }
       closePreview();
       notify({
         title: "Preview failed",
@@ -1492,14 +1543,21 @@ async function previewSelectedFile() {
       pending: true,
       statusText: ext === ".7z" ? "Reading 7z index…" : "Reading zip index…",
     });
+    const token = beginPreview();
     updateActionState();
     try {
       const payload = await window.rcloneGui.openRemotePreview(remotePath, { size: fileSize });
+      if (!isPreviewCurrent(token)) {
+        return;
+      }
       if (previewUi.subtitle) {
         previewUi.subtitle.textContent = selectedPath || "";
       }
       openPreviewDialog(payload);
     } catch (error) {
+      if (!isPreviewCurrent(token)) {
+        return;
+      }
       closePreview();
       notify({
         title: "Preview failed",
@@ -1512,13 +1570,21 @@ async function previewSelectedFile() {
     return;
   }
 
-  setLoading(true, "Preparing preview…");
+  const token = beginPreview();
+  setLoading(true, "Preparing preview…", "preview");
   updateActionState();
 
   try {
     const payload = await window.rcloneGui.openRemotePreview(remotePath, { size: fileSize });
+    if (!isPreviewCurrent(token) || payload?.cancelled) {
+      return;
+    }
     openPreviewDialog(payload);
   } catch (error) {
+    if (!isPreviewCurrent(token)) {
+      return;
+    }
+    activePreviewToken = 0;
     void window.rcloneGui?.closeRemotePreview?.();
     notify({
       title: "Preview failed",
@@ -1526,7 +1592,9 @@ async function previewSelectedFile() {
       type: "error",
     });
   } finally {
-    setLoading(false);
+    if (loadingContext === "preview" && (isPreviewCurrent(token) || activePreviewToken === 0)) {
+      setLoading(false);
+    }
     updateActionState();
   }
 }
@@ -1586,6 +1654,481 @@ async function downloadSelectedFile() {
   }
 }
 
+
+function canUpload() {
+  return Boolean(currentRemote) && !loading && Boolean(window.rcloneGui?.uploadToRemote);
+}
+
+function localBaseName(localPath) {
+  return String(localPath).split(/[\\/]/).filter(Boolean).pop() || String(localPath);
+}
+
+const uploadQueue = [];
+const uploadState = {
+  running: false,
+  cancelling: false,
+  totalItems: 0,
+  totalBytes: 0,
+  processedItems: 0,
+  processedBytes: 0,
+  uploaded: 0,
+  failed: [],
+  batch: null,
+  itemIndex: 0,
+  itemConfirmed: 0,
+  itemUpper: 0,
+  itemDisplayed: 0,
+  confirmedAt: 0,
+  rateSamples: [],
+  rate: 0,
+  displayedBytes: 0,
+  currentFile: "",
+  ticker: null,
+  hideTimer: null,
+};
+
+function itemsLabel(count) {
+  return `${count} item${count === 1 ? "" : "s"}`;
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(seconds));
+  if (total < 60) {
+    return `${total}s`;
+  }
+  if (total < 3600) {
+    return `${Math.floor(total / 60)}m ${total % 60}s`;
+  }
+  return `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`;
+}
+
+function showUploadPanel(state) {
+  const panel = remoteBrowser.uploadPanel;
+  if (!panel) {
+    return;
+  }
+  if (uploadState.hideTimer) {
+    clearTimeout(uploadState.hideTimer);
+    uploadState.hideTimer = null;
+  }
+  panel.classList.remove("hidden", "is-success", "is-error");
+  if (state) {
+    panel.classList.add(state);
+  }
+}
+
+function hideUploadPanel() {
+  if (uploadState.hideTimer) {
+    clearTimeout(uploadState.hideTimer);
+    uploadState.hideTimer = null;
+  }
+  remoteBrowser.uploadPanel?.classList.add("hidden");
+}
+
+function uploadFraction() {
+  if (uploadState.totalBytes > 0) {
+    return Math.min(1, uploadState.displayedBytes / uploadState.totalBytes);
+  }
+  return uploadState.totalItems ? uploadState.processedItems / uploadState.totalItems : 0;
+}
+
+function renderUploadProgress() {
+  const { batch, itemIndex, totalItems, totalBytes, displayedBytes, rate } = uploadState;
+  const item = batch?.items[itemIndex];
+  const fraction = uploadFraction();
+  const position = Math.min(uploadState.processedItems + itemIndex + 1, totalItems);
+
+  showUploadPanel();
+  remoteBrowser.uploadPanelTitle.textContent = uploadState.cancelling
+    ? "Cancelling…"
+    : totalItems > 1
+      ? `Uploading ${position} of ${totalItems}`
+      : "Uploading";
+  remoteBrowser.uploadPanelPercent.textContent = `${Math.floor(fraction * 100)}%`;
+
+  const fileLabel = item
+    ? item.isDir && uploadState.currentFile
+      ? `${item.name}/${uploadState.currentFile}`
+      : item.name
+    : "";
+  remoteBrowser.uploadPanelFile.textContent = fileLabel;
+  remoteBrowser.uploadPanelFile.title = fileLabel;
+  remoteBrowser.uploadPanelBar.style.width = `${fraction * 100}%`;
+
+  let meta = "Starting…";
+  if (totalBytes > 0) {
+    const amount = `${formatBytes(displayedBytes)} of ${formatBytes(totalBytes)}`;
+    if (item && item.size > 0 && uploadState.itemUpper >= item.size && uploadState.itemDisplayed >= item.size - 1) {
+      meta = `${amount} · Finishing up…`;
+    } else if (rate > 0) {
+      meta = `${amount} · ${formatBytes(rate)}/s · ${formatDuration((totalBytes - displayedBytes) / rate)} left`;
+    } else {
+      meta = amount;
+    }
+  }
+  remoteBrowser.uploadPanelMeta.textContent = meta;
+  remoteBrowser.uploadPanelAction.textContent = "Cancel";
+  remoteBrowser.uploadPanelAction.disabled = uploadState.cancelling;
+}
+
+function renderUploadResult({ cancelled }) {
+  const { uploaded, totalItems, failed } = uploadState;
+  const failedCount = failed.length;
+  const state = cancelled || failedCount ? "is-error" : "is-success";
+
+  showUploadPanel(state);
+  if (cancelled) {
+    remoteBrowser.uploadPanelTitle.textContent = "Upload cancelled";
+  } else if (failedCount) {
+    remoteBrowser.uploadPanelTitle.textContent = failedCount === totalItems ? "Upload failed" : "Upload finished with errors";
+  } else {
+    remoteBrowser.uploadPanelTitle.textContent = "Upload complete";
+  }
+  remoteBrowser.uploadPanelPercent.textContent = "";
+  remoteBrowser.uploadPanelFile.textContent = failedCount
+    ? `${failed[0].name}: ${failed[0].error}`
+    : `${itemsLabel(uploaded)} uploaded`;
+  remoteBrowser.uploadPanelFile.title = failedCount
+    ? failed.map((item) => `${item.name}: ${item.error}`).join("\n")
+    : "";
+  remoteBrowser.uploadPanelBar.style.width = cancelled || failedCount ? `${uploadFraction() * 100}%` : "100%";
+  remoteBrowser.uploadPanelMeta.textContent = cancelled || failedCount
+    ? `${uploaded} of ${totalItems} uploaded${failedCount ? ` · ${failedCount} failed` : ""}`
+    : formatBytes(uploadState.totalBytes);
+  remoteBrowser.uploadPanelAction.textContent = "Dismiss";
+  remoteBrowser.uploadPanelAction.disabled = false;
+
+  if (state === "is-success") {
+    uploadState.hideTimer = setTimeout(hideUploadPanel, 4000);
+  }
+}
+
+function refreshAfterUpload(targetPath) {
+  if (currentPath() === targetPath && !loading) {
+    void revalidateListing(targetPath, loadToken);
+  } else {
+    dropCachedListings(targetPath);
+  }
+}
+
+function resetUploadItem() {
+  Object.assign(uploadState, {
+    itemConfirmed: 0,
+    itemUpper: 0,
+    itemDisplayed: 0,
+    confirmedAt: performance.now(),
+    currentFile: "",
+  });
+}
+
+function recordUploadRate(confirmedTotal) {
+  const now = performance.now();
+  const samples = uploadState.rateSamples;
+  samples.push({ time: now, bytes: confirmedTotal });
+  while (samples.length > 2 && now - samples[1].time > 10000) {
+    samples.shift();
+  }
+  const first = samples[0];
+  const elapsed = (now - first.time) / 1000;
+  if (elapsed >= 1) {
+    uploadState.rate = Math.max(0, (confirmedTotal - first.bytes) / elapsed);
+  }
+}
+
+function advanceUploadDisplay() {
+  const batch = uploadState.batch;
+  if (!batch) {
+    return;
+  }
+  const item = batch.items[uploadState.itemIndex];
+  const size = item?.size || 0;
+  const projected = uploadState.itemConfirmed + uploadState.rate * ((performance.now() - uploadState.confirmedAt) / 1000);
+  const limit = size > 0 ? Math.min(uploadState.itemUpper, size - 1) : uploadState.itemUpper;
+  uploadState.itemDisplayed = Math.max(
+    uploadState.itemDisplayed,
+    uploadState.itemConfirmed,
+    Math.min(projected, limit),
+  );
+
+  const overall = uploadState.processedBytes + (batch.offsets[uploadState.itemIndex] || 0) + uploadState.itemDisplayed;
+  uploadState.displayedBytes = Math.max(uploadState.displayedBytes, Math.min(overall, uploadState.totalBytes));
+}
+
+function handleUploadProgress(progress) {
+  const batch = uploadState.batch;
+  if (!batch || typeof progress?.index !== "number") {
+    return;
+  }
+
+  if (progress.index !== uploadState.itemIndex) {
+    uploadState.itemIndex = progress.index;
+    resetUploadItem();
+  }
+
+  const item = batch.items[progress.index];
+  const size = item?.size || 0;
+  const cap = (value) => (size > 0 ? Math.min(value, size) : value);
+
+  if (typeof progress.bytes === "number") {
+    uploadState.itemUpper = Math.max(uploadState.itemUpper, cap(progress.bytes));
+  }
+  const confirmed = cap(typeof progress.confirmed === "number" ? progress.confirmed : progress.bytes || 0);
+  if (confirmed > uploadState.itemConfirmed) {
+    uploadState.itemConfirmed = confirmed;
+    uploadState.confirmedAt = performance.now();
+  }
+  if (typeof progress.current === "string" && progress.current) {
+    uploadState.currentFile = progress.current;
+  }
+
+  recordUploadRate(uploadState.processedBytes + (batch.offsets[progress.index] || 0) + uploadState.itemConfirmed);
+  advanceUploadDisplay();
+  renderUploadProgress();
+}
+
+function resetUploadState() {
+  Object.assign(uploadState, {
+    totalItems: 0,
+    totalBytes: 0,
+    processedItems: 0,
+    processedBytes: 0,
+    uploaded: 0,
+    failed: [],
+    batch: null,
+    itemIndex: 0,
+    itemConfirmed: 0,
+    itemUpper: 0,
+    itemDisplayed: 0,
+    confirmedAt: 0,
+    rateSamples: [],
+    rate: 0,
+    displayedBytes: 0,
+    currentFile: "",
+  });
+}
+
+async function runUploadQueue() {
+  uploadState.running = true;
+  uploadState.cancelling = false;
+
+  const stopProgress = window.rcloneGui.onUploadProgress?.(handleUploadProgress);
+  uploadState.ticker = setInterval(() => {
+    if (uploadState.batch && !uploadState.cancelling) {
+      advanceUploadDisplay();
+      renderUploadProgress();
+    }
+  }, 250);
+
+  let cancelled = false;
+  try {
+    while (uploadQueue.length && !uploadState.cancelling) {
+      const batch = uploadQueue.shift();
+      Object.assign(uploadState, { batch, itemIndex: 0, rateSamples: [], rate: 0 });
+      resetUploadItem();
+      renderUploadProgress();
+
+      try {
+        const result = await window.rcloneGui.uploadToRemote({
+          remotePath: batch.targetPath,
+          localPaths: batch.items.map((item) => item.path),
+        });
+        uploadState.uploaded += result.uploaded;
+        uploadState.failed.push(...(result.failed || []));
+        if (result.cancelled) {
+          cancelled = true;
+        }
+      } catch (error) {
+        uploadState.failed.push(
+          ...batch.items.map((item) => ({
+            name: item.name,
+            error: error.message || "Upload failed.",
+          })),
+        );
+      } finally {
+        uploadState.processedItems += batch.items.length;
+        uploadState.processedBytes += batch.totalBytes;
+        if (!cancelled && !uploadState.cancelling) {
+          uploadState.displayedBytes = Math.max(uploadState.displayedBytes, uploadState.processedBytes);
+        }
+        refreshAfterUpload(batch.targetPath);
+      }
+    }
+  } finally {
+    stopProgress?.();
+    clearInterval(uploadState.ticker);
+    uploadState.ticker = null;
+    cancelled = cancelled || uploadState.cancelling;
+    uploadQueue.length = 0;
+    uploadState.running = false;
+    uploadState.cancelling = false;
+    renderUploadResult({ cancelled });
+    resetUploadState();
+  }
+}
+
+function handleUploadPanelAction() {
+  if (uploadState.running) {
+    uploadState.cancelling = true;
+    renderUploadProgress();
+    void window.rcloneGui?.cancelUpload?.();
+    return;
+  }
+  hideUploadPanel();
+}
+
+function confirmReplace(names) {
+  const { replaceDialog, replaceMessage, replaceCancelBtn, replaceConfirmBtn } = remoteBrowser;
+  if (!replaceDialog) {
+    return Promise.resolve(true);
+  }
+
+  if (names.length === 1) {
+    replaceMessage.textContent = `"${names[0]}" already exists in this folder. Replace it?`;
+  } else {
+    const listed = names.slice(0, 3).map((name) => `"${name}"`).join(", ");
+    const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
+    replaceMessage.textContent = `${names.length} items already exist in this folder: ${listed}${more}. Replace them?`;
+  }
+
+  replaceDialog.classList.remove("hidden");
+  replaceDialog.setAttribute("aria-hidden", "false");
+  replaceConfirmBtn.focus();
+
+  return new Promise((resolve) => {
+    const backdrop = replaceDialog.querySelector("[data-upload-replace-close]");
+    const finish = (confirmed) => {
+      replaceDialog.classList.add("hidden");
+      replaceDialog.setAttribute("aria-hidden", "true");
+      replaceConfirmBtn.removeEventListener("click", onConfirm);
+      replaceCancelBtn.removeEventListener("click", onCancel);
+      backdrop?.removeEventListener("click", onCancel);
+      document.removeEventListener("keydown", onKeydown, true);
+      resolve(confirmed);
+    };
+    const onConfirm = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        finish(false);
+      }
+    };
+
+    replaceConfirmBtn.addEventListener("click", onConfirm);
+    replaceCancelBtn.addEventListener("click", onCancel);
+    backdrop?.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKeydown, true);
+  });
+}
+
+async function uploadToCurrentFolder(localPaths) {
+  const paths = (localPaths || []).filter(Boolean);
+  if (!paths.length || !canUpload()) {
+    return;
+  }
+
+  const targetPath = currentPath();
+  const existing = new Set(entries.map((entry) => entry.name));
+  const conflicts = paths.map(localBaseName).filter((name) => existing.has(name));
+  if (conflicts.length && !(await confirmReplace(conflicts))) {
+    return;
+  }
+  if (!canUpload() || currentPath() !== targetPath || uploadState.cancelling) {
+    return;
+  }
+
+  const measured = window.rcloneGui.measureLocalPaths
+    ? await window.rcloneGui.measureLocalPaths(paths).catch(() => null)
+    : null;
+  const items = paths.map((localPath, index) => ({
+    path: localPath,
+    name: localBaseName(localPath),
+    isDir: Boolean(measured?.[index]?.isDir),
+    size: Number(measured?.[index]?.size) || 0,
+  }));
+  const offsets = [];
+  let totalBytes = 0;
+  for (const item of items) {
+    offsets.push(totalBytes);
+    totalBytes += item.size;
+  }
+
+  if (!uploadState.running) {
+    resetUploadState();
+  }
+  uploadQueue.push({ targetPath, items, offsets, totalBytes });
+  uploadState.totalItems += items.length;
+  uploadState.totalBytes += totalBytes;
+  if (uploadState.running) {
+    renderUploadProgress();
+  } else {
+    void runUploadQueue();
+  }
+}
+
+function bindUploadDrop() {
+  const dropZone = remoteBrowser.tableWrap;
+  if (!dropZone) {
+    return;
+  }
+
+  const hasFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  let dragDepth = 0;
+
+  document.addEventListener("dragover", (event) => {
+    if (hasFiles(event)) {
+      event.preventDefault();
+    }
+  });
+  document.addEventListener("drop", (event) => {
+    if (hasFiles(event)) {
+      event.preventDefault();
+    }
+  });
+
+  dropZone.addEventListener("dragenter", (event) => {
+    if (!hasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepth += 1;
+    dropZone.classList.toggle("is-drop-target", canUpload());
+  });
+
+  dropZone.addEventListener("dragover", (event) => {
+    if (!hasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = canUpload() ? "copy" : "none";
+  });
+
+  dropZone.addEventListener("dragleave", (event) => {
+    if (!hasFiles(event)) {
+      return;
+    }
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) {
+      dropZone.classList.remove("is-drop-target");
+    }
+  });
+
+  dropZone.addEventListener("drop", (event) => {
+    if (!hasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepth = 0;
+    dropZone.classList.remove("is-drop-target");
+    if (!canUpload() || !window.rcloneGui?.getPathForFile) {
+      return;
+    }
+    const paths = Array.from(event.dataTransfer.files || [])
+      .map((file) => window.rcloneGui.getPathForFile(file))
+      .filter(Boolean);
+    void uploadToCurrentFolder(paths);
+  });
+}
 
 async function deleteSelectedFile() {
   if (!selectedPath || loading) {
@@ -1851,6 +2394,17 @@ function bindEvents() {
       }
     });
   }
+
+  remoteBrowser.uploadBtn?.addEventListener("click", async () => {
+    if (!canUpload() || !window.rcloneGui?.pickUploadFiles) {
+      return;
+    }
+    const paths = await window.rcloneGui.pickUploadFiles();
+    await uploadToCurrentFolder(paths);
+  });
+
+  bindUploadDrop();
+  remoteBrowser.uploadPanelAction?.addEventListener("click", handleUploadPanelAction);
 
   remoteBrowser.previewBtn?.addEventListener("click", () => {
     void previewSelectedFile();
