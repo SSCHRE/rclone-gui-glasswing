@@ -465,6 +465,36 @@
                   <button id="remote-delete-btn" type="button" class="danger">Delete</button>
                 </div>
               </div>
+              <section id="remote-mount" class="remote-mount hidden" aria-labelledby="remote-mount-title">
+                <div class="remote-mount-heading">
+                  <h4 id="remote-mount-title" class="remote-mount-title">Mount as drive</h4>
+                  <span id="remote-mount-status" class="remote-mount-status"></span>
+                </div>
+                <div id="remote-mount-form" class="remote-mount-controls">
+                  <label class="field remote-mount-field">
+                    <span>Drive</span>
+                    <select id="remote-mount-letter"></select>
+                  </label>
+                  <label class="field remote-mount-field">
+                    <span>File cache</span>
+                    <select id="remote-mount-cache">
+                      <option value="writes">Writes (recommended)</option>
+                      <option value="full">Full (best for media &amp; apps)</option>
+                      <option value="off">Off (no local cache)</option>
+                    </select>
+                  </label>
+                  <label class="checkbox remote-mount-readonly">
+                    <input id="remote-mount-readonly" type="checkbox" />
+                    Read-only
+                  </label>
+                  <button id="remote-mount-btn" type="button" class="primary">Mount</button>
+                </div>
+                <div id="remote-mount-active" class="remote-mount-controls hidden">
+                  <button id="remote-mount-open" type="button" class="primary">Open in Explorer</button>
+                  <button id="remote-unmount-btn" type="button" class="danger">Unmount</button>
+                </div>
+                <p id="remote-mount-hint" class="remote-mount-hint"></p>
+              </section>
               <pre id="remote-detail-config" class="remote-config-block"></pre>
             </div>
 
