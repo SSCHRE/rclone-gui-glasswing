@@ -2106,6 +2106,96 @@ button:disabled {
   overflow-x: auto;
 }
 
+.remote-list-item-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.remote-mount-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--success);
+  background: rgba(115, 224, 163, 0.1);
+  border: 1px solid rgba(115, 224, 163, 0.22);
+}
+
+.remote-mount {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.remote-mount-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.remote-mount-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.remote-mount-status {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.remote-mount-status.is-mounted {
+  color: var(--success);
+}
+
+.remote-mount-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.remote-mount-controls .field {
+  margin-bottom: 0;
+}
+
+.remote-mount-field:first-child {
+  width: 110px;
+}
+
+.remote-mount-field:nth-child(2) {
+  flex: 1 1 200px;
+}
+
+.remote-mount-readonly {
+  padding-bottom: 10px;
+}
+
+.remote-mount-controls .primary,
+.remote-mount-controls .secondary,
+.remote-mount-controls .danger {
+  width: auto;
+  min-width: 112px;
+}
+
+.remote-mount-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.remote-mount-hint.is-error {
+  color: var(--danger);
+}
+
 .remote-add-title {
   margin: 0 0 16px;
   font-size: 1.05rem;
@@ -2759,7 +2849,7 @@ button:disabled {
   left: 0;
   right: 0;
   top: 88px;
-  z-index: 15;
+  z-index: 30;
   display: flex;
   justify-content: center;
   padding: 0 24px;

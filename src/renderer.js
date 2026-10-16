@@ -1023,6 +1023,39 @@ window.rcloneGui.onJobOutput(({ id, text }) => {
 
 
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
+window.rcloneGui.onMountsChanged?.(({ event }) => {
+  if (!event) {
+    return;
+  }
+
+  const remote = escapeHtml(event.remote);
+  const mountPoint = escapeHtml(event.mountPoint);
+  if (event.type === "mounted") {
+    showSnackbar({
+      title: "Drive mounted",
+      message: `<strong>${remote}</strong> is now available as ${mountPoint}`,
+      type: "success",
+    });
+  } else if (event.unexpected) {
+    showPopup({
+      title: `${event.mountPoint} was unmounted`,
+      message: `The mount for "${event.remote}" stopped unexpectedly. ${event.message}`,
+      type: "error",
+      autoClose: false,
+    });
+  } else {
+    showSnackbar({
+      title: "Drive unmounted",
+      message: `${mountPoint} (<strong>${remote}</strong>) is no longer mounted`,
+      type: "success",
+    });
+  }
+});
+
 window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
 
   if (id !== activeJobId) {

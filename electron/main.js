@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const mounts = require("./mounts");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -11,6 +12,9 @@ if (process.platform === "win32") {
 
 let mainWindow = null;
 let activeJob = null;
+let closeConfirmed = false;
+let closeCheckInProgress = false;
+let mountsStopping = false;
 
 const WINDOW_ABSOLUTE_MIN_WIDTH = 760;
 const WINDOW_ABSOLUTE_MIN_HEIGHT = 520;
@@ -453,8 +457,47 @@ icon,
     );
   });
 
+  mainWindow.on("close", (event) => {
+    if (closeConfirmed || !mounts.hasMounts()) {
+      return;
+    }
+    event.preventDefault();
+    void confirmCloseWithMounts();
+  });
+
   if (icon) {
     mainWindow.setIcon(icon);
+  }
+}
+
+async function confirmCloseWithMounts() {
+  if (closeCheckInProgress) {
+    return;
+  }
+  closeCheckInProgress = true;
+
+  try {
+    const pending = await mounts.getTotalPendingUploads();
+    if (pending > 0 && mainWindow && !mainWindow.isDestroyed()) {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: "warning",
+        title: "Uploads still running",
+        message: `${pending} file${pending === 1 ? " is" : "s are"} still uploading from a mounted drive.`,
+        detail:
+          "Closing Glasswing unmounts all drives. Unfinished uploads stay in rclone's cache and resume the next time you mount the same remote.",
+        buttons: ["Keep open", "Close anyway"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response === 0) {
+        return;
+      }
+    }
+
+    closeConfirmed = true;
+    mainWindow?.close();
+  } finally {
+    closeCheckInProgress = false;
   }
 }
 
@@ -956,6 +999,50 @@ ipcMain.handle("reconnect-remote", async (_event, name) => {
   }
 
   return result.stdout.trim();
+});
+
+function sendMountsChanged(event = null) {
+  send("mounts-changed", { mounts: mounts.listMounts(), event });
+}
+
+ipcMain.handle("get-mount-status", async () => mounts.getStatus());
+
+ipcMain.handle("mount-remote", async (_event, payload) => {
+  const remote = payload?.remote?.trim();
+  if (!remote) {
+    throw new Error("Remote name is required.");
+  }
+  if (!(await listRemoteNames()).includes(remote)) {
+    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
+  }
+
+  const mount = await mounts.startMount(
+    {
+      remote,
+      driveLetter: payload.driveLetter,
+      cacheMode: payload.cacheMode,
+      readOnly: Boolean(payload.readOnly),
+    },
+    { onExit: (info) => sendMountsChanged({ type: "unmounted", ...info }) },
+  );
+  sendMountsChanged({ type: "mounted", remote: mount.remote, mountPoint: mount.mountPoint });
+  return mounts.getStatus();
+});
+
+ipcMain.handle("unmount-remote", async (_event, remote, options) => {
+  const result = await mounts.stopMount(String(remote || ""), { force: Boolean(options?.force) });
+  return { ...result, status: mounts.getStatus() };
+});
+
+ipcMain.handle("open-mount", async (_event, remote) => {
+  const mount = mounts.listMounts().find((item) => item.remote === remote);
+  if (!mount) {
+    throw new Error(`"${remote}" is not mounted.`);
+  }
+  const error = await shell.openPath(`${mount.mountPoint}\\`);
+  if (error) {
+    throw new Error(error);
+  }
 });
 
 ipcMain.handle("open-rclone-config", async () => {
@@ -2044,9 +2131,20 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   stopActiveJob();
   stopPreviewServe();
   stopPreviewFetch();
   stopActiveUpload();
+
+  if (mounts.hasMounts() || mountsStopping) {
+    event.preventDefault();
+    if (!mountsStopping) {
+      mountsStopping = true;
+      void mounts.stopAllMounts().finally(() => {
+        mountsStopping = false;
+        app.quit();
+      });
+    }
+  }
 });

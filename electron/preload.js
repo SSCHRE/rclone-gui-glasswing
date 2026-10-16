@@ -15,6 +15,15 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   authorizeProvider: (provider) => ipcRenderer.invoke("authorize-provider", provider),
   reconnectRemote: (name) => ipcRenderer.invoke("reconnect-remote", name),
   openRcloneConfig: () => ipcRenderer.invoke("open-rclone-config"),
+  getMountStatus: () => ipcRenderer.invoke("get-mount-status"),
+  mountRemote: (payload) => ipcRenderer.invoke("mount-remote", payload),
+  unmountRemote: (name, options) => ipcRenderer.invoke("unmount-remote", name, options),
+  openMount: (name) => ipcRenderer.invoke("open-mount", name),
+  onMountsChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("mounts-changed", listener);
+    return () => ipcRenderer.removeListener("mounts-changed", listener);
+  },
   getConfigFilePath: () => ipcRenderer.invoke("get-config-file-path"),
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),
