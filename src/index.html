@@ -308,6 +308,7 @@
         </section>
       </main>
       </div>
+      <div id="transfer-stack" class="transfer-stack"></div>
     </div>
 
     <div id="preview-dialog" class="popup-root hidden" aria-hidden="true">
@@ -359,20 +360,6 @@
       </div>
     </div>
 
-    <div id="upload-panel" class="upload-panel hidden" role="status" aria-live="polite">
-      <div class="upload-panel-head">
-        <span id="upload-panel-title" class="upload-panel-title">Uploading</span>
-        <span id="upload-panel-percent" class="upload-panel-percent"></span>
-      </div>
-      <p id="upload-panel-file" class="upload-panel-file"></p>
-      <div class="upload-progress" aria-hidden="true">
-        <div id="upload-panel-bar" class="upload-progress-bar"></div>
-      </div>
-      <div class="upload-panel-foot">
-        <p id="upload-panel-meta" class="upload-panel-meta"></p>
-        <button id="upload-panel-action" type="button" class="secondary upload-panel-action">Cancel</button>
-      </div>
-    </div>
     <div id="snackbar-root" class="snackbar-root hidden" aria-hidden="true">
       <div id="snackbar" class="snackbar" role="status" aria-live="polite">
         <span id="snackbar-icon" class="snackbar-icon" aria-hidden="true"></span>
@@ -587,6 +574,7 @@
     </div>
     <script src="job-output.js"></script>
     <script src="remote-manager.js"></script>
+    <script src="transfer-panel.js"></script>
     <script src="remote-browser.js"></script>
     <script src="renderer.js"></script>
   </body>
