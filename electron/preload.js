@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),
   downloadRemoteFile: (payload) => ipcRenderer.invoke("download-remote-file", payload),
+  cancelDownload: () => ipcRenderer.invoke("cancel-download"),
+  onDownloadProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("download-progress", listener);
+    return () => ipcRenderer.removeListener("download-progress", listener);
+  },
   pickUploadFiles: () => ipcRenderer.invoke("pick-upload-files"),
   measureLocalPaths: (paths) => ipcRenderer.invoke("measure-local-paths", paths),
   uploadToRemote: (payload) => ipcRenderer.invoke("upload-to-remote", payload),

@@ -1376,27 +1376,112 @@ ipcMain.handle("pick-save-file", async (_event, defaultName) => {
   return filePath;
 });
 
+let activeDownload = null;
+
+function stopActiveDownload() {
+  if (!activeDownload) {
+    return;
+  }
+  activeDownload.cancelled = true;
+  const child = activeDownload.child;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
+async function removePartialDownloads(localPath) {
+  const dir = path.dirname(localPath);
+  const base = path.basename(localPath).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${base}\\.[0-9a-f]{8}\\.partial$`, "i");
+  try {
+    const names = await fs.readdir(dir);
+    await Promise.all(
+      names.filter((name) => pattern.test(name)).map((name) => fs.rm(path.join(dir, name), { force: true })),
+    );
+  } catch {}
+}
+
 ipcMain.handle("download-remote-file", async (_event, payload) => {
   if (activeJob) {
     throw new Error("Wait for the current job to finish before downloading.");
   }
+  if (activeDownload) {
+    throw new Error("A download is already running.");
+  }
 
   const remotePath = payload?.remotePath;
-  const localPath = payload?.localPath;
-  if (!localPath?.trim()) {
+  const localPath = payload?.localPath?.trim();
+  if (!localPath) {
     throw new Error("A local save path is required.");
   }
 
   const source = normalizeRemoteBrowsePath(remotePath);
-  const result = await runRclone(["copyto", source, localPath.trim()], {
-    timeoutMs: 0,
-  });
+  const download = { child: null, cancelled: false };
+  activeDownload = download;
+  const errors = [];
+  const chunks = createChunkTracker();
 
-  if (result.code !== 0) {
-    throw new Error(result.stderr || result.stdout || `Failed to download "${source}"`);
+  try {
+    send("download-progress", { index: 0, bytes: 0, confirmed: 0, total: 0 });
+    const result = await runRclone(
+      [
+        "copyto",
+        source,
+        localPath,
+        "--stats",
+        "500ms",
+        "--stats-log-level",
+        "NOTICE",
+        "--log-level",
+        "DEBUG",
+        "--retries",
+        "1",
+        "--use-json-log",
+      ],
+      {
+        timeoutMs: 0,
+        onSpawn: (child) => {
+          download.child = child;
+          child.stderr.on("data", createJsonLogReader((entry) => {
+            if (entry.level === "error" && entry.msg) {
+              errors.push(String(entry.msg).trim());
+            }
+            if (entry.level === "debug") {
+              chunks.handle(entry);
+              return;
+            }
+            const stats = entry.stats;
+            if (stats) {
+              send("download-progress", {
+                index: 0,
+                bytes: Number(stats.bytes) || 0,
+                confirmed: chunks.confirmed(stats),
+                total: Number(stats.totalBytes) || 0,
+              });
+            }
+          }));
+        },
+      },
+    );
+
+    if (download.cancelled) {
+      await removePartialDownloads(localPath);
+      return { source, localPath, cancelled: true };
+    }
+    if (result.code !== 0) {
+      await removePartialDownloads(localPath);
+      throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
+    }
+    return { source, localPath, cancelled: false };
+  } finally {
+    activeDownload = null;
   }
+});
 
-  return { source, localPath: localPath.trim() };
+ipcMain.handle("cancel-download", async () => {
+  stopActiveDownload();
 });
 
 ipcMain.handle("delete-remote-file", async (_event, payload) => {
@@ -2136,6 +2221,7 @@ app.on("before-quit", (event) => {
   stopPreviewServe();
   stopPreviewFetch();
   stopActiveUpload();
+  stopActiveDownload();
 
   if (mounts.hasMounts() || mountsStopping) {
     event.preventDefault();
