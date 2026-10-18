@@ -108,8 +108,8 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] File previews
 - [x] Upload to remotes
 - [x] Update check
-- [X] Mount a remote (rclone mount)
-- [ ] Drag and drop upload
+- [x] Mount a remote (rclone mount)
+- [x] Drag and drop upload
 - [ ] Scheduled jobs
 - [ ] macOS build (`.dmg` / `.app`)
 - [ ] Linux build (AppImage / `.deb`)
