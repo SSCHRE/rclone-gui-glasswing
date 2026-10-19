@@ -3,7 +3,7 @@ const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
-const { randomUUID } = require("crypto");
+const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
 
 if (process.platform === "win32") {
@@ -2042,12 +2042,8 @@ function describeJobFailure(operation, output) {
   return {};
 }
 
-ipcMain.handle("start-job", async (_event, job) => {
-  if (activeJob) {
-    throw new Error("A job is already running.");
-  }
-
-  const operation = job.operation;
+function buildJobArgs(job) {
+  const operation = job?.operation;
   if (!JOB_OPERATIONS.includes(operation)) {
     throw new Error(`Unsupported operation: ${operation}`);
   }
@@ -2079,6 +2075,62 @@ ipcMain.handle("start-job", async (_event, job) => {
   }
 
   args.push(...parseExtraArgs(job.extraArgs));
+  return args;
+}
+
+function quoteCommandArg(arg) {
+  const text = String(arg);
+  if (text && !/[\s"'&|<>^()%!;`$]/.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, '\\"')}"`;
+}
+
+const MAX_APPROVED_COMMANDS = 200;
+
+function getApprovedCommandsPath() {
+  return path.join(app.getPath("userData"), "approved-commands.json");
+}
+
+function commandFingerprint(args) {
+  return createHash("sha256").update(JSON.stringify(args)).digest("hex");
+}
+
+async function readApprovedCommands() {
+  try {
+    const parsed = JSON.parse(await fs.readFile(getApprovedCommandsPath(), "utf8"));
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+ipcMain.handle("preview-job-command", async (_event, job) => {
+  const args = buildJobArgs(job);
+  const approved = await readApprovedCommands();
+  return {
+    args,
+    command: ["rclone", ...args].map(quoteCommandArg).join(" "),
+    approved: approved.includes(commandFingerprint(args)),
+  };
+});
+
+ipcMain.handle("approve-job-command", async (_event, job) => {
+  const fingerprint = commandFingerprint(buildJobArgs(job));
+  const approved = (await readApprovedCommands()).filter((item) => item !== fingerprint);
+  approved.unshift(fingerprint);
+  const filePath = getApprovedCommandsPath();
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(approved.slice(0, MAX_APPROVED_COMMANDS), null, 2), "utf8");
+});
+
+ipcMain.handle("start-job", async (_event, job) => {
+  if (activeJob) {
+    throw new Error("A job is already running.");
+  }
+
+  const operation = job.operation;
+  const args = buildJobArgs(job);
 
   const child = spawn("rclone", args, {
     windowsHide: true,

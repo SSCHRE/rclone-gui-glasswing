@@ -418,6 +418,25 @@
       </div>
     </div>
 
+    <div id="run-confirm-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-run-confirm-close></div>
+      <div class="popup-card popup-card-command" role="dialog" aria-modal="true" aria-labelledby="run-confirm-title" aria-describedby="run-confirm-message">
+        <p id="run-confirm-title" class="popup-title">Run this command?</p>
+        <p id="run-confirm-message" class="popup-message"></p>
+        <pre id="run-confirm-command" class="command-preview"></pre>
+        <label class="checkbox command-preview-remember">
+          <input id="run-confirm-remember" type="checkbox" />
+          Don't ask again for this exact job
+        </label>
+        <p class="command-preview-remember-hint">You'll be asked again if anything changes: paths, operation, options or flags.</p>
+        <div class="popup-actions command-preview-actions">
+          <button id="run-confirm-copy" type="button" class="secondary">Copy command</button>
+          <button id="run-confirm-cancel" type="button" class="secondary">Cancel</button>
+          <button id="run-confirm-start" type="button" class="primary">Run job</button>
+        </div>
+      </div>
+    </div>
+
     <div id="remote-manager-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-remote-manager-close></div>
       <div class="popup-card popup-card-remote-manager" role="dialog" aria-modal="true" aria-labelledby="remote-manager-title">

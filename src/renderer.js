@@ -390,6 +390,68 @@ async function refreshJobHistory(selectedId = "") {
   fillJobHistoryPicker(selectedId);
 }
 
+const runWarnings = {
+  sync: "Files in the destination that aren't in the source will be deleted.",
+  move: "Files are deleted from the source after they're transferred.",
+  bisync: "Changes and deletions on either side are applied to the other side.",
+};
+
+function confirmRunCommand(job, command) {
+  const dialog = document.getElementById("run-confirm-dialog");
+  const message = document.getElementById("run-confirm-message");
+  const commandBlock = document.getElementById("run-confirm-command");
+  const copyBtn = document.getElementById("run-confirm-copy");
+  const cancelBtn = document.getElementById("run-confirm-cancel");
+  const startBtn = document.getElementById("run-confirm-start");
+  const remember = document.getElementById("run-confirm-remember");
+  const backdrop = dialog.querySelector("[data-run-confirm-close]");
+
+  message.textContent = job.dryRun
+    ? "Dry run: rclone will only report what it would do. Nothing will be changed."
+    : runWarnings[job.operation] || "This is the exact command Glasswing will run.";
+  commandBlock.textContent = command;
+  copyBtn.textContent = "Copy command";
+  remember.checked = false;
+  dialog.classList.remove("hidden");
+  dialog.setAttribute("aria-hidden", "false");
+  startBtn.focus();
+
+  return new Promise((resolve) => {
+    const finish = (confirmed) => {
+      dialog.classList.add("hidden");
+      dialog.setAttribute("aria-hidden", "true");
+      startBtn.removeEventListener("click", onStart);
+      cancelBtn.removeEventListener("click", onCancel);
+      backdrop.removeEventListener("click", onCancel);
+      copyBtn.removeEventListener("click", onCopy);
+      document.removeEventListener("keydown", onKeydown, true);
+      resolve({ confirmed, remember: confirmed && remember.checked });
+    };
+    const onStart = () => finish(true);
+    const onCancel = () => finish(false);
+    const onCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        copyBtn.textContent = "Copied";
+      } catch {
+        copyBtn.textContent = "Copy failed";
+      }
+    };
+    const onKeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        finish(false);
+      }
+    };
+
+    startBtn.addEventListener("click", onStart);
+    cancelBtn.addEventListener("click", onCancel);
+    backdrop.addEventListener("click", onCancel);
+    copyBtn.addEventListener("click", onCopy);
+    document.addEventListener("keydown", onKeydown, true);
+  });
+}
+
 function hideSaveJobDialog() {
   elements.saveJobDialog.classList.add("hidden");
   elements.saveJobDialog.setAttribute("aria-hidden", "true");
@@ -451,6 +513,24 @@ async function startJobFromForm() {
   if (!job.source || !job.destination) {
     setStatus("Source and destination are required.", "error");
     return;
+  }
+
+  let preview;
+  try {
+    preview = await window.rcloneGui.previewJobCommand(job);
+  } catch (error) {
+    setStatus(String(error.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""), "error");
+    return;
+  }
+
+  if (!preview.approved) {
+    const choice = await confirmRunCommand(job, preview.command);
+    if (!choice.confirmed) {
+      return;
+    }
+    if (choice.remember) {
+      await window.rcloneGui.approveJobCommand(job).catch(() => {});
+    }
   }
 
   setRunning(true);
