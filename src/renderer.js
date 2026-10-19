@@ -6,6 +6,8 @@ const operationHints = {
 
   move: "Move transfers files and deletes them from the source when done.",
 
+  bisync: "Bisync keeps both sides in step: new, changed and deleted files on either side are applied to the other.",
+
 };
 
 
@@ -30,6 +32,8 @@ const elements = {
   dryRun: document.getElementById("dry-run"),
 
   deleteExcluded: document.getElementById("delete-excluded"),
+  resync: document.getElementById("resync"),
+  resyncOption: document.getElementById("resync-option"),
   extraArgs: document.getElementById("extra-args"),
 
   runJob: document.getElementById("run-job"),
@@ -212,6 +216,7 @@ function setRunning(isRunning) {
   elements.destination.disabled = isRunning;
   elements.dryRun.disabled = isRunning;
   elements.deleteExcluded.disabled = isRunning || elements.operation.value !== "sync";
+  elements.resync.disabled = isRunning;
   elements.extraArgs.disabled = isRunning;
   elements.jobHistoryPicker.disabled = isRunning;
   elements.loadJob.disabled = isRunning || !elements.jobHistoryPicker.value;
@@ -230,6 +235,7 @@ function getCurrentJobConfig() {
     destination: elements.destination.value.trim(),
     dryRun: elements.dryRun.checked,
     deleteExcluded: elements.deleteExcluded.checked,
+    resync: elements.operation.value === "bisync" && elements.resync.checked,
     extraArgs: elements.extraArgs.value.trim(),
   };
 }
@@ -330,6 +336,7 @@ function applyJobToForm(entry, { fromSavedJob = false } = {}) {
   elements.destination.value = entry.destination;
   elements.dryRun.checked = entry.dryRun;
   elements.deleteExcluded.checked = entry.deleteExcluded;
+  elements.resync.checked = false;
   elements.extraArgs.value = entry.extraArgs || "";
   elements.operation.dispatchEvent(new Event("change"));
 
@@ -381,6 +388,68 @@ function fillJobHistoryPicker(selectedId = "") {
 async function refreshJobHistory(selectedId = "") {
   jobHistory = await window.rcloneGui.listJobs();
   fillJobHistoryPicker(selectedId);
+}
+
+const runWarnings = {
+  sync: "Files in the destination that aren't in the source will be deleted.",
+  move: "Files are deleted from the source after they're transferred.",
+  bisync: "Changes and deletions on either side are applied to the other side.",
+};
+
+function confirmRunCommand(job, command) {
+  const dialog = document.getElementById("run-confirm-dialog");
+  const message = document.getElementById("run-confirm-message");
+  const commandBlock = document.getElementById("run-confirm-command");
+  const copyBtn = document.getElementById("run-confirm-copy");
+  const cancelBtn = document.getElementById("run-confirm-cancel");
+  const startBtn = document.getElementById("run-confirm-start");
+  const remember = document.getElementById("run-confirm-remember");
+  const backdrop = dialog.querySelector("[data-run-confirm-close]");
+
+  message.textContent = job.dryRun
+    ? "Dry run: rclone will only report what it would do. Nothing will be changed."
+    : runWarnings[job.operation] || "This is the exact command Glasswing will run.";
+  commandBlock.textContent = command;
+  copyBtn.textContent = "Copy command";
+  remember.checked = false;
+  dialog.classList.remove("hidden");
+  dialog.setAttribute("aria-hidden", "false");
+  startBtn.focus();
+
+  return new Promise((resolve) => {
+    const finish = (confirmed) => {
+      dialog.classList.add("hidden");
+      dialog.setAttribute("aria-hidden", "true");
+      startBtn.removeEventListener("click", onStart);
+      cancelBtn.removeEventListener("click", onCancel);
+      backdrop.removeEventListener("click", onCancel);
+      copyBtn.removeEventListener("click", onCopy);
+      document.removeEventListener("keydown", onKeydown, true);
+      resolve({ confirmed, remember: confirmed && remember.checked });
+    };
+    const onStart = () => finish(true);
+    const onCancel = () => finish(false);
+    const onCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        copyBtn.textContent = "Copied";
+      } catch {
+        copyBtn.textContent = "Copy failed";
+      }
+    };
+    const onKeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        finish(false);
+      }
+    };
+
+    startBtn.addEventListener("click", onStart);
+    cancelBtn.addEventListener("click", onCancel);
+    backdrop.addEventListener("click", onCancel);
+    copyBtn.addEventListener("click", onCopy);
+    document.addEventListener("keydown", onKeydown, true);
+  });
 }
 
 function hideSaveJobDialog() {
@@ -444,6 +513,24 @@ async function startJobFromForm() {
   if (!job.source || !job.destination) {
     setStatus("Source and destination are required.", "error");
     return;
+  }
+
+  let preview;
+  try {
+    preview = await window.rcloneGui.previewJobCommand(job);
+  } catch (error) {
+    setStatus(String(error.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""), "error");
+    return;
+  }
+
+  if (!preview.approved) {
+    const choice = await confirmRunCommand(job, preview.command);
+    if (!choice.confirmed) {
+      return;
+    }
+    if (choice.remember) {
+      await window.rcloneGui.approveJobCommand(job).catch(() => {});
+    }
   }
 
   setRunning(true);
@@ -788,6 +875,12 @@ elements.operation.addEventListener("change", () => {
 
   elements.deleteExcluded.disabled = operation !== "sync" || activeJobId !== null;
 
+  elements.resyncOption.classList.toggle("hidden", operation !== "bisync");
+
+  if (operation !== "bisync") {
+    elements.resync.checked = false;
+  }
+
 });
 
 
@@ -1056,7 +1149,7 @@ window.rcloneGui.onMountsChanged?.(({ event }) => {
   }
 });
 
-window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
+window.rcloneGui.onJobFinished(({ id, success, message, cancelled, needsResync }) => {
 
   if (id !== activeJobId) {
 
@@ -1073,6 +1166,12 @@ window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
   setRunning(false);
 
   outputPanel.finishJob({ success, message, cancelled });
+
+  if (needsResync && elements.operation.value === "bisync") {
+    elements.resync.checked = true;
+  } else if (success) {
+    elements.resync.checked = false;
+  }
 
   if (cancelled) {
     showSnackbar({

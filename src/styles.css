@@ -1405,6 +1405,46 @@ button:disabled {
   gap: 10px;
 }
 
+.popup-card.popup-card-command {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.command-preview {
+  max-height: 220px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(4, 6, 10, 0.72);
+  color: #d7e3f4;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.command-preview-remember {
+  margin-bottom: 4px;
+}
+
+.command-preview-remember-hint {
+  margin: 0 0 18px 30px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.popup-card .command-preview-actions button {
+  width: auto;
+  white-space: nowrap;
+}
+
+.command-preview-actions #run-confirm-copy {
+  margin-right: auto;
+}
+
 .popup-actions .primary,
 .popup-actions .secondary {
   width: auto;

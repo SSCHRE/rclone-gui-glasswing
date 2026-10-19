@@ -76,6 +76,7 @@
                   <option value="copy">Copy</option>
                   <option value="sync">Sync</option>
                   <option value="move">Move</option>
+                  <option value="bisync">Bisync (two-way)</option>
                 </select>
               </label>
 
@@ -159,6 +160,10 @@
                 <label class="checkbox">
                   <input id="delete-excluded" type="checkbox" />
                   Delete excluded files (sync only)
+                </label>
+                <label id="resync-option" class="checkbox hidden">
+                  <input id="resync" type="checkbox" />
+                  Resync (needed on the first run)
                 </label>
               </div>
             </div>
@@ -409,6 +414,25 @@
         <div class="popup-actions">
           <button id="save-job-cancel" type="button" class="secondary">Cancel</button>
           <button id="save-job-confirm" type="button" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="run-confirm-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-run-confirm-close></div>
+      <div class="popup-card popup-card-command" role="dialog" aria-modal="true" aria-labelledby="run-confirm-title" aria-describedby="run-confirm-message">
+        <p id="run-confirm-title" class="popup-title">Run this command?</p>
+        <p id="run-confirm-message" class="popup-message"></p>
+        <pre id="run-confirm-command" class="command-preview"></pre>
+        <label class="checkbox command-preview-remember">
+          <input id="run-confirm-remember" type="checkbox" />
+          Don't ask again for this exact job
+        </label>
+        <p class="command-preview-remember-hint">You'll be asked again if anything changes: paths, operation, options or flags.</p>
+        <div class="popup-actions command-preview-actions">
+          <button id="run-confirm-copy" type="button" class="secondary">Copy command</button>
+          <button id="run-confirm-cancel" type="button" class="secondary">Cancel</button>
+          <button id="run-confirm-start" type="button" class="primary">Run job</button>
         </div>
       </div>
     </div>
