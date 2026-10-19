@@ -76,6 +76,7 @@
                   <option value="copy">Copy</option>
                   <option value="sync">Sync</option>
                   <option value="move">Move</option>
+                  <option value="bisync">Bisync (two-way)</option>
                 </select>
               </label>
 
@@ -159,6 +160,10 @@
                 <label class="checkbox">
                   <input id="delete-excluded" type="checkbox" />
                   Delete excluded files (sync only)
+                </label>
+                <label id="resync-option" class="checkbox hidden">
+                  <input id="resync" type="checkbox" />
+                  Resync (needed on the first run)
                 </label>
               </div>
             </div>

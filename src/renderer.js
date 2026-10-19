@@ -6,6 +6,8 @@ const operationHints = {
 
   move: "Move transfers files and deletes them from the source when done.",
 
+  bisync: "Bisync keeps both sides in step: new, changed and deleted files on either side are applied to the other.",
+
 };
 
 
@@ -30,6 +32,8 @@ const elements = {
   dryRun: document.getElementById("dry-run"),
 
   deleteExcluded: document.getElementById("delete-excluded"),
+  resync: document.getElementById("resync"),
+  resyncOption: document.getElementById("resync-option"),
   extraArgs: document.getElementById("extra-args"),
 
   runJob: document.getElementById("run-job"),
@@ -212,6 +216,7 @@ function setRunning(isRunning) {
   elements.destination.disabled = isRunning;
   elements.dryRun.disabled = isRunning;
   elements.deleteExcluded.disabled = isRunning || elements.operation.value !== "sync";
+  elements.resync.disabled = isRunning;
   elements.extraArgs.disabled = isRunning;
   elements.jobHistoryPicker.disabled = isRunning;
   elements.loadJob.disabled = isRunning || !elements.jobHistoryPicker.value;
@@ -230,6 +235,7 @@ function getCurrentJobConfig() {
     destination: elements.destination.value.trim(),
     dryRun: elements.dryRun.checked,
     deleteExcluded: elements.deleteExcluded.checked,
+    resync: elements.operation.value === "bisync" && elements.resync.checked,
     extraArgs: elements.extraArgs.value.trim(),
   };
 }
@@ -330,6 +336,7 @@ function applyJobToForm(entry, { fromSavedJob = false } = {}) {
   elements.destination.value = entry.destination;
   elements.dryRun.checked = entry.dryRun;
   elements.deleteExcluded.checked = entry.deleteExcluded;
+  elements.resync.checked = false;
   elements.extraArgs.value = entry.extraArgs || "";
   elements.operation.dispatchEvent(new Event("change"));
 
@@ -788,6 +795,12 @@ elements.operation.addEventListener("change", () => {
 
   elements.deleteExcluded.disabled = operation !== "sync" || activeJobId !== null;
 
+  elements.resyncOption.classList.toggle("hidden", operation !== "bisync");
+
+  if (operation !== "bisync") {
+    elements.resync.checked = false;
+  }
+
 });
 
 
@@ -1056,7 +1069,7 @@ window.rcloneGui.onMountsChanged?.(({ event }) => {
   }
 });
 
-window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
+window.rcloneGui.onJobFinished(({ id, success, message, cancelled, needsResync }) => {
 
   if (id !== activeJobId) {
 
@@ -1073,6 +1086,12 @@ window.rcloneGui.onJobFinished(({ id, success, message, cancelled }) => {
   setRunning(false);
 
   outputPanel.finishJob({ success, message, cancelled });
+
+  if (needsResync && elements.operation.value === "bisync") {
+    elements.resync.checked = true;
+  } else if (success) {
+    elements.resync.checked = false;
+  }
 
   if (cancelled) {
     showSnackbar({

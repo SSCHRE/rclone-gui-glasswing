@@ -53,6 +53,8 @@ function resolveAppIcon() {
   return icon.isEmpty() ? undefined : icon;
 }
 const MAX_JOB_HISTORY = 50;
+const JOB_OPERATIONS = ["sync", "copy", "move", "bisync"];
+const JOB_OUTPUT_TAIL_CHARS = 16384;
 
 function jobSignature(job) {
   return [
@@ -2022,13 +2024,31 @@ ipcMain.handle("close-remote-preview", async () => {
   stopPreviewFetch();
 });
 
+function describeJobFailure(operation, output) {
+  if (operation !== "bisync") {
+    return {};
+  }
+  if (/Must run --resync/i.test(output)) {
+    return {
+      needsResync: true,
+      message: "Bisync needs a resync first: on the first run, or after an interrupted run. Resync is now ticked; run the job again.",
+    };
+  }
+  if (/filename, directory name, or volume label syntax is incorrect/i.test(output)) {
+    return {
+      message: "Bisync couldn't save its state file because the two paths together are too long for Windows. Try shorter paths.",
+    };
+  }
+  return {};
+}
+
 ipcMain.handle("start-job", async (_event, job) => {
   if (activeJob) {
     throw new Error("A job is already running.");
   }
 
   const operation = job.operation;
-  if (!["sync", "copy", "move"].includes(operation)) {
+  if (!JOB_OPERATIONS.includes(operation)) {
     throw new Error(`Unsupported operation: ${operation}`);
   }
 
@@ -2047,8 +2067,15 @@ ipcMain.handle("start-job", async (_event, job) => {
     args.push("--dry-run");
   }
 
-  if (job.deleteExcluded) {
+  if (job.deleteExcluded && operation === "sync") {
     args.push("--delete-excluded");
+  }
+
+  if (operation === "bisync") {
+    args.push("--color", "NEVER");
+    if (job.resync) {
+      args.push("--resync");
+    }
   }
 
   args.push(...parseExtraArgs(job.extraArgs));
@@ -2062,6 +2089,7 @@ ipcMain.handle("start-job", async (_event, job) => {
     id: Date.now(),
     process: child,
     killed: false,
+    outputTail: "",
     historyId: await markJobRunStarted({
       operation,
       source: job.source,
@@ -2084,6 +2112,7 @@ ipcMain.handle("start-job", async (_event, job) => {
   const forwardOutput = (stream, type) => {
     stream.on("data", (chunk) => {
       const text = chunk.toString();
+      jobState.outputTail = (jobState.outputTail + text).slice(-JOB_OUTPUT_TAIL_CHARS);
       send("job-output", {
         id: jobState.id,
         type,
@@ -2109,16 +2138,16 @@ ipcMain.handle("start-job", async (_event, job) => {
 
   child.on("close", async (code) => {
     const cancelled = jobState.killed;
-    await markJobRunFinished(jobState.historyId, {
-      success: code === 0 && !cancelled,
-      cancelled,
-    });
+    const success = code === 0 && !cancelled;
+    const failure = !success && !cancelled ? describeJobFailure(operation, jobState.outputTail) : {};
+    await markJobRunFinished(jobState.historyId, { success, cancelled });
     send("job-finished", {
       id: jobState.id,
       code,
-      success: code === 0 && !cancelled,
-      message: cancelled ? "" : code === 0 ? "Job completed successfully." : "Job failed.",
+      success,
+      message: cancelled ? "" : success ? "Job completed successfully." : failure.message || "Job failed.",
       cancelled,
+      needsResync: Boolean(failure.needsResync),
     });
 
     if (activeJob && activeJob.id === jobState.id) {
@@ -2141,7 +2170,7 @@ ipcMain.handle("save-job", async (_event, job) => {
     throw new Error("Source and destination are required.");
   }
 
-  if (!["sync", "copy", "move"].includes(job.operation)) {
+  if (!JOB_OPERATIONS.includes(job.operation)) {
     throw new Error(`Unsupported operation: ${job.operation}`);
   }
 
@@ -2167,7 +2196,7 @@ ipcMain.handle("update-job", async (_event, jobId, job) => {
     throw new Error("Source and destination are required.");
   }
 
-  if (!["sync", "copy", "move"].includes(job.operation)) {
+  if (!JOB_OPERATIONS.includes(job.operation)) {
     throw new Error(`Unsupported operation: ${job.operation}`);
   }
 
