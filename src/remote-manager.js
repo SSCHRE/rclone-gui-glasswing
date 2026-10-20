@@ -302,6 +302,7 @@ async function selectRemote(name) {
   try {
     const entry = remoteEntries.find((item) => item.name === name);
     remoteManager.detailType.textContent = entry?.type || "unknown";
+    updateReconnectAvailability();
     remoteManager.detailConfig.textContent = await window.rcloneGui.getRemoteRedacted(name);
   } catch (error) {
     remoteManager.detailConfig.textContent = error.message || "Could not load remote settings.";
@@ -689,6 +690,13 @@ async function refreshRemotes({ keepSelection = true } = {}) {
 async function loadProviders() {
   providers = await window.rcloneGui.getConfigProviders();
   renderProviderOptions();
+  updateReconnectAvailability();
+}
+
+function updateReconnectAvailability() {
+  const entry = remoteEntries.find((item) => item.name === selectedRemoteName);
+  const provider = providers.find((item) => item.Name === entry?.type);
+  remoteManager.reconnectBtn.classList.toggle("hidden", !optionNeedsAuthorize(provider));
 }
 
 async function openRemoteManager({ onChanged } = {}) {
@@ -840,7 +848,7 @@ async function reconnectSelectedRemote() {
     await window.rcloneGui.reconnectRemote(selectedRemoteName);
     await selectRemote(selectedRemoteName);
   } catch (error) {
-    window.alert(error.message || "Could not reconnect remote.");
+    window.alert(cleanIpcError(error, "Could not reconnect remote."));
   } finally {
     setBusy(false);
   }
