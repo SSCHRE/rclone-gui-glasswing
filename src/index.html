@@ -68,6 +68,7 @@
                   <button id="update-job" type="button" class="secondary" disabled>Update</button>
                   <button id="save-job" type="button" class="secondary">Save current</button>
                   <button id="delete-job" type="button" class="secondary" disabled>Remove</button>
+                  <button id="schedule-job" type="button" class="secondary" disabled>Schedule…</button>
                 </div>
                 <p id="job-history-meta" class="history-meta"></p>
               </div>
@@ -475,6 +476,71 @@
       </div>
     </div>
 
+    <div id="schedule-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-schedule-close></div>
+      <div class="popup-card popup-card-form popup-card-schedule" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
+        <p id="schedule-title" class="popup-title">Schedule job</p>
+        <p id="schedule-job-name" class="popup-message schedule-job-name"></p>
+        <label class="field">
+          <span>Repeat</span>
+          <select id="schedule-type">
+            <option value="off">Don't run automatically</option>
+            <option value="interval">Every few hours</option>
+            <option value="daily">Every day</option>
+            <option value="weekly">On certain days</option>
+          </select>
+        </label>
+        <label id="schedule-interval-row" class="field">
+          <span>Every</span>
+          <div class="input-row">
+            <input id="schedule-hours" type="number" min="1" max="168" step="1" value="6" />
+            <span class="schedule-unit">hours</span>
+          </div>
+        </label>
+        <div id="schedule-days-row" class="field">
+          <span>Days</span>
+          <div class="schedule-days" role="group" aria-label="Days">
+              <label class="schedule-day"><input type="checkbox" value="1" /><span>Mon</span></label>
+              <label class="schedule-day"><input type="checkbox" value="2" /><span>Tue</span></label>
+              <label class="schedule-day"><input type="checkbox" value="3" /><span>Wed</span></label>
+              <label class="schedule-day"><input type="checkbox" value="4" /><span>Thu</span></label>
+              <label class="schedule-day"><input type="checkbox" value="5" /><span>Fri</span></label>
+              <label class="schedule-day"><input type="checkbox" value="6" /><span>Sat</span></label>
+              <label class="schedule-day"><input type="checkbox" value="0" /><span>Sun</span></label>
+          </div>
+        </div>
+        <label id="schedule-time-row" class="field">
+          <span>At</span>
+          <input id="schedule-time" type="time" value="02:00" />
+        </label>
+        <label id="schedule-catchup-row" class="checkbox schedule-catchup">
+          <input id="schedule-catchup" type="checkbox" checked />
+          If a run is missed, run it as soon as Glasswing is back
+        </label>
+        <p id="schedule-next" class="hint schedule-next"></p>
+        <div id="schedule-command-wrap" class="schedule-command-wrap">
+          <p class="schedule-section-label">Runs without asking</p>
+          <pre id="schedule-command" class="command-preview schedule-command"></pre>
+        </div>
+        <div class="schedule-background">
+          <p class="schedule-section-label">All scheduled jobs</p>
+          <label class="checkbox">
+            <input id="schedule-run-in-background" type="checkbox" />
+            Keep running in the tray when the window is closed
+          </label>
+          <label id="schedule-login-row" class="checkbox">
+            <input id="schedule-open-at-login" type="checkbox" />
+            <span>Start Glasswing with Windows <span id="schedule-login-note" class="schedule-login-note"></span></span>
+          </label>
+        </div>
+        <p id="schedule-error" class="remote-create-error hidden"></p>
+        <div class="popup-actions schedule-actions">
+          <button id="schedule-cancel" type="button" class="secondary">Cancel</button>
+          <button id="schedule-save" type="button" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="remote-manager-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-remote-manager-close></div>
       <div class="popup-card popup-card-remote-manager" role="dialog" aria-modal="true" aria-labelledby="remote-manager-title">
@@ -639,6 +705,7 @@
     <script src="transfer-panel.js"></script>
     <script src="remote-browser.js"></script>
     <script src="bandwidth-settings.js"></script>
+    <script src="job-schedule.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

@@ -65,6 +65,7 @@ const elements = {
   updateJob: document.getElementById("update-job"),
   saveJob: document.getElementById("save-job"),
   deleteJob: document.getElementById("delete-job"),
+  scheduleJob: document.getElementById("schedule-job"),
   jobHistoryMeta: document.getElementById("job-history-meta"),
   jobHistoryCollapsible: document.getElementById("job-history-collapsible"),
   pathsCollapsible: document.getElementById("paths-collapsible"),
@@ -223,6 +224,7 @@ function setRunning(isRunning) {
   elements.updateJob.disabled = isRunning || !elements.jobHistoryPicker.value;
   elements.saveJob.disabled = isRunning;
   elements.deleteJob.disabled = isRunning || !elements.jobHistoryPicker.value;
+  elements.scheduleJob.disabled = isRunning || !elements.jobHistoryPicker.value;
   if (elements.manageRemotes) {
     elements.manageRemotes.disabled = isRunning;
   }
@@ -264,7 +266,7 @@ function formatRelativeTime(timestamp) {
 }
 
 function formatJobOptionLabel(entry) {
-  return entry.name;
+  return entry.schedule?.enabled ? `⏰ ${entry.name}` : entry.name;
 }
 
 function formatJobMeta(entry) {
@@ -274,8 +276,16 @@ function formatJobMeta(entry) {
 
   const parts = [
     `${entry.operation} · ${entry.source} → ${entry.destination}`,
-    `Last run ${formatRelativeTime(entry.lastRunAt)}`,
   ];
+
+  if (entry.schedule?.enabled) {
+    const next = entry.schedule.nextRunAt
+      ? `, next run ${window.JobSchedule.formatNextRun(entry.schedule.nextRunAt)}`
+      : "";
+    parts.push(`⏰ ${entry.schedule.description || "Scheduled"}${next}`);
+  }
+
+  parts.push(`Last run ${formatRelativeTime(entry.lastRunAt)}`);
 
   if (entry.runCount > 0) {
     parts.push(`${entry.runCount} run${entry.runCount === 1 ? "" : "s"}`);
@@ -354,6 +364,7 @@ function updateHistoryActions() {
   elements.loadJob.disabled = isRunning || !hasSelection;
   elements.updateJob.disabled = isRunning || !hasSelection || savedJobMatchesForm(entry);
   elements.deleteJob.disabled = isRunning || !hasSelection;
+  elements.scheduleJob.disabled = isRunning || !hasSelection;
   elements.jobHistoryMeta.textContent = entry ? formatJobMeta(entry) : "";
 }
 
@@ -363,7 +374,8 @@ function updateJobHistoryCount() {
     return;
   }
 
-  elements.jobHistoryCount.textContent = `${jobHistory.length} job${jobHistory.length === 1 ? "" : "s"}`;
+  const scheduled = jobHistory.filter((entry) => entry.schedule?.enabled).length;
+  elements.jobHistoryCount.textContent = `${jobHistory.length} job${jobHistory.length === 1 ? "" : "s"}${scheduled ? ` · ${scheduled} scheduled` : ""}`;
 }
 
 function fillJobHistoryPicker(selectedId = "") {
@@ -848,6 +860,7 @@ async function init() {
     }
 
     const [remotesResult] = await Promise.all([remotesLoad, historyLoad]);
+    attachToRunningJob(await window.rcloneGui.getActiveJob().catch(() => null));
     if (remotesResult.error) {
       await loadRemotes({ showFeedback: false });
     } else {
@@ -1043,6 +1056,27 @@ elements.saveJobName.addEventListener("keydown", (event) => {
   }
 });
 
+elements.scheduleJob.addEventListener("click", () => {
+  const entry = getSelectedHistoryEntry();
+  if (!entry) {
+    return;
+  }
+
+  void window.JobSchedule.open(entry, {
+    onSaved: (saved, jobs) => {
+      jobHistory = jobs;
+      fillJobHistoryPicker(entry.id);
+      showSnackbar({
+        title: saved?.schedule?.enabled ? "Job scheduled" : "Schedule turned off",
+        message: saved?.schedule?.enabled
+          ? `<strong>${escapeHtml(entry.name)}</strong> runs next ${escapeHtml(window.JobSchedule.formatNextRun(saved.schedule.nextRunAt))}.`
+          : `<strong>${escapeHtml(entry.name)}</strong> only runs when you start it.`,
+        type: "success",
+      });
+    },
+  });
+});
+
 elements.deleteJob.addEventListener("click", async () => {
   const entry = getSelectedHistoryEntry();
   if (!entry) {
@@ -1099,6 +1133,41 @@ elements.checkForUpdates.addEventListener("click", () => {
 });
 
 
+
+function attachToRunningJob(job) {
+  if (!job || activeJobId !== null) {
+    return;
+  }
+
+  activeJobId = job.id;
+  setRunning(true);
+  outputPanel.startJob({
+    operation: job.operation,
+    source: job.source,
+    destination: job.destination,
+  });
+
+  if (job.scheduled) {
+    showSnackbar({
+      title: "Scheduled job running",
+      message: `<strong>${escapeHtml(job.scheduled.name)}</strong> started on schedule.`,
+      type: "running",
+    });
+  }
+}
+
+window.rcloneGui.onJobStarted((job) => {
+  if (!job.scheduled) {
+    return;
+  }
+
+  attachToRunningJob(job);
+  void refreshJobHistory(elements.jobHistoryPicker.value);
+});
+
+window.rcloneGui.onSchedulesChanged(() => {
+  void refreshJobHistory(elements.jobHistoryPicker.value);
+});
 
 window.rcloneGui.onJobOutput(({ id, text }) => {
 

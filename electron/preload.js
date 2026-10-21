@@ -64,6 +64,16 @@ openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-prev
   saveJob: (job) => ipcRenderer.invoke("save-job", job),
   updateJob: (jobId, job) => ipcRenderer.invoke("update-job", jobId, job),
   deleteJob: (jobId) => ipcRenderer.invoke("delete-job", jobId),
+  getActiveJob: () => ipcRenderer.invoke("get-active-job"),
+  setJobSchedule: (jobId, schedule) => ipcRenderer.invoke("set-job-schedule", jobId, schedule),
+  previewJobSchedule: (schedule) => ipcRenderer.invoke("preview-job-schedule", schedule),
+  getScheduleSettings: () => ipcRenderer.invoke("get-schedule-settings"),
+  setScheduleSettings: (changes) => ipcRenderer.invoke("set-schedule-settings", changes),
+  onSchedulesChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("schedules-changed", listener);
+    return () => ipcRenderer.removeListener("schedules-changed", listener);
+  },
   onJobStarted: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("job-started", listener);
