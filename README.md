@@ -110,9 +110,9 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Update check
 - [x] Mount a remote
 - [x] Drag and drop upload
-- [ ] Scheduled jobs (in progress)
+- [x] Scheduled jobs
 - [ ] macOS build (`.dmg` / `.app`)
-- [ ] Linux build (AppImage / `.deb`)
+- [ ] Linux build (AppImage / `.deb`) IN PROGRESS
 
 ## Screenshots
 ![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
