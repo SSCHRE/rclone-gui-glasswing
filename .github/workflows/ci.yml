@@ -37,6 +37,8 @@ jobs:
           node --check src/remote-browser.js
           node --check src/transfer-panel.js
           node --check src/bandwidth-settings.js
+          node --check src/job-schedule.js
+          node --check electron/scheduler.js
           node --check scripts/generate-icons.js
 
       - name: Generate icons

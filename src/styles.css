@@ -3421,3 +3421,119 @@ button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.popup-card.popup-card-schedule {
+  width: min(540px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.schedule-job-name {
+  margin-bottom: 14px;
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+#schedule-hours {
+  flex: 0 0 110px;
+  width: 110px;
+}
+
+.schedule-unit {
+  color: var(--muted);
+}
+
+#schedule-time {
+  width: 150px;
+  color-scheme: dark;
+}
+
+.schedule-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.schedule-day {
+  position: relative;
+  cursor: pointer;
+}
+
+.schedule-day input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.schedule-day span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 52px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(120, 145, 180, 0.16);
+  background: rgba(6, 9, 14, 0.88);
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.schedule-day:hover span {
+  border-color: rgba(120, 145, 180, 0.32);
+  color: var(--text);
+}
+
+.schedule-day input:checked + span {
+  border-color: rgba(92, 176, 255, 0.55);
+  background: rgba(92, 176, 255, 0.16);
+  color: var(--accent-strong);
+}
+
+.schedule-day input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.schedule-catchup {
+  margin: 4px 0 14px;
+}
+
+.hint.schedule-next {
+  margin: 0 0 16px;
+}
+
+.schedule-section-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.command-preview.schedule-command {
+  max-height: 120px;
+  margin-bottom: 16px;
+}
+
+.schedule-background {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(120, 145, 180, 0.12);
+}
+
+.schedule-login-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.checkbox input:disabled,
+.checkbox input:disabled ~ span {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

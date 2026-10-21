@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, screen, nativeImage, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
+const scheduler = require("./scheduler");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -12,6 +13,9 @@ if (process.platform === "win32") {
 
 let mainWindow = null;
 let activeJob = null;
+let jobStarting = false;
+let appQuitting = false;
+let windowRevealed = !process.argv.includes("--hidden");
 let closeConfirmed = false;
 let closeCheckInProgress = false;
 let mountsStopping = false;
@@ -214,6 +218,14 @@ async function readJobHistory() {
   }
 }
 
+let historyQueue = Promise.resolve();
+
+function withJobHistory(task) {
+  const run = historyQueue.then(task);
+  historyQueue = run.catch(() => {});
+  return run;
+}
+
 async function writeJobHistory(entries) {
   const filePath = getHistoryFilePath();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -222,7 +234,11 @@ async function writeJobHistory(entries) {
   return trimmed;
 }
 
-async function upsertJobHistory(job, { name = null } = {}) {
+function upsertJobHistory(job, options) {
+  return withJobHistory(() => upsertJobHistoryNow(job, options));
+}
+
+async function upsertJobHistoryNow(job, { name = null } = {}) {
   const signature = jobSignature(job);
   const now = Date.now();
   const entries = await readJobHistory();
@@ -244,6 +260,7 @@ async function upsertJobHistory(job, { name = null } = {}) {
     lastRunAt: existing?.lastRunAt || null,
     lastRunSuccess: existing?.lastRunSuccess ?? null,
     runCount: existing?.runCount || 0,
+    schedule: existing?.schedule || null,
   };
 
   if (existingIndex >= 0) {
@@ -254,7 +271,11 @@ async function upsertJobHistory(job, { name = null } = {}) {
   return writeJobHistory(entries);
 }
 
-async function updateSavedJob(jobId, job) {
+function updateSavedJob(jobId, job) {
+  return withJobHistory(() => updateSavedJobNow(jobId, job));
+}
+
+async function updateSavedJobNow(jobId, job) {
   const entries = await readJobHistory();
   const index = entries.findIndex((entry) => entry.id === jobId);
   if (index < 0) {
@@ -287,7 +308,11 @@ async function updateSavedJob(jobId, job) {
   return writeJobHistory(entries);
 }
 
-async function markJobRunStarted(job) {
+function markJobRunStarted(job) {
+  return withJobHistory(() => markJobRunStartedNow(job));
+}
+
+async function markJobRunStartedNow(job) {
   const signature = jobSignature(job);
   const now = Date.now();
   const entries = await readJobHistory();
@@ -305,7 +330,11 @@ async function markJobRunStarted(job) {
   return entry.id;
 }
 
-async function markJobRunFinished(historyId, { success, cancelled }) {
+function markJobRunFinished(historyId, result) {
+  return withJobHistory(() => markJobRunFinishedNow(historyId, result));
+}
+
+async function markJobRunFinishedNow(historyId, { success, cancelled }) {
   if (!historyId) {
     return readJobHistory();
   }
@@ -486,7 +515,7 @@ icon,
   });
 
   mainWindow.once("ready-to-show", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
+    if (!mainWindow || mainWindow.isDestroyed() || !windowRevealed) {
       return;
     }
     ensureWindowOnScreen(mainWindow);
@@ -512,6 +541,11 @@ icon,
   });
 
   mainWindow.on("close", (event) => {
+    if (!appQuitting && shouldKeepRunning()) {
+      event.preventDefault();
+      hideToTray();
+      return;
+    }
     if (closeConfirmed || !mounts.hasMounts()) {
       return;
     }
@@ -849,7 +883,7 @@ ipcMain.handle("fit-window-to-content", async (_event, size, snap = false) => {
 });
 
 ipcMain.handle("show-main-window", async () => {
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  if (!mainWindow || mainWindow.isDestroyed() || !windowRevealed) {
     return;
   }
 
@@ -2193,13 +2227,28 @@ ipcMain.handle("approve-job-command", async (_event, job) => {
   await fs.writeFile(filePath, JSON.stringify(approved.slice(0, MAX_APPROVED_COMMANDS), null, 2), "utf8");
 });
 
-ipcMain.handle("start-job", async (_event, job) => {
-  if (activeJob) {
+ipcMain.handle("start-job", async (_event, job) => startJob(job));
+
+async function startJob(job, { scheduled = null } = {}) {
+  if (activeJob || jobStarting) {
     throw new Error("A job is already running.");
   }
 
   const operation = job.operation;
   const args = buildJobArgs(job);
+
+  jobStarting = true;
+  let historyId = null;
+  try {
+    historyId = await markJobRunStarted({
+      operation,
+      source: job.source,
+      destination: job.destination,
+      dryRun: job.dryRun,
+      deleteExcluded: job.deleteExcluded,
+      extraArgs: job.extraArgs,
+    });
+  } catch {}
 
   const child = spawn("rclone", args, {
     windowsHide: true,
@@ -2209,25 +2258,22 @@ ipcMain.handle("start-job", async (_event, job) => {
   const jobState = {
     id: Date.now(),
     process: child,
+    job,
     killed: false,
     outputTail: "",
-    historyId: await markJobRunStarted({
-      operation,
-      source: job.source,
-      destination: job.destination,
-      dryRun: job.dryRun,
-      deleteExcluded: job.deleteExcluded,
-      extraArgs: job.extraArgs,
-    }),
+    scheduled,
+    historyId,
   };
 
   activeJob = jobState;
+  jobStarting = false;
 
   send("job-started", {
     id: jobState.id,
     operation,
     source: job.source,
     destination: job.destination,
+    scheduled: scheduled ? { name: scheduled.name } : null,
   });
 
   const forwardOutput = (stream, type) => {
@@ -2255,6 +2301,7 @@ ipcMain.handle("start-job", async (_event, job) => {
       cancelled: false,
     });
     activeJob = null;
+    onJobSettled(jobState, { success: false, cancelled: false, message: error.message });
   });
 
   child.on("close", async (code) => {
@@ -2274,10 +2321,15 @@ ipcMain.handle("start-job", async (_event, job) => {
     if (activeJob && activeJob.id === jobState.id) {
       activeJob = null;
     }
+    onJobSettled(jobState, {
+      success,
+      cancelled,
+      message: success ? "" : failure.message || (cancelled ? "" : "rclone exited with an error."),
+    });
   });
 
   return { id: jobState.id };
-});
+}
 
 ipcMain.handle("stop-job", async () => {
   const stopped = stopActiveJob();
@@ -2332,14 +2384,315 @@ ipcMain.handle("update-job", async (_event, jobId, job) => {
 });
 
 ipcMain.handle("delete-job", async (_event, jobId) => {
-  const entries = await readJobHistory();
-  const next = entries.filter((entry) => entry.id !== jobId);
-  return writeJobHistory(next);
+  const result = await withJobHistory(async () => {
+    const entries = await readJobHistory();
+    return writeJobHistory(entries.filter((entry) => entry.id !== jobId));
+  });
+  void refreshSchedules();
+  return result;
 });
 
+const SCHEDULER_TICK_MS = 15000;
+const SCHEDULER_FIRST_CHECK_MS = 4000;
+const SCHEDULE_GRACE_MS = 5 * 60 * 1000;
+const scheduleQueue = [];
+let scheduledJobs = [];
+let tray = null;
+
+function getRunInBackground() {
+  return getAppSettings().runInBackground !== false;
+}
+
+function shouldKeepRunning() {
+  return scheduledJobs.length > 0 && getRunInBackground();
+}
+
+function canOpenAtLogin() {
+  return app.isPackaged && process.platform === "win32";
+}
+
+function loginItemOptions() {
+  return { path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: ["--hidden"] };
+}
+
+function getScheduleSettings() {
+  return {
+    runInBackground: getRunInBackground(),
+    openAtLogin: canOpenAtLogin() && app.getLoginItemSettings(loginItemOptions()).openAtLogin,
+    canOpenAtLogin: canOpenAtLogin(),
+  };
+}
+
+function formatRunTime(timestamp) {
+  return new Date(timestamp).toLocaleString(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function nextScheduledJob() {
+  return scheduledJobs
+    .filter((entry) => entry.schedule.nextRunAt)
+    .sort((left, right) => left.schedule.nextRunAt - right.schedule.nextRunAt)[0] || null;
+}
+
+function showWindow() {
+  windowRevealed = true;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  ensureWindowOnScreen(mainWindow);
+  mainWindow.show();
+  mainWindow.focus();
+  updateTray();
+}
+
+function showNotification(title, body) {
+  if (!Notification.isSupported()) {
+    return;
+  }
+  const notification = new Notification({ title, body, icon: resolveAppIconPath() });
+  notification.on("click", showWindow);
+  notification.show();
+}
+
+function notifyInBackground(title, body) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) {
+    return;
+  }
+  showNotification(title, body);
+}
+
+function hideToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.hide();
+  windowRevealed = false;
+  updateTray();
+  if (!getAppSettings().trayHintShown) {
+    showNotification(
+      "Glasswing is still running",
+      "Your scheduled jobs keep running in the background. Right-click the tray icon to quit.",
+    );
+    void saveAppSettings({ trayHintShown: true });
+  }
+}
+
+function updateTray() {
+  if (!shouldKeepRunning() && windowRevealed) {
+    tray?.destroy();
+    tray = null;
+    return;
+  }
+
+  if (!tray) {
+    const iconPath = resolveAppIconPath();
+    if (!iconPath) {
+      return;
+    }
+    tray = new Tray(iconPath);
+    tray.on("click", showWindow);
+  }
+
+  const next = nextScheduledJob();
+  const nextLabel = next
+    ? `Next: ${next.name} (${formatRunTime(next.schedule.nextRunAt)})`
+    : "No scheduled jobs";
+  tray.setToolTip(`Glasswing\n${nextLabel}`.slice(0, 127));
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Open Glasswing", click: showWindow },
+      { label: nextLabel, enabled: false },
+      { type: "separator" },
+      {
+        label: "Quit Glasswing",
+        click: () => {
+          appQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+}
+
+async function refreshSchedules() {
+  scheduledJobs = (await readJobHistory()).filter((entry) => entry.schedule?.enabled);
+  updateTray();
+  send("schedules-changed");
+}
+
+async function setJobSchedule(jobId, input) {
+  const schedule = scheduler.normalizeSchedule(input);
+  const entries = await withJobHistory(async () => {
+    const entries = await readJobHistory();
+    const entry = entries.find((item) => item.id === jobId);
+    if (!entry) {
+      throw new Error("Saved job not found.");
+    }
+    if (schedule) {
+      const now = Date.now();
+      schedule.anchorAt = now;
+      schedule.nextRunAt = scheduler.computeNextRun(schedule, now, now);
+      schedule.description = scheduler.describeSchedule(schedule);
+    }
+    entry.schedule = schedule;
+    return writeJobHistory(entries);
+  });
+  await refreshSchedules();
+  return entries;
+}
+
+async function checkSchedules() {
+  const now = Date.now();
+  const due = [];
+  const changed = await withJobHistory(async () => {
+    const entries = await readJobHistory();
+    let dirty = false;
+    for (const entry of entries) {
+      const schedule = entry.schedule;
+      if (!schedule?.enabled || schedule.nextRunAt > now) {
+        continue;
+      }
+      if (schedule.nextRunAt) {
+        const missed = now - schedule.nextRunAt > SCHEDULE_GRACE_MS;
+        if (!missed || schedule.catchUp) {
+          due.push({ id: entry.id, missed });
+        }
+      }
+      schedule.nextRunAt = scheduler.computeNextRun(schedule, now, schedule.anchorAt);
+      dirty = true;
+    }
+    if (dirty) {
+      await writeJobHistory(entries);
+    }
+    return dirty;
+  });
+
+  for (const item of due) {
+    if (!scheduleQueue.some((queued) => queued.id === item.id)) {
+      scheduleQueue.push(item);
+    }
+  }
+  if (changed) {
+    await refreshSchedules();
+  }
+  await runQueuedSchedule();
+}
+
+async function runQueuedSchedule() {
+  if (activeJob || jobStarting || scheduleQueue.length === 0) {
+    return;
+  }
+
+  const item = scheduleQueue.shift();
+  const entry = (await readJobHistory()).find((candidate) => candidate.id === item.id);
+  if (!entry?.schedule?.enabled) {
+    await runQueuedSchedule();
+    return;
+  }
+
+  try {
+    await startJob(
+      {
+        operation: entry.operation,
+        source: entry.source,
+        destination: entry.destination,
+        dryRun: entry.dryRun,
+        deleteExcluded: entry.deleteExcluded,
+        extraArgs: entry.extraArgs,
+      },
+      { scheduled: { id: entry.id, name: entry.name } },
+    );
+    notifyInBackground(
+      `Running "${entry.name}"`,
+      item.missed ? "Catching up on a scheduled run that was missed." : "Scheduled job started.",
+    );
+  } catch (error) {
+    if (activeJob) {
+      scheduleQueue.unshift(item);
+      return;
+    }
+    notifyInBackground(`Couldn't start "${entry.name}"`, error.message);
+    await runQueuedSchedule();
+  }
+}
+
+function onJobSettled(jobState, { success, cancelled, message }) {
+  if (jobState.settled) {
+    return;
+  }
+  jobState.settled = true;
+
+  if (jobState.scheduled && !cancelled) {
+    const { name } = jobState.scheduled;
+    notifyInBackground(
+      success ? `"${name}" finished` : `"${name}" failed`,
+      success ? "Scheduled job completed successfully." : message || "The job ended with errors.",
+    );
+  }
+  setTimeout(() => void runQueuedSchedule(), 1000);
+}
+
+ipcMain.handle("get-active-job", async () =>
+  activeJob
+    ? {
+        id: activeJob.id,
+        operation: activeJob.job.operation,
+        source: activeJob.job.source,
+        destination: activeJob.job.destination,
+        scheduled: activeJob.scheduled ? { name: activeJob.scheduled.name } : null,
+      }
+    : null,
+);
+
+ipcMain.handle("set-job-schedule", async (_event, jobId, schedule) => setJobSchedule(jobId, schedule));
+
+ipcMain.handle("preview-job-schedule", async (_event, input) => {
+  const schedule = scheduler.normalizeSchedule(input);
+  const now = Date.now();
+  return {
+    nextRunAt: scheduler.computeNextRun(schedule, now, now),
+    description: scheduler.describeSchedule(schedule),
+  };
+});
+
+ipcMain.handle("get-schedule-settings", async () => getScheduleSettings());
+
+ipcMain.handle("set-schedule-settings", async (_event, changes = {}) => {
+  if (typeof changes.runInBackground === "boolean") {
+    await saveAppSettings({ runInBackground: changes.runInBackground });
+  }
+  if (typeof changes.openAtLogin === "boolean" && canOpenAtLogin()) {
+    app.setLoginItemSettings({ openAtLogin: changes.openAtLogin, ...loginItemOptions() });
+  }
+  updateTray();
+  return getScheduleSettings();
+});
+
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (!hasInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", showWindow);
+}
+
 app.whenReady().then(() => {
+  if (!hasInstanceLock) {
+    return;
+  }
   Menu.setApplicationMenu(null);
   createWindow();
+
+  void refreshSchedules();
+  setTimeout(() => void checkSchedules(), SCHEDULER_FIRST_CHECK_MS);
+  setInterval(() => void checkSchedules(), SCHEDULER_TICK_MS);
+  powerMonitor.on("resume", () => void checkSchedules());
 
   screen.on("display-metrics-changed", () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -2367,6 +2720,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
+  appQuitting = true;
   stopActiveJob();
   stopPreviewServe();
   stopPreviewFetch();
