@@ -112,7 +112,7 @@ function friendlyMountError(stderr, code) {
   return `rclone mount exited with code ${code ?? "unknown"}.`;
 }
 
-async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly = false }, { onExit } = {}) {
+async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly = false, bwlimit = "" }, { onExit } = {}) {
   if (!isSupported()) {
     throw new Error("Mounting is only supported on Windows for now.");
   }
@@ -151,6 +151,9 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
   ];
   if (readOnly) {
     args.push("--read-only");
+  }
+  if (bwlimit) {
+    args.push("--bwlimit", bwlimit);
   }
 
   const child = spawn("rclone", args, {
@@ -292,6 +295,15 @@ async function stopMount(remote, { force = false } = {}) {
   return { stopped: true, pending: 0 };
 }
 
+async function setBwlimit(rate) {
+  const results = await Promise.all(
+    [...mounts.values()].filter((mount) => mount.ready).map((mount) =>
+      rcCall(mount, "core/bwlimit", { rate }).then(() => true, () => false),
+    ),
+  );
+  return results.filter(Boolean).length;
+}
+
 async function getTotalPendingUploads() {
   const counts = await Promise.all([...mounts.keys()].map((remote) => getPendingUploads(remote)));
   return counts.reduce((sum, count) => sum + count, 0);
@@ -311,6 +323,7 @@ module.exports = {
   startMount,
   stopMount,
   stopAllMounts,
+  setBwlimit,
   getTotalPendingUploads,
   hasMounts,
 };

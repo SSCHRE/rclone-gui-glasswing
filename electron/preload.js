@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   reconnectRemote: (name) => ipcRenderer.invoke("reconnect-remote", name),
   openRcloneConfig: () => ipcRenderer.invoke("open-rclone-config"),
   getMountStatus: () => ipcRenderer.invoke("get-mount-status"),
+  getBwlimit: () => ipcRenderer.invoke("get-bwlimit"),
+  setBwlimit: (value) => ipcRenderer.invoke("set-bwlimit", value),
   mountRemote: (payload) => ipcRenderer.invoke("mount-remote", payload),
   unmountRemote: (name, options) => ipcRenderer.invoke("unmount-remote", name, options),
   openMount: (name) => ipcRenderer.invoke("open-mount", name),
