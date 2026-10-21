@@ -35,6 +35,10 @@
           <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
         </nav>
         <div class="header-actions">
+          <button id="bwlimit-button" type="button" class="secondary bwlimit-button" title="Bandwidth limit for all transfers">
+            <span class="bwlimit-button-icon" aria-hidden="true">⇅</span>
+            <span id="bwlimit-button-label">Full speed</span>
+          </button>
           <button id="manage-remotes" type="button" class="secondary">Manage remotes</button>
           <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
         </div>
@@ -418,6 +422,40 @@
       </div>
     </div>
 
+    <div id="bwlimit-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-bwlimit-close></div>
+      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="bwlimit-title">
+        <p id="bwlimit-title" class="popup-title">Bandwidth limit</p>
+        <p class="popup-message">Caps how fast rclone moves data application wide.</p>
+        <label class="field">
+          <span>Maximum speed</span>
+          <div class="input-row">
+            <input id="bwlimit-rate" type="number" min="0" step="any" inputmode="decimal" placeholder="Unlimited" />
+            <select id="bwlimit-unit" class="bwlimit-unit" aria-label="Speed unit">
+              <option value="K">KB/s</option>
+              <option value="M" selected>MB/s</option>
+            </select>
+          </div>
+        </label>
+        <label class="checkbox">
+          <input id="bwlimit-scheduled" type="checkbox" />
+          Only during specified hours
+        </label>
+        <div id="bwlimit-hours" class="input-row bwlimit-hours hidden">
+          <input id="bwlimit-from" type="time" value="08:00" aria-label="Limit from" />
+          <span>to</span>
+          <input id="bwlimit-to" type="time" value="18:00" aria-label="Limit until" />
+        </div>
+        <p id="bwlimit-hint" class="hint bwlimit-hint"></p>
+        <p id="bwlimit-note" class="hint bwlimit-note"></p>
+        <div class="popup-actions bwlimit-actions">
+          <button id="bwlimit-clear" type="button" class="secondary bwlimit-clear">Remove limit</button>
+          <button id="bwlimit-cancel" type="button" class="secondary">Cancel</button>
+          <button id="bwlimit-save" type="button" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="run-confirm-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-run-confirm-close></div>
       <div class="popup-card popup-card-command" role="dialog" aria-modal="true" aria-labelledby="run-confirm-title" aria-describedby="run-confirm-message">
@@ -600,6 +638,7 @@
     <script src="remote-manager.js"></script>
     <script src="transfer-panel.js"></script>
     <script src="remote-browser.js"></script>
+    <script src="bandwidth-settings.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

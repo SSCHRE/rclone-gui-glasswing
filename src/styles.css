@@ -408,6 +408,7 @@ input[type="email"],
 input[type="number"],
 input[type="search"],
 input[type="url"],
+input[type="time"],
 textarea,
 select {
   width: 100%;
@@ -430,6 +431,7 @@ input[type="email"]:hover,
 input[type="number"]:hover,
 input[type="search"]:hover,
 input[type="url"]:hover,
+input[type="time"]:hover,
 textarea:hover,
 select:hover {
   border-color: rgba(120, 145, 180, 0.28);
@@ -441,6 +443,7 @@ input[type="email"]:focus,
 input[type="number"]:focus,
 input[type="search"]:focus,
 input[type="url"]:focus,
+input[type="time"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -476,6 +479,84 @@ textarea {
 
 .input-row input {
   flex: 1;
+}
+
+.input-row .bwlimit-unit {
+  flex: 0 0 100px;
+  width: 100px;
+}
+
+.bwlimit-hours {
+  margin: 8px 0 0 30px;
+}
+
+.bwlimit-hours input {
+  min-width: 0;
+  color-scheme: dark;
+  font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+
+.bwlimit-hours input::-webkit-calendar-picker-indicator {
+  padding: 2px;
+  border-radius: 4px;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.bwlimit-hours input::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+  background: rgba(92, 176, 255, 0.14);
+}
+
+.bwlimit-hours input::-webkit-datetime-edit-hour-field:focus,
+.bwlimit-hours input::-webkit-datetime-edit-minute-field:focus {
+  border-radius: 3px;
+  background: rgba(92, 176, 255, 0.28);
+  color: var(--text);
+}
+
+.bwlimit-hours span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.hint.bwlimit-hint {
+  margin: 12px 0 4px;
+}
+
+.hint.bwlimit-note {
+  margin: 0 0 18px;
+  font-size: 0.8rem;
+}
+
+.popup-card .bwlimit-actions button {
+  width: auto;
+  white-space: nowrap;
+}
+
+.popup-card .popup-actions .bwlimit-clear {
+  margin-right: auto;
+}
+
+.bwlimit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bwlimit-button-icon {
+  color: var(--muted);
+}
+
+.bwlimit-button.is-limited {
+  border-color: rgba(255, 217, 120, 0.35);
+}
+
+.bwlimit-button.is-limited .bwlimit-button-icon {
+  color: var(--warning);
 }
 
 .remote-insert {

@@ -53,6 +53,58 @@ function resolveAppIcon() {
   return icon.isEmpty() ? undefined : icon;
 }
 const MAX_JOB_HISTORY = 50;
+
+const BWLIMIT_RATE = String.raw`\d+(?:\.\d+)?[KMG]`;
+const BWLIMIT_PATTERN = new RegExp(
+  String.raw`^(?:${BWLIMIT_RATE}|\d{2}:\d{2},(?:${BWLIMIT_RATE}|off)(?: \d{2}:\d{2},(?:${BWLIMIT_RATE}|off))*)$`,
+);
+let appSettings = null;
+
+function getSettingsPath() {
+  return path.join(app.getPath("userData"), "settings.json");
+}
+
+function getAppSettings() {
+  if (!appSettings) {
+    try {
+      appSettings = JSON.parse(fsSync.readFileSync(getSettingsPath(), "utf8")) || {};
+    } catch {
+      appSettings = {};
+    }
+  }
+  return appSettings;
+}
+
+async function saveAppSettings(changes) {
+  appSettings = { ...getAppSettings(), ...changes };
+  await fs.mkdir(path.dirname(getSettingsPath()), { recursive: true });
+  await fs.writeFile(getSettingsPath(), JSON.stringify(appSettings, null, 2), "utf8");
+  return appSettings;
+}
+
+function normalizeBwlimit(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  if (!BWLIMIT_PATTERN.test(text)) {
+    throw new Error(`Invalid bandwidth limit "${text}".`);
+  }
+  return text;
+}
+
+function getBwlimit() {
+  try {
+    return normalizeBwlimit(getAppSettings().bwlimit);
+  } catch {
+    return "";
+  }
+}
+
+function bwlimitArgs() {
+  const bwlimit = getBwlimit();
+  return bwlimit ? ["--bwlimit", bwlimit] : [];
+}
 const JOB_OPERATIONS = ["sync", "copy", "move", "bisync"];
 const JOB_OUTPUT_TAIL_CHARS = 16384;
 
@@ -1009,6 +1061,16 @@ function sendMountsChanged(event = null) {
 
 ipcMain.handle("get-mount-status", async () => mounts.getStatus());
 
+ipcMain.handle("get-bwlimit", async () => getBwlimit());
+
+ipcMain.handle("set-bwlimit", async (_event, value) => {
+  const bwlimit = normalizeBwlimit(value);
+  await saveAppSettings({ bwlimit });
+  const isTimetable = bwlimit.includes(",");
+  const mountsUpdated = isTimetable ? 0 : await mounts.setBwlimit(bwlimit || "off");
+  return { bwlimit, mountsUpdated, mountsNeedRemount: isTimetable ? mounts.listMounts().length : 0 };
+});
+
 ipcMain.handle("mount-remote", async (_event, payload) => {
   const remote = payload?.remote?.trim();
   if (!remote) {
@@ -1024,6 +1086,7 @@ ipcMain.handle("mount-remote", async (_event, payload) => {
       driveLetter: payload.driveLetter,
       cacheMode: payload.cacheMode,
       readOnly: Boolean(payload.readOnly),
+      bwlimit: getBwlimit(),
     },
     { onExit: (info) => sendMountsChanged({ type: "unmounted", ...info }) },
   );
@@ -1298,6 +1361,7 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
           "--retries",
           "1",
           "--use-json-log",
+          ...bwlimitArgs(),
         ],
         {
           timeoutMs: 0,
@@ -1441,6 +1505,7 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
         "--retries",
         "1",
         "--use-json-log",
+        ...bwlimitArgs(),
       ],
       {
         timeoutMs: 0,
@@ -2042,7 +2107,7 @@ function describeJobFailure(operation, output) {
   return {};
 }
 
-function buildJobArgs(job) {
+function buildJobArgs(job, { appLimits = true } = {}) {
   const operation = job?.operation;
   if (!JOB_OPERATIONS.includes(operation)) {
     throw new Error(`Unsupported operation: ${operation}`);
@@ -2072,6 +2137,10 @@ function buildJobArgs(job) {
     if (job.resync) {
       args.push("--resync");
     }
+  }
+
+  if (appLimits) {
+    args.push(...bwlimitArgs());
   }
 
   args.push(...parseExtraArgs(job.extraArgs));
@@ -2111,12 +2180,12 @@ ipcMain.handle("preview-job-command", async (_event, job) => {
   return {
     args,
     command: ["rclone", ...args].map(quoteCommandArg).join(" "),
-    approved: approved.includes(commandFingerprint(args)),
+    approved: approved.includes(commandFingerprint(buildJobArgs(job, { appLimits: false }))),
   };
 });
 
 ipcMain.handle("approve-job-command", async (_event, job) => {
-  const fingerprint = commandFingerprint(buildJobArgs(job));
+  const fingerprint = commandFingerprint(buildJobArgs(job, { appLimits: false }));
   const approved = (await readApprovedCommands()).filter((item) => item !== fingerprint);
   approved.unshift(fingerprint);
   const filePath = getApprovedCommandsPath();
