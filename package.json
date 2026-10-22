@@ -85,7 +85,11 @@
     ],
     "asarUnpack": [
       "**/node_modules/7zip-bin/**"
-    ]
+    ],
+    "deb": {
+      "afterInstall": "build/linux/after-install.sh",
+      "afterRemove": "build/linux/after-remove.sh"
+    }
   },
   "allowScripts": {
     "electron@35.7.5": true

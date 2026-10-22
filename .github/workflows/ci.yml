@@ -114,6 +114,8 @@ jobs:
         run: |
           ls -lh dist/*.AppImage dist/*.deb
           dpkg-deb --info dist/*.deb
+          dpkg-deb --info dist/*.deb postinst | grep -q "chmod 4755"
+          dpkg-deb --info dist/*.deb postinst | grep -q "apparmor_parser --replace"
           dpkg-deb --contents dist/*.deb | grep -E "glasswing$|\.desktop$|icons/.*\.png$"
           chmod +x dist/*.AppImage
           (cd dist && ./*.AppImage --appimage-extract >/dev/null)
