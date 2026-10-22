@@ -11,8 +11,11 @@
     "build:portable": "electron-builder --win portable",
     "build:installer": "electron-builder --win nsis",
     "build:dir": "electron-builder --win dir",
+    "prebuild:linux": "npm run icons",
     "build:linux": "electron-builder --linux AppImage deb",
+    "prebuild:appimage": "npm run icons",
     "build:appimage": "electron-builder --linux AppImage",
+    "prebuild:deb": "npm run icons",
     "build:deb": "electron-builder --linux deb"
   },
   "author": "",
@@ -63,7 +66,7 @@
       "runAfterFinish": false
     },
     "linux": {
-      "icon": "build/icon.png",
+      "icon": "build/icons",
       "target": [
         "AppImage",
         "deb"

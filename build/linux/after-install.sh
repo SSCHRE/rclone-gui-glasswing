@@ -1,7 +1,6 @@
 #!/bin/bash
 
 if type update-alternatives 2>/dev/null >&1; then
-    # Remove previous link if it doesn't use update-alternatives
     if [ -L '/usr/bin/${executable}' -a -e '/usr/bin/${executable}' -a "`readlink '/usr/bin/${executable}'`" != '/etc/alternatives/${executable}' ]; then
         rm -f '/usr/bin/${executable}'
     fi
@@ -10,12 +9,9 @@ else
     ln -sf '/opt/${sanitizedProductName}/${executable}' '/usr/bin/${executable}'
 fi
 
-# Chromium falls back to the SUID sandbox when user namespaces are blocked for normal users
-# (Ubuntu 23.10+), so it must always be root-owned with the setuid bit.
 chown root:root '/opt/${sanitizedProductName}/chrome-sandbox' || true
 chmod 4755 '/opt/${sanitizedProductName}/chrome-sandbox' || true
 
-# Ubuntu 24.04+ (AppArmor 4) only allows user namespaces for apps with a profile that grants them.
 if [ -f /etc/apparmor.d/abi/4.0 ] && hash apparmor_parser 2>/dev/null; then
     cat > '/etc/apparmor.d/${executable}' <<'PROFILE'
 abi <abi/4.0>,
@@ -36,4 +32,8 @@ fi
 
 if hash update-desktop-database 2>/dev/null; then
     update-desktop-database /usr/share/applications || true
+fi
+
+if hash gtk-update-icon-cache 2>/dev/null; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
 fi
