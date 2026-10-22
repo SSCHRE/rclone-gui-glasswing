@@ -113,6 +113,12 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Scheduled jobs
 - [ ] macOS build (`.dmg` / `.app`)
 - [x] Linux build (AppImage / `.deb`)
+- [ ] Sync preview
+- [ ] Run/job history
+- [ ] Rclone serve
+- [ ] Search remote
+- [ ] Split screen browse
+- [ ] Rclone self update
 
 ## Screenshots
 ![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
