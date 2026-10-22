@@ -72,7 +72,10 @@
       "executableName": "glasswing",
       "synopsis": "Desktop GUI for rclone",
       "maintainer": "SSCHRE",
-      "artifactName": "Glasswing-${version}-${arch}.${ext}"
+      "artifactName": "Glasswing-${version}-${arch}.${ext}",
+      "desktop": {
+        "StartupWMClass": "rclone-glasswing-gui"
+      }
     },
     "files": [
       "electron/**/*",

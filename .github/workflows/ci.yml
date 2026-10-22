@@ -116,6 +116,7 @@ jobs:
           dpkg-deb --info dist/*.deb
           dpkg-deb --info dist/*.deb postinst | grep -q "chmod 4755"
           dpkg-deb --info dist/*.deb postinst | grep -q "apparmor_parser --replace"
+          dpkg-deb --fsys-tarfile dist/*.deb | tar -xO ./usr/share/applications/glasswing.desktop | grep -x "StartupWMClass=rclone-glasswing-gui"
           dpkg-deb --contents dist/*.deb | grep -E "glasswing$|\.desktop$|icons/.*\.png$"
           chmod +x dist/*.AppImage
           (cd dist && ./*.AppImage --appimage-extract >/dev/null)
