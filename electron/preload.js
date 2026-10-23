@@ -9,6 +9,13 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   listRemotes: () => ipcRenderer.invoke("list-remotes"),
   listRemoteEntries: () => ipcRenderer.invoke("list-remote-entries"),
   listRemotePath: (remotePath) => ipcRenderer.invoke("list-remote-path", remotePath),
+  searchRemote: (request) => ipcRenderer.invoke("search-remote", request),
+  cancelRemoteSearch: () => ipcRenderer.invoke("cancel-remote-search"),
+  onRemoteSearchResults: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("remote-search-results", listener);
+    return () => ipcRenderer.removeListener("remote-search-results", listener);
+  },
   getConfigProviders: () => ipcRenderer.invoke("get-config-providers"),
   getRemoteRedacted: (name) => ipcRenderer.invoke("get-remote-redacted", name),
   deleteRemote: (name) => ipcRenderer.invoke("delete-remote", name),
