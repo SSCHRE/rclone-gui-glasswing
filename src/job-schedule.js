@@ -16,6 +16,7 @@ const ui = {
   command: document.getElementById("schedule-command"),
   runInBackground: document.getElementById("schedule-run-in-background"),
   openAtLogin: document.getElementById("schedule-open-at-login"),
+  loginLabel: document.getElementById("schedule-login-label"),
   loginNote: document.getElementById("schedule-login-note"),
   error: document.getElementById("schedule-error"),
   cancelBtn: document.getElementById("schedule-cancel"),
@@ -112,6 +113,9 @@ async function loadSettings() {
   ui.openAtLogin.checked = settings.openAtLogin;
   ui.openAtLogin.disabled = !settings.canOpenAtLogin;
   ui.loginNote.textContent = settings.canOpenAtLogin ? "(starts in the tray)" : "(only in the installed app)";
+  ui.loginLabel.textContent = window.rcloneGui.platform === "win32"
+    ? "Start Glasswing with Windows"
+    : "Start Glasswing when you log in";
 }
 
 function onKeydown(event) {

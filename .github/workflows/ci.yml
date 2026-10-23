@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -84,5 +85,54 @@ jobs:
         with:
           name: glasswing-windows-${{ github.sha }}
           path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Build Linux app
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Check Linux packages
+        run: |
+          ls -lh dist/*.AppImage dist/*.deb
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --info dist/*.deb postinst | grep -q "chmod 4755"
+          dpkg-deb --info dist/*.deb postinst | grep -q "apparmor_parser --replace"
+          dpkg-deb --fsys-tarfile dist/*.deb | tar -xO ./usr/share/applications/glasswing.desktop | grep -x "StartupWMClass=rclone-glasswing-gui"
+          dpkg-deb --contents dist/*.deb | grep -E "glasswing$|\.desktop$|icons/.*\.png$"
+          for size in 16 32 48 128 256 512; do dpkg-deb --contents dist/*.deb | grep -q "hicolor/${size}x${size}/apps/glasswing.png"; done
+          chmod +x dist/*.AppImage
+          (cd dist && ./*.AppImage --appimage-extract >/dev/null)
+          test -x dist/squashfs-root/glasswing
+          test -x dist/squashfs-root/resources/app.asar.unpacked/node_modules/7zip-bin/linux/x64/7za
+          rm -rf dist/squashfs-root
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glasswing-linux-${{ github.sha }}
+          path: |
+            dist/*.AppImage
+            dist/*.deb
           if-no-files-found: error
           retention-days: 14

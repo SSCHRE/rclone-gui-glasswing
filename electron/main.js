@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMoni
 const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
+const os = require("os");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
@@ -30,14 +31,12 @@ const SCREEN_MARGIN = 20;
 let contentChrome = { width: 16, height: 39 };
 
 function resolveAppIconPath() {
+  const formats = process.platform === "win32" ? ["icon.ico", "icon.png"] : ["icon.png"];
   const candidates = [
-    path.join(__dirname, "icons", "icon.ico"),
-    path.join(__dirname, "icons", "icon.png"),
-    path.join(__dirname, "..", "build", "icon.ico"),
-    path.join(__dirname, "..", "build", "icon.png"),
-    path.join(process.resourcesPath, "icon.ico"),
-    path.join(process.resourcesPath, "icon.png"),
-  ];
+    path.join(__dirname, "icons"),
+    path.join(__dirname, "..", "build"),
+    process.resourcesPath,
+  ].flatMap((dir) => formats.map((file) => path.join(dir, file)));
 
   for (const iconPath of candidates) {
     if (fsSync.existsSync(iconPath)) {
@@ -1175,7 +1174,70 @@ ipcMain.handle("open-mount", async (_event, remote) => {
   }
 });
 
+const LINUX_TERMINALS = [
+  ["x-terminal-emulator", ["-e"]],
+  ["gnome-terminal", ["--"]],
+  ["konsole", ["-e"]],
+  ["xfce4-terminal", ["-x"]],
+  ["mate-terminal", ["-x"]],
+  ["tilix", ["-e"]],
+  ["kitty", []],
+  ["alacritty", ["-e"]],
+  ["wezterm", ["start", "--"]],
+  ["foot", []],
+  ["xterm", ["-e"]],
+];
+
+function findOnPath(command) {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    const candidate = dir && path.join(dir, command);
+    if (candidate && fsSync.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function findLinuxTerminal() {
+  const preferred = process.env.TERMINAL && findOnPath(process.env.TERMINAL);
+  if (preferred) {
+    return [preferred, ["-e"]];
+  }
+  for (const [command, args] of LINUX_TERMINALS) {
+    const found = findOnPath(command);
+    if (found) {
+      return [found, args];
+    }
+  }
+  return null;
+}
+
+async function openRcloneConfigInLinuxTerminal() {
+  const terminal = findLinuxTerminal();
+  if (!terminal) {
+    throw new Error("Couldn't find a terminal app. Run \"rclone config\" in a terminal instead.");
+  }
+
+  const script = path.join(os.tmpdir(), "glasswing-rclone-config.sh");
+  await fs.writeFile(
+    script,
+    '#!/bin/sh\nrclone config\nprintf "\\nPress Enter to close this window."\nread _\n',
+    { mode: 0o755 },
+  );
+  await fs.chmod(script, 0o755);
+
+  const [command, args] = terminal;
+  const child = spawn(command, [...args, script], { detached: true, stdio: "ignore" });
+  child.on("error", () => {});
+  child.unref();
+}
+
 ipcMain.handle("open-rclone-config", async () => {
+  if (process.platform === "linux") {
+    await openRcloneConfigInLinuxTerminal();
+    return;
+  }
+
   if (process.platform === "win32") {
     const child = spawn("cmd.exe", ["/c", "start", "", "cmd", "/k", "rclone", "config"], {
       detached: true,
@@ -2439,17 +2501,67 @@ function shouldKeepRunning() {
 }
 
 function canOpenAtLogin() {
-  return app.isPackaged && process.platform === "win32";
+  return app.isPackaged && (process.platform === "win32" || process.platform === "linux");
 }
 
 function loginItemOptions() {
   return { path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: ["--hidden"] };
 }
 
+function getLinuxAutostartPath() {
+  return path.join(app.getPath("appData"), "autostart", "glasswing.desktop");
+}
+
+function quoteDesktopExecArg(value) {
+  return `"${value.replace(/([\\"`$])/g, "\\\\$1")}"`;
+}
+
+async function setLinuxAutostart(enabled) {
+  const file = getLinuxAutostartPath();
+  if (!enabled) {
+    await fs.rm(file, { force: true });
+    return;
+  }
+  const executable = process.env.APPIMAGE || process.execPath;
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(
+    file,
+    [
+      "[Desktop Entry]",
+      "Type=Application",
+      "Name=Glasswing",
+      "Comment=Runs scheduled rclone jobs in the background",
+      `Exec=${quoteDesktopExecArg(executable)} --hidden`,
+      "Terminal=false",
+      "X-GNOME-Autostart-enabled=true",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+function isOpenAtLogin() {
+  if (!canOpenAtLogin()) {
+    return false;
+  }
+  if (process.platform === "linux") {
+    return fsSync.existsSync(getLinuxAutostartPath());
+  }
+  return app.getLoginItemSettings(loginItemOptions()).openAtLogin;
+}
+
+async function setOpenAtLogin(enabled) {
+  if (process.platform === "linux") {
+    await setLinuxAutostart(enabled);
+    return;
+  }
+  app.setLoginItemSettings({ openAtLogin: enabled, ...loginItemOptions() });
+}
+
 function getScheduleSettings() {
   return {
     runInBackground: getRunInBackground(),
-    openAtLogin: canOpenAtLogin() && app.getLoginItemSettings(loginItemOptions()).openAtLogin,
+    openAtLogin: isOpenAtLogin(),
     canOpenAtLogin: canOpenAtLogin(),
   };
 }
@@ -2700,7 +2812,7 @@ ipcMain.handle("set-schedule-settings", async (_event, changes = {}) => {
     await saveAppSettings({ runInBackground: changes.runInBackground });
   }
   if (typeof changes.openAtLogin === "boolean" && canOpenAtLogin()) {
-    app.setLoginItemSettings({ openAtLogin: changes.openAtLogin, ...loginItemOptions() });
+    await setOpenAtLogin(changes.openAtLogin);
   }
   updateTray();
   return getScheduleSettings();

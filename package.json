@@ -10,7 +10,13 @@
     "build": "electron-builder --win portable nsis",
     "build:portable": "electron-builder --win portable",
     "build:installer": "electron-builder --win nsis",
-    "build:dir": "electron-builder --win dir"
+    "build:dir": "electron-builder --win dir",
+    "prebuild:linux": "npm run icons",
+    "build:linux": "electron-builder --linux AppImage deb",
+    "prebuild:appimage": "npm run icons",
+    "build:appimage": "electron-builder --linux AppImage",
+    "prebuild:deb": "npm run icons",
+    "build:deb": "electron-builder --linux deb"
   },
   "author": "",
   "license": "MIT",
@@ -59,21 +65,43 @@
       "installerHeaderIcon": "build/icon.ico",
       "runAfterFinish": false
     },
+    "linux": {
+      "icon": "build/icons",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "executableName": "glasswing",
+      "synopsis": "Desktop GUI for rclone",
+      "maintainer": "SSCHRE",
+      "artifactName": "Glasswing-${version}-${arch}.${ext}",
+      "desktop": {
+        "StartupWMClass": "rclone-glasswing-gui"
+      }
+    },
     "files": [
       "electron/**/*",
       "src/**/*",
       "build/icon.png",
       "build/icon.ico",
-      "node_modules/7zip-bin/**/*"
+      "node_modules/7zip-bin/**/*",
+      "!node_modules/7zip-bin/!(${os})/**",
+      "!node_modules/7zip-bin/**/*.sh"
     ],
     "asarUnpack": [
       "**/node_modules/7zip-bin/**"
-    ]
+    ],
+    "deb": {
+      "afterInstall": "build/linux/after-install.sh",
+      "afterRemove": "build/linux/after-remove.sh"
+    }
   },
   "allowScripts": {
     "electron@35.7.5": true
   },
   "dependencies": {
     "7zip-bin": "^5.2.0"
-  }
+  },
+  "homepage": "https://github.com/SSCHRE/rclone-gui-glasswing"
 }
