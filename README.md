@@ -116,7 +116,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [ ] Sync preview
 - [ ] Run/job history
 - [ ] Rclone serve
-- [ ] Search remote
+- [x] Search remote
 - [ ] Split screen browse
 - [ ] Rclone self update
 
