@@ -6,6 +6,7 @@ const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
 const scheduler = require("./scheduler");
+const remoteSearch = require("./remote-search");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -989,6 +990,36 @@ ipcMain.handle("list-remote-path", async (_event, remotePath) => {
 
   return { path: target, entries: mapped };
 });
+
+let activeRemoteSearch = null;
+
+function stopRemoteSearch() {
+  activeRemoteSearch?.kill();
+  activeRemoteSearch = null;
+}
+
+ipcMain.handle("search-remote", async (_event, { remotePath, query, token }) => {
+  stopRemoteSearch();
+  let child = null;
+  try {
+    const summary = await remoteSearch.searchRemote(normalizeRemoteBrowsePath(remotePath), query, {
+      onSpawn: (spawned) => {
+        child = spawned;
+        activeRemoteSearch = spawned;
+      },
+      onBatch: (items, scanned) => send("remote-search-results", { token, items, scanned }),
+    });
+    return { ok: true, ...summary };
+  } catch (error) {
+    return { ok: false, cancelled: Boolean(error.cancelled), message: error.message };
+  } finally {
+    if (activeRemoteSearch === child) {
+      activeRemoteSearch = null;
+    }
+  }
+});
+
+ipcMain.handle("cancel-remote-search", async () => stopRemoteSearch());
 
 ipcMain.handle("get-config-providers", async () => {
   const result = await runRclone(["config", "providers"]);
@@ -2722,6 +2753,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", (event) => {
   appQuitting = true;
   stopActiveJob();
+  stopRemoteSearch();
   stopPreviewServe();
   stopPreviewFetch();
   stopActiveUpload();

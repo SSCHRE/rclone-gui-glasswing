@@ -24,6 +24,13 @@ const remoteBrowser = {
   useDestBtn: document.getElementById("browse-use-dest"),
   deleteBtn: document.getElementById("browse-delete"),
   tableHead: document.querySelector(".browse-table thead"),
+  searchInput: document.getElementById("browse-search"),
+  searchGoBtn: document.getElementById("browse-search-go"),
+  searchBar: document.getElementById("browse-search-bar"),
+  searchSpinner: document.getElementById("browse-search-spinner"),
+  searchSummary: document.getElementById("browse-search-summary"),
+  searchStopBtn: document.getElementById("browse-search-stop"),
+  searchExitBtn: document.getElementById("browse-search-exit"),
 };
 
 const previewUi = {
@@ -73,6 +80,9 @@ let currentPreviewIndex = -1;
 let statusHideTimer = null;
 let previewToken = 0;
 let activePreviewToken = 0;
+let searchState = null;
+let searchToken = 0;
+let searchRenderQueued = false;
 
 function beginPreview() {
   activePreviewToken = ++previewToken;
@@ -492,6 +502,10 @@ function updateActionState() {
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
   remoteBrowser.remotePicker.disabled = loading;
+  if (remoteBrowser.searchInput) {
+    remoteBrowser.searchInput.disabled = !currentRemote;
+    updateSearchButton();
+  }
 
   if (!currentRemote) {
     remoteBrowser.selectionLabel.textContent = "Nothing selected";
@@ -584,8 +598,8 @@ function renderEntries({ animate = true } = {}) {
   } else if (loading) {
     remoteBrowser.empty.classList.add("hidden");
   } else if (sortedEntries.length === 0) {
-    remoteBrowser.empty.textContent = "This folder is empty.";
-    remoteBrowser.empty.classList.remove("hidden");
+    remoteBrowser.empty.textContent = searchEmptyText();
+    remoteBrowser.empty.classList.toggle("hidden", !remoteBrowser.empty.textContent);
   } else {
     remoteBrowser.empty.classList.add("hidden");
   }
@@ -609,8 +623,23 @@ function renderEntries({ animate = true } = {}) {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = "browse-entry-name";
-    name.textContent = entry.name;
+    if (searchState && entry.name.includes("/")) {
+      const slash = entry.name.lastIndexOf("/");
+      const label = document.createElement("span");
+      label.className = "browse-entry-label";
+      label.textContent = entry.name.slice(slash + 1);
+      const folder = document.createElement("span");
+      folder.className = "browse-entry-folder";
+      folder.textContent = entry.name.slice(0, slash);
+      name.append(label, folder);
+      name.title = entry.name;
+    } else {
+      name.textContent = entry.name;
+    }
     nameWrap.append(icon, name);
+    if (searchState) {
+      nameWrap.append(createGoToFolderButton(entry));
+    }
     nameCell.append(nameWrap);
 
     const sizeCell = document.createElement("td");
@@ -744,6 +773,7 @@ async function revalidateListing(path, token) {
 }
 
 async function loadListing(context = "") {
+  endSearchMode();
   if (!currentRemote || !window.rcloneGui?.listRemotePath) {
     entries = [];
     setLoading(false);
@@ -847,6 +877,7 @@ function resetBrowseHistory(remote, subPath = "") {
 }
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
+  endSearchMode();
   const targetSubPath = String(subPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
@@ -1927,7 +1958,11 @@ async function deleteSelectedFile() {
         message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
         type: "success",
       });
-      await loadListing("delete");
+      if (searchState) {
+        removeSearchResult(deletedRemotePath);
+      } else {
+        await loadListing("delete");
+      }
     } catch (error) {
       notify({
         title: "Delete failed",
@@ -1937,6 +1972,242 @@ async function deleteSelectedFile() {
     } finally {
       setLoading(false);
       updateActionState();
+    }
+  });
+}
+
+function matchCount(count) {
+  return `${count.toLocaleString()} ${count === 1 ? "match" : "matches"}`;
+}
+
+function searchEmptyText() {
+  if (!searchState) {
+    return "This folder is empty.";
+  }
+  if (searchState.running) {
+    return "Searching…";
+  }
+  if (searchState.error) {
+    return "";
+  }
+  return `Nothing named like “${searchState.query}” in this folder or its subfolders.`;
+}
+
+function renderSearchBar() {
+  const bar = remoteBrowser.searchBar;
+  if (!bar) {
+    return;
+  }
+  if (!searchState) {
+    bar.classList.add("hidden");
+    return;
+  }
+
+  const { query, running, scanned, limited, stopped, warning, error } = searchState;
+  const scope = currentPath().replace(/:$/, "");
+  let text;
+  if (error) {
+    text = `Search failed: ${error}`;
+  } else if (running) {
+    text = `Searching for “${query}” in ${scope} · ${matchCount(entries.length)} so far, ${scanned.toLocaleString()} items checked`;
+  } else {
+    text = `${matchCount(entries.length)} for “${query}” in ${scope}`;
+    if (limited) {
+      text += " · only the first 1,000 are shown, try a more specific search";
+    } else if (stopped) {
+      text += " · stopped early";
+    }
+    if (warning) {
+      text += ` · some folders couldn't be read: ${warning}`;
+    }
+  }
+
+  bar.classList.remove("hidden");
+  bar.classList.toggle("is-error", Boolean(error));
+  remoteBrowser.searchSpinner.classList.toggle("hidden", !running);
+  remoteBrowser.searchStopBtn.classList.toggle("hidden", !running);
+  remoteBrowser.searchSummary.textContent = text;
+}
+
+function queueSearchRender() {
+  if (searchRenderQueued) {
+    return;
+  }
+  searchRenderQueued = true;
+  requestAnimationFrame(() => {
+    searchRenderQueued = false;
+    if (searchState) {
+      renderEntries({ animate: false });
+      renderSearchBar();
+    }
+  });
+}
+
+function endSearchMode() {
+  if (!searchState) {
+    return false;
+  }
+  if (searchState.running) {
+    void window.rcloneGui.cancelRemoteSearch?.();
+  }
+  searchState = null;
+  searchToken += 1;
+  if (remoteBrowser.searchInput) {
+    remoteBrowser.searchInput.value = "";
+    updateSearchButton();
+  }
+  renderSearchBar();
+  return true;
+}
+
+function exitSearch() {
+  if (endSearchMode()) {
+    void loadListing("navigate");
+  }
+}
+
+async function startSearch() {
+  const query = remoteBrowser.searchInput.value.trim();
+  if (!currentRemote || !window.rcloneGui?.searchRemote) {
+    return;
+  }
+  if (!query) {
+    exitSearch();
+    return;
+  }
+
+  if (searchState?.running) {
+    void window.rcloneGui.cancelRemoteSearch();
+  }
+  const token = ++searchToken;
+  loadToken += 1;
+  loadingAbortController?.abort();
+  loadingAbortController = null;
+  setLoading(false);
+  searchState = { query, token, running: true, scanned: 0, limited: false, stopped: false, warning: "", error: "" };
+  entries = [];
+  selectedPath = null;
+  selectedIsDir = false;
+  selectedSize = null;
+  setStatus("");
+  renderEntries();
+  renderSearchBar();
+
+  const response = await window.rcloneGui.searchRemote({ remotePath: currentPath(), query, token });
+  if (!searchState || searchState.token !== token) {
+    return;
+  }
+  searchState.running = false;
+  if (response.ok) {
+    searchState.scanned = response.scanned;
+    searchState.limited = response.limited;
+    searchState.warning = response.warning || "";
+  } else if (response.cancelled) {
+    searchState.stopped = true;
+  } else {
+    searchState.error = response.message || "Unknown error.";
+  }
+  renderEntries({ animate: false });
+  renderSearchBar();
+}
+
+function createGoToFolderButton(entry) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "browse-goto-folder";
+  button.title = "Open the folder this is in";
+  button.setAttribute("aria-label", `Open the folder containing ${entry.name}`);
+  button.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M10 13h6m-2-2 2 2-2 2" /></svg>';
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void goToContainingFolder(entry);
+  });
+  button.addEventListener("dblclick", (event) => event.stopPropagation());
+  button.addEventListener("keydown", (event) => event.stopPropagation());
+  return button;
+}
+
+async function goToContainingFolder(entry) {
+  const itemSubPath = joinSubPath(currentSubPath, entry.name);
+  await navigateTo(parentSubPath(itemSubPath));
+  const itemPath = formatRemotePath(currentRemote, itemSubPath);
+  const target = entries.find((candidate) => formatRemotePath(currentRemote, joinSubPath(currentSubPath, candidate.name)) === itemPath);
+  if (!target) {
+    return;
+  }
+  selectEntry(target);
+  const row = [...remoteBrowser.entriesBody.querySelectorAll("tr")].find((candidate) => candidate.dataset.path === itemPath);
+  row?.scrollIntoView({ block: "center" });
+  row?.focus({ preventScroll: true });
+}
+
+function removeSearchResult(remotePath) {
+  entries = entries.filter((entry) => {
+    const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
+    return entryPath !== remotePath && !entryPath.startsWith(`${remotePath}/`);
+  });
+  selectedPath = null;
+  selectedIsDir = false;
+  selectedSize = null;
+  renderEntries({ animate: false });
+  renderSearchBar();
+}
+
+function updateSearchButton() {
+  if (remoteBrowser.searchGoBtn) {
+    remoteBrowser.searchGoBtn.disabled = !currentRemote || !remoteBrowser.searchInput.value.trim();
+  }
+}
+
+function bindSearch() {
+  const input = remoteBrowser.searchInput;
+  if (!input || !window.rcloneGui?.searchRemote) {
+    return;
+  }
+
+  input.addEventListener("input", updateSearchButton);
+  remoteBrowser.searchGoBtn?.addEventListener("click", () => void startSearch());
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void startSearch();
+    } else if (event.key === "Escape" && (searchState || input.value)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (searchState) {
+        exitSearch();
+      } else {
+        input.value = "";
+      }
+    }
+  });
+  input.addEventListener("search", () => {
+    if (!input.value && searchState) {
+      exitSearch();
+    }
+  });
+
+  remoteBrowser.searchStopBtn?.addEventListener("click", () => {
+    void window.rcloneGui.cancelRemoteSearch();
+  });
+  remoteBrowser.searchExitBtn?.addEventListener("click", exitSearch);
+
+  window.rcloneGui.onRemoteSearchResults(({ token, items, scanned }) => {
+    if (!searchState || token !== searchState.token) {
+      return;
+    }
+    entries.push(...items);
+    searchState.scanned = scanned;
+    queueSearchRender();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && isBrowseViewVisible() && !input.disabled) {
+      event.preventDefault();
+      input.focus();
+      input.select();
     }
   });
 }
@@ -2063,8 +2334,14 @@ function bindEvents() {
   });
 
   remoteBrowser.refreshBtn.addEventListener("click", () => {
-    void loadListing("refresh");
+    if (searchState) {
+      void startSearch();
+    } else {
+      void loadListing("refresh");
+    }
   });
+
+  bindSearch();
 
   if (remoteBrowser.loadingCancelBtn) {
     remoteBrowser.loadingCancelBtn.addEventListener("click", () => {
