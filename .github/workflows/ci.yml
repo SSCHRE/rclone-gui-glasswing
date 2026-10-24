@@ -41,6 +41,7 @@ jobs:
           node --check src/job-schedule.js
           node --check electron/scheduler.js
           node --check electron/remote-search.js
+          node --check src/theme.js
           node --check scripts/generate-icons.js
 
       - name: Generate icons

@@ -155,6 +155,8 @@ a:not(:disabled):hover {
 }
 
 .header {
+  position: relative;
+  z-index: 5;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -538,6 +540,82 @@ textarea {
 
 .popup-card .popup-actions .bwlimit-clear {
   margin-right: auto;
+}
+
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  padding: 0;
+}
+
+.theme-picker {
+  position: relative;
+  display: flex;
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+}
+
+.theme-menu .theme-menu-card {
+  position: static;
+  min-width: 210px;
+}
+
+.theme-swatch {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(120, 145, 180, 0.35);
+}
+
+.theme-swatch-glass {
+  background: linear-gradient(135deg, #8fd0ff 0%, #2f80ff 45%, #080b10 46%);
+}
+
+.theme-swatch-material {
+  background: linear-gradient(135deg, #0b57d0 0%, #0b57d0 45%, #ffffff 46%);
+}
+
+.theme-swatch-material-dark {
+  background: linear-gradient(135deg, #a8c7fa 0%, #a8c7fa 45%, #1e1f20 46%);
+}
+
+.theme-menu-check {
+  color: var(--accent);
+  font-weight: 700;
+  visibility: hidden;
+}
+
+.theme-menu-item[aria-checked="true"] .theme-menu-check {
+  visibility: visible;
+}
+
+.md-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0);
+  animation: mdRipple 0.5s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes mdRipple {
+  from {
+    opacity: 0.16;
+    transform: scale(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 .bwlimit-button {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, nativeTheme, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
@@ -95,6 +95,21 @@ function normalizeBwlimit(value) {
     throw new Error(`Invalid bandwidth limit "${text}".`);
   }
   return text;
+}
+
+const THEMES = {
+  glass: { background: "#080b10", nativeTheme: "dark" },
+  material: { background: "#f0f4f9", nativeTheme: "light" },
+  "material-dark": { background: "#131314", nativeTheme: "dark" },
+};
+
+function getTheme() {
+  const theme = getAppSettings().theme;
+  return Object.hasOwn(THEMES, theme) ? theme : "glass";
+}
+
+function applyNativeTheme(theme) {
+  nativeTheme.themeSource = THEMES[theme].nativeTheme;
 }
 
 function getBwlimit() {
@@ -493,6 +508,9 @@ function fitWindowToContent(window, { width, height } = {}, snap = false) {
 }
 
 function createWindow() {
+  const theme = getTheme();
+  applyNativeTheme(theme);
+
   const initialSize = getInitialContentSize();
   const icon = resolveAppIcon();
 
@@ -504,13 +522,14 @@ function createWindow() {
     useContentSize: true,
     center: true,
     show: false,
-    backgroundColor: "#080b10",
-icon,
+    backgroundColor: THEMES[theme].background,
+    icon,
     title: "Glasswing",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      additionalArguments: [`--glasswing-theme=${theme}`],
     },
   });
 
@@ -1126,6 +1145,16 @@ function sendMountsChanged(event = null) {
 ipcMain.handle("get-mount-status", async () => mounts.getStatus());
 
 ipcMain.handle("get-bwlimit", async () => getBwlimit());
+
+ipcMain.handle("set-theme", async (event, theme) => {
+  if (!Object.hasOwn(THEMES, theme)) {
+    throw new Error(`Unknown theme "${theme}".`);
+  }
+  await saveAppSettings({ theme });
+  applyNativeTheme(theme);
+  BrowserWindow.fromWebContents(event.sender)?.setBackgroundColor(THEMES[theme].background);
+  return theme;
+});
 
 ipcMain.handle("set-bwlimit", async (_event, value) => {
   const bwlimit = normalizeBwlimit(value);

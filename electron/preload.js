@@ -1,7 +1,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+const themeArg = process.argv.find((arg) => arg.startsWith("--glasswing-theme="));
+
 contextBridge.exposeInMainWorld("rcloneGui", {
   platform: process.platform,
+  initialTheme: themeArg ? themeArg.slice("--glasswing-theme=".length) : "glass",
+  setTheme: (theme) => ipcRenderer.invoke("set-theme", theme),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   openReleasePage: (url) => ipcRenderer.invoke("open-release-page", url),
