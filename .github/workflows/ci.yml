@@ -81,7 +81,7 @@ jobs:
           fi
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: glasswing-windows-${{ github.sha }}
           path: dist/
@@ -128,7 +128,7 @@ jobs:
           rm -rf dist/squashfs-root
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: glasswing-linux-${{ github.sha }}
           path: |
