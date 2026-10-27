@@ -741,6 +741,7 @@ function getRemoteEntriesFromDump(config) {
     .map(([name, settings]) => ({
       name,
       type: settings?.type || "unknown",
+      ...(settings?.type === "crypt" && settings.remote ? { backing: settings.remote } : {}),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -1110,6 +1111,130 @@ ipcMain.handle("create-remote", async (_event, payload) => {
   }
 
   return readRemoteEntries();
+});
+
+const REMOTE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const ENCRYPTED_NAME_PATTERN = /^[0-9a-v]{16,}$/;
+
+function cleanRcloneError(stderr, fallback) {
+  const lines = String(stderr || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\s+(?:ERROR|NOTICE|CRITICAL)\s*:\s*/, "").trim())
+    .filter(Boolean);
+  return lines[lines.length - 1] || fallback;
+}
+
+async function resolveVaultTarget(payload) {
+  const folder = String(payload?.folder || "").trim();
+  if (payload?.local) {
+    if (!folder || !path.isAbsolute(folder)) {
+      throw new Error("Pick a folder on this computer for the vault.");
+    }
+    return path.resolve(folder);
+  }
+
+  const remote = String(payload?.remote || "").trim();
+  if (!remote || !(await listRemoteNames()).includes(remote)) {
+    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
+  }
+  const cleanFolder = folder.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (cleanFolder.split("/").some((part) => part === "..")) {
+    throw new Error("The folder can't contain \"..\".");
+  }
+  return `${remote}:${cleanFolder}`;
+}
+
+async function obscureSecret(secret) {
+  const result = await runRclone(["obscure", "-"], {
+    timeoutMs: 15000,
+    onSpawn: (child) => child.stdin.end(secret),
+  });
+  if (result.code !== 0 || !result.stdout.trim()) {
+    throw new Error("Couldn't prepare the password for rclone.");
+  }
+  return result.stdout.trim();
+}
+
+async function inspectVaultTarget(target) {
+  const result = await runRclone(["lsjson", target, "--max-depth", "1"], { timeoutMs: 60000 });
+  if (result.code !== 0) {
+    if (/directory not found|not found|doesn't exist|does not exist|cannot find/i.test(result.stderr)) {
+      return { target, state: "missing", count: 0, looksLikeVault: false };
+    }
+    throw new Error(cleanRcloneError(result.stderr, `Couldn't look inside "${target}".`));
+  }
+  const entries = JSON.parse(result.stdout.trim() || "[]");
+  const names = entries.map((entry) => entry.Name || "").filter(Boolean);
+  return {
+    target,
+    state: names.length ? "files" : "empty",
+    count: names.length,
+    looksLikeVault: names.length > 0 && names.every((name) => ENCRYPTED_NAME_PATTERN.test(name)),
+  };
+}
+
+ipcMain.handle("inspect-vault-target", async (_event, payload) => inspectVaultTarget(await resolveVaultTarget(payload)));
+
+ipcMain.handle("create-vault", async (_event, payload) => {
+  const name = String(payload?.name || "").trim();
+  const password = String(payload?.password || "");
+  const password2 = String(payload?.password2 || "");
+
+  if (!REMOTE_NAME_PATTERN.test(name)) {
+    throw new Error("The vault name must start with a letter or number and only use letters, numbers, _ or -.");
+  }
+  if ((await listRemoteNames()).includes(name)) {
+    throw new Error(`There's already a remote called "${name}".`);
+  }
+  if (password.length < 8) {
+    throw new Error("The password needs at least 8 characters.");
+  }
+
+  const target = await resolveVaultTarget(payload);
+  const before = await inspectVaultTarget(target);
+  const hideNames = payload?.hideNames !== false;
+  const args = [
+    "config",
+    "create",
+    name,
+    "crypt",
+    `remote=${target}`,
+    `password=${await obscureSecret(password)}`,
+    `filename_encryption=${hideNames ? "standard" : "off"}`,
+    `directory_name_encryption=${hideNames ? "true" : "false"}`,
+  ];
+  if (password2) {
+    args.push(`password2=${await obscureSecret(password2)}`);
+  }
+  args.push("--no-obscure", "--non-interactive");
+
+  const created = await runRclone(args, { timeoutMs: 30000 });
+  if (created.code !== 0) {
+    throw new Error(cleanRcloneError(created.stderr, "Couldn't create the vault."));
+  }
+
+  const undo = async (message) => {
+    await runRclone(["config", "delete", name], { timeoutMs: 15000 }).catch(() => {});
+    throw new Error(message);
+  };
+
+  if (before.state === "files") {
+    const opened = await runRclone(["lsjson", `${name}:`, "--max-depth", "1"], { timeoutMs: 60000 });
+    if (opened.code !== 0) {
+      await undo(cleanRcloneError(opened.stderr, "Couldn't open the vault."));
+    }
+    const visible = JSON.parse(opened.stdout.trim() || "[]").length;
+    if (before.looksLikeVault && visible === 0) {
+      await undo("Those passwords don't unlock this vault. Check both passwords and the file name setting, they have to match what you used before.");
+    }
+  } else {
+    const made = await runRclone(["mkdir", `${name}:`], { timeoutMs: 120000 });
+    if (made.code !== 0) {
+      await undo(cleanRcloneError(made.stderr, "Couldn't create the vault folder."));
+    }
+  }
+
+  return { name, target, entries: await readRemoteEntries() };
 });
 
 ipcMain.handle("authorize-provider", async (_event, provider) => {

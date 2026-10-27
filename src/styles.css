@@ -3907,6 +3907,33 @@ button:disabled {
   margin: 0;
   border: 1px dashed rgba(147, 161, 182, 0.18);
   border-radius: var(--radius-md);
+.remote-list-toolbar .remote-vault-btn {
+  grid-column: 1 / -1;
+}
+
+.remote-panel-vault {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vault-title {
+  margin: 0;
+}
+
+.vault-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+}
+
+.vault-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
   font-size: 0.84rem;
 }
@@ -3921,4 +3948,235 @@ button:disabled {
 
 .speed-axis.is-empty {
   visibility: hidden;
+.vault-step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.vault-step.is-active {
+  color: var(--text);
+}
+
+.vault-step.is-active .vault-step-number {
+  border-color: var(--accent);
+  background: rgba(92, 176, 255, 0.16);
+  color: var(--accent-strong);
+}
+
+.vault-step.is-done .vault-step-number {
+  border-color: rgba(115, 224, 163, 0.4);
+  color: var(--success);
+}
+
+.vault-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.vault-field {
+  margin: 0;
+}
+
+.vault-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.vault-hint:empty {
+  display: none;
+}
+
+.vault-hint.is-bad {
+  color: var(--danger);
+}
+
+.vault-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.vault-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vault-input-row .secondary {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.vault-input-row input[readonly] {
+  cursor: pointer;
+}
+
+.vault-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.vault-strength-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  width: 140px;
+}
+
+.vault-strength-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(147, 161, 182, 0.18);
+}
+
+.vault-strength[data-score="1"] .vault-strength-bar:nth-child(-n + 1) {
+  background: var(--danger);
+}
+
+.vault-strength[data-score="2"] .vault-strength-bar:nth-child(-n + 2) {
+  background: var(--warning);
+}
+
+.vault-strength[data-score="3"] .vault-strength-bar:nth-child(-n + 3),
+.vault-strength[data-score="4"] .vault-strength-bar {
+  background: var(--success);
+}
+
+.vault-strength-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.vault-more {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.vault-more summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.vault-more[open] summary {
+  margin-bottom: 12px;
+}
+
+.vault-more .vault-check {
+  margin-top: 14px;
+}
+
+.vault-note {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 176, 255, 0.18);
+  background: rgba(92, 176, 255, 0.06);
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.vault-note.is-good {
+  border-color: rgba(115, 224, 163, 0.24);
+  background: rgba(115, 224, 163, 0.06);
+}
+
+.vault-note.is-warn {
+  border-color: rgba(255, 217, 120, 0.28);
+  background: rgba(255, 217, 120, 0.06);
+}
+
+.vault-note.is-bad {
+  border-color: rgba(255, 123, 123, 0.3);
+  background: rgba(255, 123, 123, 0.06);
+}
+
+.vault-summary {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 145, 180, 0.12);
+  background: rgba(4, 6, 10, 0.5);
+}
+
+.vault-summary-row {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) 1fr;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.vault-summary-row dt {
+  color: var(--muted);
+}
+
+.vault-summary-row dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.vault-nav {
+  margin-top: 4px;
+}
+
+.vault-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0 6px;
+  text-align: center;
+}
+
+.vault-done .vault-intro {
+  max-width: 420px;
+}
+
+.vault-done-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  font-size: 1.8rem;
+  background: rgba(115, 224, 163, 0.08);
+  border: 1px solid rgba(115, 224, 163, 0.24);
+}
+
+.vault-done-actions {
+  justify-content: center;
+}
+
+.browse-vault-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--success);
+  background: rgba(115, 224, 163, 0.1);
+  border: 1px solid rgba(115, 224, 163, 0.24);
+  cursor: default;
+  white-space: nowrap;
 }

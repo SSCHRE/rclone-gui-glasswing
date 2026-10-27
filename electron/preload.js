@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   getRemoteRedacted: (name) => ipcRenderer.invoke("get-remote-redacted", name),
   deleteRemote: (name) => ipcRenderer.invoke("delete-remote", name),
   createRemote: (payload) => ipcRenderer.invoke("create-remote", payload),
+  inspectVaultTarget: (payload) => ipcRenderer.invoke("inspect-vault-target", payload),
+  createVault: (payload) => ipcRenderer.invoke("create-vault", payload),
   authorizeProvider: (provider) => ipcRenderer.invoke("authorize-provider", provider),
   reconnectRemote: (name) => ipcRenderer.invoke("reconnect-remote", name),
   openRcloneConfig: () => ipcRenderer.invoke("open-rclone-config"),
