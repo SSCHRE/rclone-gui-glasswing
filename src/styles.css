@@ -3907,6 +3907,22 @@ button:disabled {
   margin: 0;
   border: 1px dashed rgba(147, 161, 182, 0.18);
   border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.speed-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-axis.is-empty {
+  visibility: hidden;
+}
+
 .remote-list-toolbar .remote-vault-btn {
   grid-column: 1 / -1;
 }
@@ -3938,16 +3954,6 @@ button:disabled {
   font-size: 0.84rem;
 }
 
-.speed-axis {
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.speed-axis.is-empty {
-  visibility: hidden;
 .vault-step-number {
   display: inline-grid;
   place-items: center;
