@@ -34,6 +34,7 @@ jobs:
           node --check electron/mounts.js
           node --check src/renderer.js
           node --check src/job-output.js
+          node --check src/speed-graph.js
           node --check src/remote-manager.js
           node --check src/remote-browser.js
           node --check src/transfer-panel.js
