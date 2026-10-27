@@ -35,6 +35,7 @@ jobs:
           node --check src/renderer.js
           node --check src/job-output.js
           node --check src/remote-manager.js
+          node --check src/vault-wizard.js
           node --check src/remote-browser.js
           node --check src/transfer-panel.js
           node --check src/bandwidth-settings.js

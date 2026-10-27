@@ -576,6 +576,7 @@
             <div class="remote-list-toolbar">
               <button id="remote-add-btn" type="button" class="primary">Add remote</button>
               <button id="remote-refresh-btn" type="button" class="secondary">Refresh</button>
+              <button id="remote-vault-btn" type="button" class="secondary remote-vault-btn">New private vault</button>
             </div>
             <ul id="remote-list" class="remote-list"></ul>
             <p id="remote-list-empty" class="remote-list-empty hidden">No remotes configured yet.</p>
@@ -631,6 +632,8 @@
               </section>
               <pre id="remote-detail-config" class="remote-config-block"></pre>
             </div>
+
+            <div id="remote-panel-vault" class="remote-panel-add remote-panel-vault hidden"></div>
 
             <div id="remote-panel-add" class="remote-panel-add hidden">
               <h3 class="remote-add-title">Add remote</h3>
@@ -720,6 +723,7 @@
       </div>
     </div>
     <script src="job-output.js"></script>
+    <script src="vault-wizard.js"></script>
     <script src="remote-manager.js"></script>
     <script src="transfer-panel.js"></script>
     <script src="remote-browser.js"></script>
