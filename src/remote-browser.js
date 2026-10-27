@@ -56,6 +56,8 @@ const previewUi = {
 const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".7z", ".jpg", ".jpeg", ".png"]);
 
 let browseRemotes = [];
+let vaultBacking = new Map();
+let vaultLookup = 0;
 let currentRemote = "";
 let currentSubPath = "";
 let entries = [];
@@ -567,6 +569,10 @@ function renderBreadcrumbs() {
     });
     remoteBrowser.breadcrumbs.appendChild(crumb);
   }
+
+  if (vaultBacking.has(currentRemote)) {
+    remoteBrowser.breadcrumbs.appendChild(vaultBadge(currentRemote));
+  }
 }
 
 function selectEntry(entry) {
@@ -964,9 +970,9 @@ function fillRemotePicker() {
   for (const remote of browseRemotes) {
     const option = document.createElement("option");
     option.value = remote;
-    option.textContent = remote;
     remoteBrowser.remotePicker.appendChild(option);
   }
+  labelRemoteOptions();
 
   if (browseRemotes.includes(previous)) {
     remoteBrowser.remotePicker.value = previous;
@@ -990,6 +996,44 @@ function fillRemotePicker() {
 function setRemotes(names) {
   browseRemotes = Array.isArray(names) ? [...names] : [];
   fillRemotePicker();
+  void refreshVaults();
+}
+
+function labelRemoteOptions() {
+  for (const option of remoteBrowser.remotePicker.options) {
+    if (option.value) {
+      option.textContent = vaultBacking.has(option.value) ? `${option.value} 🔒` : option.value;
+    }
+  }
+}
+
+async function refreshVaults() {
+  const lookup = ++vaultLookup;
+  let entries = [];
+  try {
+    entries = (await window.rcloneGui?.listRemoteEntries?.()) || [];
+  } catch {
+    return;
+  }
+  if (lookup !== vaultLookup) {
+    return;
+  }
+  vaultBacking = new Map(entries.filter((entry) => entry.type === "crypt").map((entry) => [entry.name, entry.backing || ""]));
+  labelRemoteOptions();
+  renderBreadcrumbs();
+}
+
+function vaultBadge(remote) {
+  const badge = document.createElement("span");
+  badge.className = "browse-vault-badge";
+  const backing = vaultBacking.get(remote);
+  badge.title = backing
+    ? `Files here are encrypted on this PC before they're stored in ${backing}`
+    : "Files here are encrypted on this PC before they're stored";
+  badge.innerHTML =
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>';
+  badge.append(document.createTextNode("Encrypted vault"));
+  return badge;
 }
 
 async function copyActivePath() {

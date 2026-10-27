@@ -1042,6 +1042,14 @@ elements.manageRemotes?.addEventListener("click", () => {
       window.RemoteBrowser?.setRemotes(remotes);
       window.StorageView?.setRemotes(remotes);
     },
+    onBrowse: (name) => {
+      setAppMode("browse");
+      const picker = document.getElementById("browse-remote-picker");
+      if (picker && [...picker.options].some((option) => option.value === name)) {
+        picker.value = name;
+        picker.dispatchEvent(new Event("change"));
+      }
+    },
   });
 });
 elements.popupClose.addEventListener("click", hidePopup);
