@@ -33,6 +33,7 @@
         <nav class="mode-switch" role="tablist" aria-label="App mode">
           <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">Jobs</button>
           <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
+          <button id="mode-storage" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="storage">Storage</button>
         </nav>
         <div class="header-actions">
           <button id="bwlimit-button" type="button" class="secondary bwlimit-button" title="Bandwidth limit for all transfers">
@@ -102,6 +103,7 @@
                     <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
                     <button type="button" class="secondary" data-target="source">Browse</button>
                   </div>
+                  <div id="source-storage" class="field-storage"></div>
                 </label>
 
                 <label class="field">
@@ -110,6 +112,7 @@
                     <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
                     <button type="button" class="secondary" data-target="destination">Browse</button>
                   </div>
+                  <div id="destination-storage" class="field-storage"></div>
                 </label>
               </div>
             </details>
@@ -290,7 +293,10 @@
             </div>
           </div>
 
-          <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+          <div class="browse-location-row">
+            <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+            <div id="browse-storage" class="browse-storage"></div>
+          </div>
 
           <div id="browse-search-bar" class="browse-search-bar hidden" aria-live="polite">
             <span id="browse-search-spinner" class="browse-loading-spinner browse-search-spinner" aria-hidden="true"></span>
@@ -333,6 +339,35 @@
               <button id="browse-use-dest" type="button" class="secondary" disabled>Use as destination</button>
               <button id="browse-delete" type="button" class="danger" disabled>Delete</button>
             </div>
+          </div>
+        </section>
+      </main>
+      <main id="storage-view" class="layout storage-layout hidden" data-app-view="storage" hidden>
+        <section class="panel storage-panel">
+          <div class="storage-header">
+            <div>
+              <h2>Storage</h2>
+              <p id="storage-summary" class="storage-summary"></p>
+            </div>
+            <div class="storage-header-actions">
+              <label class="storage-sort">
+                <span>Sort</span>
+                <select id="storage-sort">
+                  <option value="name">Name</option>
+                  <option value="fullest">Fullest first</option>
+                  <option value="free">Most free space</option>
+                </select>
+              </label>
+              <button id="storage-refresh" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="storage-overview" class="storage-overview hidden"></div>
+          <h3 class="storage-section-title">Remotes</h3>
+          <div id="storage-grid" class="storage-grid"></div>
+          <p id="storage-empty" class="storage-empty hidden">No remotes configured yet. Add one with Manage remotes.</p>
+          <div id="storage-local" class="storage-local hidden">
+            <h3 class="storage-section-title">This PC</h3>
+            <div id="storage-local-grid" class="storage-grid"></div>
           </div>
         </section>
       </main>
@@ -722,9 +757,11 @@
     <script src="job-output.js"></script>
     <script src="remote-manager.js"></script>
     <script src="transfer-panel.js"></script>
+    <script src="storage-usage.js"></script>
     <script src="remote-browser.js"></script>
     <script src="bandwidth-settings.js"></script>
     <script src="job-schedule.js"></script>
+    <script src="storage-view.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

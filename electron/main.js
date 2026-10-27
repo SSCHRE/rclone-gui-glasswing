@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
+const { createStorageHistory } = require("./storage-history");
 const scheduler = require("./scheduler");
 const remoteSearch = require("./remote-search");
 
@@ -1254,6 +1255,108 @@ ipcMain.handle("open-rclone-config", async () => {
     windowsHide: false,
   });
   child.unref();
+});
+
+function describeAboutFailure(stderr) {
+  const lines = String(stderr || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const last = lines.pop() || "";
+  return last
+    .replace(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\s+/, "")
+    .replace(/^(NOTICE|ERROR|CRITICAL)\s*:\s*/, "")
+    .replace(/^Failed to about:\s*/, "")
+    .replace(/^about call failed:\s*/, "");
+}
+
+ipcMain.handle("get-remote-usage", async (_event, target) => {
+  const remote = String(target || "").trim();
+  if (!remote || remote.startsWith("-")) {
+    throw new Error("Remote name is required.");
+  }
+
+  let result;
+  try {
+    result = await runRclone(["about", /[:\\/]/.test(remote) ? remote : `${remote}:`, "--json"], { timeoutMs: 60000 });
+  } catch (error) {
+    return { remote, error: error.message || "rclone about failed." };
+  }
+
+  if (result.code !== 0) {
+    if (/doesn't support about/i.test(result.stderr)) {
+      return { remote, unsupported: true };
+    }
+    return { remote, error: describeAboutFailure(result.stderr) || `rclone about exited with code ${result.code}.` };
+  }
+
+  try {
+    const usage = JSON.parse(result.stdout);
+    const pick = (key) => (typeof usage[key] === "number" ? usage[key] : null);
+    const summary = {
+      remote,
+      total: pick("total"),
+      used: pick("used"),
+      free: pick("free"),
+      trashed: pick("trashed"),
+      other: pick("other"),
+      objects: pick("objects"),
+    };
+    const used = summary.used ?? (summary.total != null && summary.free != null ? summary.total - summary.free : null);
+    void getStorageHistory().record(remote, { used, total: summary.total }).catch(() => {});
+    return summary;
+  } catch {
+    return { remote, error: "Could not read the usage reported by rclone." };
+  }
+});
+
+let storageHistory = null;
+
+function getStorageHistory() {
+  if (!storageHistory) {
+    storageHistory = createStorageHistory({ directory: app.getPath("userData") });
+  }
+  return storageHistory;
+}
+
+ipcMain.handle("get-storage-history", async (_event, targets) =>
+  getStorageHistory().get(Array.isArray(targets) ? targets.map(String) : undefined),
+);
+
+ipcMain.handle("cleanup-remote", async (_event, name) => {
+  const remote = String(name || "").trim();
+  if (!remote || !(await listRemoteNames()).includes(remote)) {
+    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
+  }
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before emptying the trash.");
+  }
+
+  const result = await runRclone(["cleanup", `${remote}:`], { timeoutMs: 10 * 60 * 1000 });
+  if (result.code !== 0) {
+    if (/doesn't support cleanup|not supported/i.test(result.stderr)) {
+      throw new Error("This storage type can't empty its trash through rclone.");
+    }
+    throw new Error(describeAboutFailure(result.stderr) || "Emptying the trash failed.");
+  }
+  return true;
+});
+
+ipcMain.handle("list-local-drives", async () => {
+  if (process.platform !== "win32") {
+    return [{ target: "/", label: "/" }];
+  }
+  const mounted = new Set(mounts.listMounts().map((mount) => mount.mountPoint.toUpperCase()));
+  const drives = [];
+  for (let code = "C".charCodeAt(0); code <= "Z".charCodeAt(0); code += 1) {
+    const letter = String.fromCharCode(code);
+    if (mounted.has(`${letter}:`)) {
+      continue;
+    }
+    try {
+      if (fsSync.existsSync(`${letter}:\\`)) {
+        drives.push({ target: `${letter}:\\`, label: `${letter}:` });
+      }
+    } catch {}
+  }
+  return drives;
 });
 
 ipcMain.handle("get-config-file-path", async () => {

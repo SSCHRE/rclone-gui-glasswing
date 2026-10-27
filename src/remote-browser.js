@@ -523,7 +523,11 @@ function updateActionState() {
   remoteBrowser.selectionLabel.textContent = "Nothing selected";
 }
 
+const browseStorageSlot = document.getElementById("browse-storage");
+const browseMeter = browseStorageSlot && window.StorageMeter ? new window.StorageMeter(browseStorageSlot) : null;
+
 function renderBreadcrumbs() {
+  browseMeter?.setTarget(currentRemote ? `${currentRemote}:` : null);
   remoteBrowser.breadcrumbs.innerHTML = "";
 
   if (!currentRemote) {
@@ -1681,7 +1685,10 @@ const uploadPanel = new TransferPanel(transferStack, {
     return { completed: result.uploaded, failed: result.failed, cancelled: result.cancelled };
   },
   cancel: () => window.rcloneGui?.cancelUpload?.(),
-  onBatchFinished: (batch) => refreshAfterUpload(batch.targetPath),
+  onBatchFinished: (batch) => {
+    refreshAfterUpload(batch.targetPath);
+    browseMeter?.refresh();
+  },
 });
 
 const downloadPanel = new TransferPanel(transferStack, {
@@ -1958,6 +1965,7 @@ async function deleteSelectedFile() {
         message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
         type: "success",
       });
+      browseMeter?.refresh();
       if (searchState) {
         removeSearchResult(deletedRemotePath);
       } else {
