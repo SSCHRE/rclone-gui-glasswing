@@ -1019,6 +1019,193 @@
   & .context-menu-item-danger:hover {
     background: color-mix(in srgb, var(--md-error) 8%, transparent);
   }
+
+  & .speed-section {
+    border-color: var(--md-divider);
+    background: var(--md-surface-low);
+  }
+
+  & .speed-grid-line {
+    stroke: var(--md-outline-variant);
+  }
+
+  & .speed-area,
+  & .storage-trend-area {
+    fill: color-mix(in srgb, var(--md-primary) 14%, transparent);
+  }
+
+  & .speed-cursor {
+    background: color-mix(in srgb, var(--md-on-surface) 35%, transparent);
+  }
+
+  & .storage-trend-cursor {
+    stroke: color-mix(in srgb, var(--md-on-surface) 35%, transparent);
+  }
+
+  & .speed-dot {
+    border-color: var(--md-surface-low);
+    background: var(--md-primary);
+  }
+
+  & .storage-trend-dot {
+    fill: var(--md-primary);
+    stroke: var(--md-surface-low);
+  }
+
+  & .speed-tip,
+  & .storage-split-tip,
+  & .storage-trend-tip,
+  & .space-tip {
+    border: 0;
+    border-radius: 4px;
+    background: var(--md-inverse-surface);
+    color: var(--md-inverse-on-surface);
+    box-shadow: var(--md-elevation-2);
+  }
+
+  & .speed-empty,
+  & .filter-rule-empty {
+    border-color: var(--md-outline-variant);
+  }
+
+  & .vault-step-number {
+    border-color: var(--md-outline-variant);
+  }
+
+  & .vault-step.is-active .vault-step-number {
+    border-color: var(--md-primary);
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+  }
+
+  & .vault-step.is-done .vault-step-number {
+    border-color: transparent;
+    background: var(--md-success-container);
+    color: var(--md-on-success-container);
+  }
+
+  & .vault-strength-bar,
+  & .storage-bar,
+  & .storage-meter-bar,
+  & .space-row-meter,
+  & .space-types-empty {
+    background: var(--md-surface-highest);
+  }
+
+  & .vault-more,
+  & .vault-summary,
+  & .filter-rule,
+  & .filter-preview-tab {
+    border-color: var(--md-divider);
+    background: var(--md-surface-low);
+  }
+
+  & .vault-note {
+    border-color: transparent;
+    background: var(--md-secondary-container);
+    color: var(--md-on-secondary-container);
+  }
+
+  & .vault-note.is-good {
+    background: var(--md-success-container);
+    color: var(--md-on-success-container);
+  }
+
+  & .vault-note.is-warn,
+  & .space-warning {
+    border-color: transparent;
+    background: var(--md-warning-container);
+    color: var(--md-on-warning-container);
+  }
+
+  & .vault-note.is-bad,
+  & .filter-preview-error {
+    border-color: transparent;
+    background: var(--md-error-container);
+    color: var(--md-on-error-container);
+  }
+
+  & .vault-done-icon {
+    border-color: transparent;
+    background: var(--md-success-container);
+  }
+
+  & .browse-vault-badge {
+    border-color: transparent;
+    background: var(--md-success-container);
+    color: var(--md-on-success-container);
+  }
+
+  & .storage-card {
+    border-color: transparent;
+    background: var(--md-surface-low);
+  }
+
+  & .storage-split {
+    border-color: transparent;
+    background: var(--md-surface-low);
+  }
+
+  & .storage-bar.is-unknown .storage-bar-fill {
+    background: repeating-linear-gradient(135deg, var(--md-outline-variant) 0 8px, transparent 8px 16px);
+  }
+
+  & .storage-skel {
+    background: linear-gradient(90deg, var(--md-surface-high) 25%, var(--md-surface-highest) 50%, var(--md-surface-high) 75%);
+    background-size: 200% 100%;
+  }
+
+  & .mode-switch-btn.has-alert::after {
+    background: var(--md-error);
+    box-shadow: 0 0 0 2px var(--md-surface);
+  }
+
+  & .space-map {
+    background: var(--md-surface-low);
+  }
+
+  & .space-tile.is-rest {
+    color: var(--md-on-surface);
+    background: repeating-linear-gradient(135deg, var(--md-surface-highest) 0 6px, var(--md-surface-high) 6px 12px);
+  }
+
+  & .space-tile.is-hovered,
+  & .space-tile:hover {
+    box-shadow: inset 0 0 0 2px var(--md-on-surface);
+  }
+
+  & .space-row.is-hovered .space-row-main {
+    background: var(--md-state-hover);
+  }
+
+  & .space-row-fill {
+    background: var(--md-outline);
+  }
+
+  & .filters-summary-item {
+    border-color: transparent;
+    background: var(--md-secondary-container);
+    color: var(--md-on-secondary-container);
+  }
+
+  & .filter-preview-tab.is-active {
+    border-color: var(--md-primary);
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+  }
+
+  & .filter-preview-list {
+    border-color: var(--md-divider);
+    background: var(--md-surface-lowest);
+  }
+
+  & .filter-preview-item {
+    border-bottom-color: var(--md-divider);
+  }
+
+  & .filter-flags {
+    color: var(--md-primary);
+  }
 }
 
 :root[data-theme="material-dark"] {
