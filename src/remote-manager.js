@@ -22,6 +22,8 @@ const remoteManager = {
   panelEmpty: document.getElementById("remote-panel-empty"),
   panelDetail: document.getElementById("remote-panel-detail"),
   panelAdd: document.getElementById("remote-panel-add"),
+  panelVault: document.getElementById("remote-panel-vault"),
+  vaultBtn: document.getElementById("remote-vault-btn"),
   detailName: document.getElementById("remote-detail-name"),
   detailType: document.getElementById("remote-detail-type"),
   detailConfig: document.getElementById("remote-detail-config"),
@@ -58,6 +60,7 @@ let remoteEntries = [];
 let providers = [];
 let selectedRemoteName = null;
 let onRemotesChanged = null;
+let onBrowseRemote = null;
 let busy = false;
 let mountStatus = null;
 let mountError = "";
@@ -68,6 +71,7 @@ function setBusy(nextBusy) {
   const controls = [
     remoteManager.addBtn,
     remoteManager.refreshBtn,
+    remoteManager.vaultBtn,
     remoteManager.reconnectBtn,
     remoteManager.deleteBtn,
     remoteManager.createCancelBtn,
@@ -105,6 +109,10 @@ function showPanel(mode) {
   remoteManager.panelEmpty.classList.toggle("hidden", mode !== "empty");
   remoteManager.panelDetail.classList.toggle("hidden", mode !== "detail");
   remoteManager.panelAdd.classList.toggle("hidden", mode !== "add");
+  remoteManager.panelVault.classList.toggle("hidden", mode !== "vault");
+  if (mode !== "vault") {
+    window.VaultWizard?.reset();
+  }
 }
 
 function renderRemoteList() {
@@ -674,6 +682,8 @@ async function refreshRemotes({ keepSelection = true } = {}) {
       showPanel("empty");
     } else if (!remoteManager.panelAdd.classList.contains("hidden")) {
       showPanel("add");
+    } else if (!remoteManager.panelVault.classList.contains("hidden")) {
+      showPanel("vault");
     } else {
       selectedRemoteName = null;
       showPanel("empty");
@@ -699,12 +709,13 @@ function updateReconnectAvailability() {
   remoteManager.reconnectBtn.classList.toggle("hidden", !optionNeedsAuthorize(provider));
 }
 
-async function openRemoteManager({ onChanged } = {}) {
+async function openRemoteManager({ onChanged, onBrowse } = {}) {
   if (!window.rcloneGui) {
     return;
   }
 
   onRemotesChanged = onChanged || null;
+  onBrowseRemote = onBrowse || null;
   selectedRemoteName = null;
   showCreateError("");
   showPanel("empty");
@@ -736,6 +747,36 @@ function closeRemoteManager() {
   remoteManager.dialog.setAttribute("aria-hidden", "true");
   showCreateError("");
   selectedRemoteName = null;
+  window.VaultWizard?.reset();
+}
+
+function beginVault() {
+  if (!window.VaultWizard) {
+    return;
+  }
+  selectedRemoteName = null;
+  renderRemoteList();
+  showPanel("vault");
+  window.VaultWizard.begin({
+    container: remoteManager.panelVault,
+    remotes: remoteEntries,
+    onCancel: () => showPanel("empty"),
+    onCreated: async (result) => {
+      remoteEntries = result.entries;
+      renderRemoteList();
+      if (typeof onRemotesChanged === "function") {
+        await onRemotesChanged(remoteEntries.map((entry) => entry.name));
+      }
+    },
+    onOpen: (name) => {
+      showPanel("detail");
+      void selectRemote(name);
+    },
+    onBrowse: (name) => {
+      closeRemoteManager();
+      onBrowseRemote?.(name);
+    },
+  });
 }
 
 function beginAddRemote() {
@@ -855,6 +896,7 @@ async function reconnectSelectedRemote() {
 }
 
 remoteManager.addBtn.addEventListener("click", beginAddRemote);
+remoteManager.vaultBtn.addEventListener("click", beginVault);
 remoteManager.refreshBtn.addEventListener("click", () => {
   void refreshRemotes();
 });

@@ -1,13 +1,21 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+const themeArg = process.argv.find((arg) => arg.startsWith("--glasswing-theme="));
+
 contextBridge.exposeInMainWorld("rcloneGui", {
   platform: process.platform,
+  initialTheme: themeArg ? themeArg.slice("--glasswing-theme=".length) : "glass",
+  setTheme: (theme) => ipcRenderer.invoke("set-theme", theme),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   openReleasePage: (url) => ipcRenderer.invoke("open-release-page", url),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
   listRemotes: () => ipcRenderer.invoke("list-remotes"),
   listRemoteEntries: () => ipcRenderer.invoke("list-remote-entries"),
+  getRemoteUsage: (name) => ipcRenderer.invoke("get-remote-usage", name),
+  getStorageHistory: (targets) => ipcRenderer.invoke("get-storage-history", targets),
+  cleanupRemote: (name) => ipcRenderer.invoke("cleanup-remote", name),
+  listLocalDrives: () => ipcRenderer.invoke("list-local-drives"),
   listRemotePath: (remotePath) => ipcRenderer.invoke("list-remote-path", remotePath),
   searchRemote: (request) => ipcRenderer.invoke("search-remote", request),
   cancelRemoteSearch: () => ipcRenderer.invoke("cancel-remote-search"),
@@ -20,6 +28,8 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   getRemoteRedacted: (name) => ipcRenderer.invoke("get-remote-redacted", name),
   deleteRemote: (name) => ipcRenderer.invoke("delete-remote", name),
   createRemote: (payload) => ipcRenderer.invoke("create-remote", payload),
+  inspectVaultTarget: (payload) => ipcRenderer.invoke("inspect-vault-target", payload),
+  createVault: (payload) => ipcRenderer.invoke("create-vault", payload),
   authorizeProvider: (provider) => ipcRenderer.invoke("authorize-provider", provider),
   reconnectRemote: (name) => ipcRenderer.invoke("reconnect-remote", name),
   openRcloneConfig: () => ipcRenderer.invoke("open-rclone-config"),

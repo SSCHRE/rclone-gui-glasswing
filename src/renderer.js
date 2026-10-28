@@ -45,6 +45,7 @@ const elements = {
   checkForUpdates: document.getElementById("check-for-updates"),
   modeJobs: document.getElementById("mode-jobs"),
   modeBrowse: document.getElementById("mode-browse"),
+  modeStorage: document.getElementById("mode-storage"),
   jobsView: document.getElementById("jobs-view"),
   browseView: document.getElementById("browse-view"),
 
@@ -349,6 +350,7 @@ function applyJobToForm(entry, { fromSavedJob = false } = {}) {
   elements.resync.checked = false;
   elements.extraArgs.value = entry.extraArgs || "";
   elements.operation.dispatchEvent(new Event("change"));
+  updatePathMeters({ immediate: true });
 
   if (fromSavedJob) {
     elements.pathsCollapsible.open = true;
@@ -743,19 +745,60 @@ async function checkForUpdates() {
     });
   }
 }
+const STORAGE_METER_INPUT_DELAY_MS = 600;
+const pathMeters = window.StorageMeter
+  ? {
+      source: new window.StorageMeter(document.getElementById("source-storage")),
+      destination: new window.StorageMeter(document.getElementById("destination-storage")),
+    }
+  : null;
+let pathMeterTimer = null;
+
+function updatePathMeters({ immediate = false } = {}) {
+  if (!pathMeters) {
+    return;
+  }
+  clearTimeout(pathMeterTimer);
+  const apply = () => {
+    pathMeters.source.setTarget(window.StorageUsage.targetForPath(elements.source.value, remotes));
+    pathMeters.destination.setTarget(window.StorageUsage.targetForPath(elements.destination.value, remotes));
+  };
+  if (immediate) {
+    apply();
+  } else {
+    pathMeterTimer = setTimeout(apply, STORAGE_METER_INPUT_DELAY_MS);
+  }
+}
+
+function refreshPathMeters() {
+  pathMeters?.source.refresh();
+  pathMeters?.destination.refresh();
+}
+
 function setAppMode(mode) {
-  const nextMode = mode === "browse" ? "browse" : "jobs";
+  const nextMode = ["browse", "storage"].includes(mode) ? mode : "jobs";
   const browsing = nextMode === "browse";
 
-  elements.jobsView?.classList.toggle("hidden", browsing);
+  elements.jobsView?.classList.toggle("hidden", nextMode !== "jobs");
   if (elements.jobsView) {
-    elements.jobsView.hidden = browsing;
+    elements.jobsView.hidden = nextMode !== "jobs";
   }
 
-  elements.modeJobs?.classList.toggle("is-active", !browsing);
-  elements.modeBrowse?.classList.toggle("is-active", browsing);
-  elements.modeJobs?.setAttribute("aria-selected", String(!browsing));
-  elements.modeBrowse?.setAttribute("aria-selected", String(browsing));
+  for (const [button, buttonMode] of [
+    [elements.modeJobs, "jobs"],
+    [elements.modeBrowse, "browse"],
+    [elements.modeStorage, "storage"],
+  ]) {
+    button?.classList.toggle("is-active", nextMode === buttonMode);
+    button?.setAttribute("aria-selected", String(nextMode === buttonMode));
+  }
+
+  if (nextMode === "storage") {
+    window.StorageView?.setRemotes(remotes);
+    window.StorageView?.show();
+  } else {
+    window.StorageView?.hide();
+  }
 
   if (browsing) {
     // Re-sync in case remotes loaded while Browse was hidden, or init raced.
@@ -781,6 +824,7 @@ function useBrowsePath({ path, target }) {
 
   setAppMode("jobs");
   updateHistoryActions();
+  updatePathMeters({ immediate: true });
   showSnackbar({
     title: target === "destination" ? "Destination set" : "Source set",
     message: path,
@@ -803,7 +847,9 @@ async function loadRemotes({ showFeedback = false } = {}) {
   try {
     remotes = await window.rcloneGui.listRemotes();
     fillRemotePicker();
+    updatePathMeters({ immediate: true });
     window.RemoteBrowser?.setRemotes(remotes);
+    window.StorageView?.setRemotes(remotes);
 
     const countLabel = `${remotes.length} remote${remotes.length === 1 ? "" : "s"}`;
 
@@ -866,8 +912,10 @@ async function init() {
     } else {
       remotes = remotesResult.names;
       fillRemotePicker();
+      updatePathMeters({ immediate: true });
     }
     window.RemoteBrowser?.setRemotes(remotes);
+    window.StorageView?.setRemotes(remotes);
     elements.version.textContent = rcloneVersion;
     elements.operation.dispatchEvent(new Event("change"));
   } finally {
@@ -910,6 +958,8 @@ document.querySelectorAll("[data-target]").forEach((button) => {
 
       document.getElementById(targetId).value = folder;
 
+      updatePathMeters({ immediate: true });
+
     }
 
   });
@@ -933,6 +983,7 @@ document.getElementById("insert-remote-source").addEventListener("click", () => 
 
 
   elements.source.value = formatRemotePath(remote, elements.remotePath.value);
+  updatePathMeters({ immediate: true });
 
 });
 
@@ -953,6 +1004,7 @@ document.getElementById("insert-remote-dest").addEventListener("click", () => {
 
 
   elements.destination.value = formatRemotePath(remote, elements.remotePath.value);
+  updatePathMeters({ immediate: true });
 
 });
 
@@ -962,6 +1014,19 @@ elements.refreshRemotes.addEventListener("click", () => loadRemotes({ showFeedba
 
 elements.modeJobs?.addEventListener("click", () => setAppMode("jobs"));
 elements.modeBrowse?.addEventListener("click", () => setAppMode("browse"));
+elements.modeStorage?.addEventListener("click", () => setAppMode("storage"));
+
+window.StorageView?.setOptions({
+  notify: showSnackbar,
+  onBrowse: (name) => {
+    setAppMode("browse");
+    const picker = document.getElementById("browse-remote-picker");
+    if (picker && [...picker.options].some((option) => option.value === name)) {
+      picker.value = name;
+      picker.dispatchEvent(new Event("change"));
+    }
+  },
+});
 
 window.RemoteBrowser?.init({
   onUsePath: useBrowsePath,
@@ -973,7 +1038,17 @@ elements.manageRemotes?.addEventListener("click", () => {
     onChanged: async (names) => {
       remotes = names;
       fillRemotePicker();
+      updatePathMeters({ immediate: true });
       window.RemoteBrowser?.setRemotes(remotes);
+      window.StorageView?.setRemotes(remotes);
+    },
+    onBrowse: (name) => {
+      setAppMode("browse");
+      const picker = document.getElementById("browse-remote-picker");
+      if (picker && [...picker.options].some((option) => option.value === name)) {
+        picker.value = name;
+        picker.dispatchEvent(new Event("change"));
+      }
     },
   });
 });
@@ -989,6 +1064,11 @@ elements.updateOpen.addEventListener("click", () => {
 elements.popupRoot.querySelector("[data-popup-close]").addEventListener("click", hidePopup);
 
 elements.jobHistoryPicker.addEventListener("change", updateHistoryActions);
+
+for (const input of [elements.source, elements.destination]) {
+  input.addEventListener("input", () => updatePathMeters());
+  input.addEventListener("change", () => updatePathMeters({ immediate: true }));
+}
 
 for (const input of [
   elements.operation,
@@ -1235,6 +1315,7 @@ window.rcloneGui.onJobFinished(({ id, success, message, cancelled, needsResync }
   setRunning(false);
 
   outputPanel.finishJob({ success, message, cancelled });
+  refreshPathMeters();
 
   if (needsResync && elements.operation.value === "bisync") {
     elements.resync.checked = true;

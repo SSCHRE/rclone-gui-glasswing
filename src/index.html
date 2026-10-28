@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob: http://127.0.0.1:* http://localhost:*; frame-src 'self' blob:; img-src 'self' data: blob:" />
     <title>Glasswing</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="theme-material.css" />
   </head>
   <body>
     <div class="ambient-bg" aria-hidden="true"></div>
@@ -33,6 +35,7 @@
         <nav class="mode-switch" role="tablist" aria-label="App mode">
           <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">Jobs</button>
           <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
+          <button id="mode-storage" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="storage">Storage</button>
         </nav>
         <div class="header-actions">
           <button id="bwlimit-button" type="button" class="secondary bwlimit-button" title="Bandwidth limit for all transfers">
@@ -41,6 +44,33 @@
           </button>
           <button id="manage-remotes" type="button" class="secondary">Manage remotes</button>
           <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
+          <div class="theme-picker">
+            <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-label="Theme" aria-haspopup="menu" aria-expanded="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <div id="theme-menu" class="theme-menu hidden">
+              <div class="context-menu-card theme-menu-card" role="menu" aria-label="Theme">
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="glass">
+                  <span class="theme-swatch theme-swatch-glass" aria-hidden="true"></span>
+                  <span class="context-menu-label">Glass</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="material">
+                  <span class="theme-swatch theme-swatch-material" aria-hidden="true"></span>
+                  <span class="context-menu-label">Material</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="material-dark">
+                  <span class="theme-swatch theme-swatch-material-dark" aria-hidden="true"></span>
+                  <span class="context-menu-label">Material Dark</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -102,6 +132,7 @@
                     <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
                     <button type="button" class="secondary" data-target="source">Browse</button>
                   </div>
+                  <div id="source-storage" class="field-storage"></div>
                 </label>
 
                 <label class="field">
@@ -110,6 +141,7 @@
                     <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
                     <button type="button" class="secondary" data-target="destination">Browse</button>
                   </div>
+                  <div id="destination-storage" class="field-storage"></div>
                 </label>
               </div>
             </details>
@@ -224,6 +256,8 @@
               <p class="progress-detail" id="progress-detail">Waiting for stats…</p>
             </div>
 
+            <section class="speed-section" id="speed-section" aria-label="Transfer speed"></section>
+
             <div class="stat-grid">
               <div class="stat-card stat-card-speed">
                 <span class="stat-icon" aria-hidden="true">⚡</span>
@@ -290,7 +324,10 @@
             </div>
           </div>
 
-          <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+          <div class="browse-location-row">
+            <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+            <div id="browse-storage" class="browse-storage"></div>
+          </div>
 
           <div id="browse-search-bar" class="browse-search-bar hidden" aria-live="polite">
             <span id="browse-search-spinner" class="browse-loading-spinner browse-search-spinner" aria-hidden="true"></span>
@@ -333,6 +370,35 @@
               <button id="browse-use-dest" type="button" class="secondary" disabled>Use as destination</button>
               <button id="browse-delete" type="button" class="danger" disabled>Delete</button>
             </div>
+          </div>
+        </section>
+      </main>
+      <main id="storage-view" class="layout storage-layout hidden" data-app-view="storage" hidden>
+        <section class="panel storage-panel">
+          <div class="storage-header">
+            <div>
+              <h2>Storage</h2>
+              <p id="storage-summary" class="storage-summary"></p>
+            </div>
+            <div class="storage-header-actions">
+              <label class="storage-sort">
+                <span>Sort</span>
+                <select id="storage-sort">
+                  <option value="name">Name</option>
+                  <option value="fullest">Fullest first</option>
+                  <option value="free">Most free space</option>
+                </select>
+              </label>
+              <button id="storage-refresh" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="storage-overview" class="storage-overview hidden"></div>
+          <h3 class="storage-section-title">Remotes</h3>
+          <div id="storage-grid" class="storage-grid"></div>
+          <p id="storage-empty" class="storage-empty hidden">No remotes configured yet. Add one with Manage remotes.</p>
+          <div id="storage-local" class="storage-local hidden">
+            <h3 class="storage-section-title">This PC</h3>
+            <div id="storage-local-grid" class="storage-grid"></div>
           </div>
         </section>
       </main>
@@ -576,6 +642,7 @@
             <div class="remote-list-toolbar">
               <button id="remote-add-btn" type="button" class="primary">Add remote</button>
               <button id="remote-refresh-btn" type="button" class="secondary">Refresh</button>
+              <button id="remote-vault-btn" type="button" class="secondary remote-vault-btn">New private vault</button>
             </div>
             <ul id="remote-list" class="remote-list"></ul>
             <p id="remote-list-empty" class="remote-list-empty hidden">No remotes configured yet.</p>
@@ -631,6 +698,8 @@
               </section>
               <pre id="remote-detail-config" class="remote-config-block"></pre>
             </div>
+
+            <div id="remote-panel-vault" class="remote-panel-add remote-panel-vault hidden"></div>
 
             <div id="remote-panel-add" class="remote-panel-add hidden">
               <h3 class="remote-add-title">Add remote</h3>
@@ -719,12 +788,16 @@
         </div>
       </div>
     </div>
+    <script src="speed-graph.js"></script>
     <script src="job-output.js"></script>
+    <script src="vault-wizard.js"></script>
     <script src="remote-manager.js"></script>
     <script src="transfer-panel.js"></script>
+    <script src="storage-usage.js"></script>
     <script src="remote-browser.js"></script>
     <script src="bandwidth-settings.js"></script>
     <script src="job-schedule.js"></script>
+    <script src="storage-view.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

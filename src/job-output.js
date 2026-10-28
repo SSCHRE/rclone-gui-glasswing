@@ -86,6 +86,8 @@ class JobOutputPanel {
     this.statErrors = root.querySelector("#stat-errors");
     this.activityFeed = root.querySelector("#activity-feed");
     this.activityCount = root.querySelector("#activity-count");
+    const speedSection = root.querySelector("#speed-section");
+    this.speedGraph = speedSection && window.SpeedGraph ? new window.SpeedGraph(speedSection) : null;
 
     this.lineBuffer = "";
     this.rawText = "";
@@ -128,6 +130,7 @@ class JobOutputPanel {
     this.progressSection?.classList.remove("is-active");
     this.progressTrack.setAttribute("aria-valuenow", "0");
     this.jobMessage.textContent = "";
+    this.speedGraph?.reset();
   }
 
   setIdle() {
@@ -156,6 +159,7 @@ class JobOutputPanel {
   }
 
   finishJob({ success, message, cancelled }) {
+    this.speedGraph?.finish();
     this.progressSection?.classList.remove("is-active");
     this.jobBanner.classList.remove("is-running");
     this.jobBadge.classList.remove("running");
@@ -270,6 +274,7 @@ class JobOutputPanel {
     this.progressEta.textContent = !etaLabel || etaLabel === "-" ? "ETA —" : `ETA ${etaLabel}`;
     this.progressDetail.textContent = `${transferred} / ${total}`;
     this.statSpeed.textContent = speed;
+    this.speedGraph?.push(speed);
     this.statTransferred.textContent = transferred;
     this.jobMessage.textContent = timestamp
       ? `Last update ${timestamp.split(" ")[1]}`
