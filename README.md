@@ -18,6 +18,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Extra rclone flags**: append your own arguments (e.g. `--transfers 8 --filter "- *.tmp"`)
 - **Saved jobs**: save, load, update and remove jobs for quick re-use
 - **Stop job**: cancel a running transfer
+- **Schedule jobs**: Schedule saved jobs to be run at specific times
 
 ### Browse
 - **Remote browser**: navigate folders on any remote, sort by column, reload or cancel slow listings
@@ -26,12 +27,19 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Download, new folder and delete** directly on the remote
 - **Use as source / destination**: send the current path straight to the job form
 - **Listing cache**: recently visited folders open instantly
+- **Searching**: Search for files or folders in your rclone remote
 
 ### Remotes
 - **Remote manager**: add remotes (including browser sign-in for OAuth providers), reconnect expired tokens, view a redacted config, and delete remotes
 - **Quick insert remote**: drop `remote:path` into source or destination
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal
+- **Remote mounting**: Mount your rclone remote to as a system drive
+- **Storage overview**: Monitor your remote space/usage in 1 simple view
+- **Vault wizard**: Create an rclone crypt vault in the Remote manager
+
+### Other
+- **Bandwidth limit**: Set a bandwidth limit. Permanently or between specific hours.
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
