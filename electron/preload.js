@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   setTheme: (theme) => ipcRenderer.invoke("set-theme", theme),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  skipUpdateVersion: (version) => ipcRenderer.invoke("skip-update-version", version),
   openReleasePage: (url) => ipcRenderer.invoke("open-release-page", url),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
   listRemotes: () => ipcRenderer.invoke("list-remotes"),

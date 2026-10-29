@@ -837,6 +837,7 @@ ipcMain.handle("check-for-updates", async () => {
               currentVersion,
               latestVersion,
               hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+              skipped: getAppSettings().skippedUpdateVersion === latestVersion,
               releaseUrl: release.html_url,
               publishedAt: release.published_at,
             });
@@ -849,12 +850,25 @@ ipcMain.handle("check-for-updates", async () => {
       });
     });
 
+    req.setTimeout(15000, () => {
+      req.destroy(new Error("GitHub didn't answer in time"));
+    });
+
     req.on("error", (error) => {
       reject(error);
     });
 
     req.end();
   });
+});
+
+ipcMain.handle("skip-update-version", async (_event, version) => {
+  const text = String(version || "").trim();
+  if (!/^\d+(?:\.\d+)*(?:-[\w.]+)?$/.test(text)) {
+    throw new Error("That doesn't look like a version number.");
+  }
+  await saveAppSettings({ skippedUpdateVersion: text });
+  return true;
 });
 
 ipcMain.handle("set-minimum-content-size", async () => {
