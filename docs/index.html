@@ -1,0 +1,1649 @@
+<!doctype html>
+<html lang="en" data-theme="glass">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Glasswing – Free rclone GUI</title>
+  <meta name="description" content="Glasswing is a free, open-source rclone GUI for Windows and Linux. Sync, copy, browse, mount and encrypt Google Drive, OneDrive, Dropbox, S3 and 70+ other cloud storage providers without the command line." />
+  <link rel="canonical" href="https://sschre.github.io/rclone-gui-glasswing/" />
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <meta name="theme-color" content="#0b0f16" />
+
+  <script>
+    (function () {
+      var themes = ["glass", "material", "material-dark"];
+      var saved = null;
+      try {
+        saved = localStorage.getItem("glasswing-site-theme");
+      } catch (error) {}
+      if (themes.indexOf(saved) !== -1) {
+        document.documentElement.dataset.theme = saved;
+      }
+    })();
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Glasswing",
+    "alternateName": "Glasswing rclone GUI",
+    "description": "A free, open-source desktop GUI for rclone. Sync, copy, browse, mount and encrypt cloud storage like Google Drive, OneDrive, Dropbox and S3.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Windows, Linux",
+    "url": "https://sschre.github.io/rclone-gui-glasswing/",
+    "downloadUrl": "https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest",
+    "image": "https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg",
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is Glasswing free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Free and open source under the MIT license. No accounts, no pro version." } },
+      { "@type": "Question", "name": "Do I need rclone installed?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Glasswing is a GUI on top of rclone, it doesn't replace it. Install rclone from rclone.org first and make sure it's on your PATH." } },
+      { "@type": "Question", "name": "Does Glasswing store my passwords or tokens?", "acceptedAnswer": { "@type": "Answer", "text": "No. It reads your normal rclone config file on your own PC. Nothing gets collected or sent anywhere." } },
+      { "@type": "Question", "name": "Which cloud providers does it work with?", "acceptedAnswer": { "@type": "Answer", "text": "Anything rclone supports: Google Drive, OneDrive, Dropbox, Amazon S3, Backblaze B2, pCloud, Mega, SFTP, WebDAV and 70+ more." } },
+      { "@type": "Question", "name": "Is there a Mac version?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Windows and Linux for now, macOS is on the roadmap." } }
+    ]
+  }
+  </script>
+
+  <style>
+    :root,
+    :root[data-theme="glass"] {
+      color-scheme: dark;
+      --bg: #080b11;
+      --surface: rgba(18, 24, 34, 0.82);
+      --surface-solid: #121822;
+      --border: rgba(120, 145, 180, 0.16);
+      --text: #e6edf7;
+      --muted: #9aa8bd;
+      --accent: #5cb0ff;
+      --accent-strong: #8fd0ff;
+      --on-accent: #071322;
+      --accent-soft: rgba(92, 176, 255, 0.14);
+      --term-bg: #05070b;
+      --term-text: #c9d6e8;
+      --term-dim: #6f7f96;
+      --term-green: #73e0a3;
+      --radius-card: 18px;
+      --radius-button: 12px;
+      --font: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    :root[data-theme="material"] {
+      color-scheme: light;
+      --bg: #f0f4f9;
+      --surface: #ffffff;
+      --surface-solid: #ffffff;
+      --border: #c4c7c5;
+      --text: #1f1f1f;
+      --muted: #444746;
+      --accent: #0b57d0;
+      --accent-strong: #0b57d0;
+      --on-accent: #ffffff;
+      --accent-soft: #d3e3fd;
+      --term-bg: #1f1f1f;
+      --term-text: #e3e3e3;
+      --term-dim: #9aa0a6;
+      --term-green: #6dd58c;
+      --radius-card: 24px;
+      --radius-button: 999px;
+      --font: Roboto, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    }
+
+    :root[data-theme="material-dark"] {
+      color-scheme: dark;
+      --bg: #131314;
+      --surface: #1e1f20;
+      --surface-solid: #1e1f20;
+      --border: #444746;
+      --text: #e3e3e3;
+      --muted: #c4c7c5;
+      --accent: #a8c7fa;
+      --accent-strong: #a8c7fa;
+      --on-accent: #062e6f;
+      --accent-soft: #0842a0;
+      --term-bg: #0b0b0c;
+      --term-text: #e3e3e3;
+      --term-dim: #8e918f;
+      --term-green: #6dd58c;
+      --radius-card: 24px;
+      --radius-button: 999px;
+      --font: Roboto, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--text);
+      background: var(--bg);
+      font-family: var(--font);
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    :root[data-theme="glass"] body {
+      background:
+        radial-gradient(circle at 12% 0%, rgba(92, 176, 255, 0.18), transparent 34%),
+        radial-gradient(circle at 92% 6%, rgba(115, 224, 163, 0.08), transparent 28%),
+        linear-gradient(180deg, #0d1219 0%, var(--bg) 40%, #06080d 100%);
+      background-attachment: fixed;
+    }
+
+    a {
+      color: var(--accent-strong);
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+      font-size: 0.86em;
+    }
+
+    .wrap {
+      width: min(1120px, 100% - 32px);
+      margin-inline: auto;
+    }
+
+    .narrow {
+      width: min(720px, 100% - 32px);
+      margin-inline: auto;
+    }
+
+    .skip {
+      position: absolute;
+      left: -999px;
+    }
+
+    .skip:focus {
+      left: 16px;
+      top: 16px;
+      z-index: 10;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: var(--surface-solid);
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 86%, transparent);
+      backdrop-filter: blur(14px);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 64px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 0.95rem;
+    }
+
+    .nav-right > a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .nav-right > a:hover {
+      color: var(--text);
+    }
+
+    .theme-switch {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .theme-switch button {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 2px solid transparent;
+      border-radius: 50%;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .theme-switch button[aria-checked="true"] {
+      border-color: var(--accent);
+    }
+
+    .theme-switch button:focus-visible,
+    .theme-cards button:focus-visible,
+    .button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .swatch {
+      display: block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid rgba(120, 145, 180, 0.4);
+    }
+
+    .swatch-glass {
+      background: linear-gradient(135deg, #8fd0ff 0%, #2f80ff 45%, #080b10 46%);
+    }
+
+    .swatch-material {
+      background: linear-gradient(135deg, #0b57d0 0%, #0b57d0 45%, #ffffff 46%);
+    }
+
+    .swatch-material-dark {
+      background: linear-gradient(135deg, #a8c7fa 0%, #a8c7fa 45%, #1e1f20 46%);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 20px;
+      border-radius: var(--radius-button);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .button:hover {
+      filter: brightness(1.08);
+    }
+
+    .button.primary {
+      border-color: transparent;
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    :root[data-theme="glass"] .button.primary {
+      background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+      box-shadow: 0 10px 30px rgba(92, 176, 255, 0.25);
+    }
+
+    :root:not([data-theme="glass"]) .button:not(.primary) {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    .hero {
+      padding: 64px 0 12px;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .hero-top img {
+      width: 68px;
+      height: 68px;
+      border-radius: 17px;
+    }
+
+    :root[data-theme="glass"] .hero-top img {
+      box-shadow: 0 10px 34px rgba(47, 128, 255, 0.35);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-lead {
+      max-width: 640px;
+      margin: 0 0 8px;
+      font-size: 1.35rem;
+      line-height: 1.5;
+    }
+
+    .hero-lead strong {
+      color: var(--accent-strong);
+    }
+
+    .hero-sub {
+      max-width: 640px;
+      margin: 0 0 26px;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .actions small {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .shot {
+      margin: 0;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    :root[data-theme="glass"] .shot {
+      border-color: rgba(143, 208, 255, 0.18);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 60px rgba(92, 176, 255, 0.08);
+    }
+
+    :root[data-theme="material"] .shot {
+      border-color: transparent;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 8px 28px rgba(0, 0, 0, 0.1);
+    }
+
+    .hero-figure {
+      margin-top: 48px;
+    }
+
+    section {
+      padding: 60px 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+      line-height: 1.2;
+      letter-spacing: -0.015em;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+      line-height: 1.3;
+    }
+
+    p {
+      margin: 0 0 16px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .vs {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      align-items: center;
+      gap: 40px;
+    }
+
+    .terminal {
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--term-bg);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      transform: rotate(-0.8deg);
+    }
+
+    .terminal-bar {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .terminal-bar span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .terminal pre {
+      margin: 0;
+      padding: 16px 18px 20px;
+      overflow-x: auto;
+      color: var(--term-text);
+      font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+
+    .terminal .prompt {
+      color: var(--term-green);
+    }
+
+    .terminal .dim {
+      color: var(--term-dim);
+    }
+
+    .vs-text p {
+      color: var(--muted);
+    }
+
+    .note {
+      padding: 28px 30px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .note p:last-of-type {
+      margin-bottom: 0;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      align-items: center;
+      gap: 48px;
+    }
+
+    .split.reverse {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    }
+
+    .split.reverse > :first-child {
+      order: 2;
+    }
+
+    .split p {
+      color: var(--muted);
+    }
+
+    .tilt-left {
+      transform: rotate(-1.2deg);
+    }
+
+    .tilt-right {
+      transform: rotate(1.1deg);
+    }
+
+    .list {
+      margin: 0 0 16px;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .list li {
+      margin-bottom: 6px;
+    }
+
+    .list li::marker {
+      color: var(--accent);
+    }
+
+    .wide-shot {
+      transform: rotate(-0.4deg);
+    }
+
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 44px;
+      margin-top: 36px;
+    }
+
+    .cols p {
+      color: var(--muted);
+    }
+
+    .bits-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .bits-head h2 {
+      margin: 0;
+    }
+
+    .bits-nav {
+      display: flex;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .bits-nav button {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+
+    .bits-nav button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .bits-nav button:focus-visible,
+    .bits:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .bits {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(260px, 300px);
+      gap: 14px;
+      padding: 8px 2px 18px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      --fade-start: 0px;
+      --fade-end: 48px;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+    }
+
+    .bits.is-scrolled {
+      --fade-start: 48px;
+    }
+
+    .bits.at-end {
+      --fade-end: 0px;
+    }
+
+    .bits .bit {
+      scroll-snap-align: start;
+    }
+
+    @media (hover: hover) {
+      .bits {
+        cursor: grab;
+      }
+    }
+
+    .bits.is-dragging {
+      cursor: grabbing;
+      scroll-snap-type: none;
+      user-select: none;
+    }
+
+    .bits.is-dragging .bit {
+      pointer-events: none;
+    }
+
+    .bit {
+      padding: 20px 22px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    :root:not([data-theme="glass"]) .bit,
+    :root:not([data-theme="glass"]) .note,
+    :root:not([data-theme="glass"]) .theme-cards button {
+      border-color: transparent;
+    }
+
+    .bit h3 {
+      font-size: 1.05rem;
+    }
+
+    .bit p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .bit {
+      position: relative;
+      isolation: isolate;
+      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.25, 1), border-color 0.25s ease, box-shadow 0.3s ease, background-color 0.25s ease;
+    }
+
+    .bit::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      background: radial-gradient(260px circle at var(--spot-x, 50%) var(--spot-y, 0%), color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .bit h3 {
+      transition: color 0.2s ease;
+    }
+
+    @media (hover: hover) {
+      .bit:hover {
+        border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+        box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.35);
+      }
+
+      :root[data-theme="material"] .bit:hover {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 6px 14px -4px rgba(0, 0, 0, 0.14);
+      }
+
+      :root[data-theme="material-dark"] .bit:hover {
+        background-color: #262728;
+      }
+
+      .bit:hover::before {
+        opacity: 1;
+      }
+
+      .bit:hover h3 {
+        color: var(--accent-strong);
+      }
+    }
+
+    .theme-cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0 8px;
+    }
+
+    .theme-cards button {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .theme-cards button[aria-checked="true"] {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .theme-cards .swatch {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .theme-cards small {
+      display: block;
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 0.85rem;
+    }
+
+    .log {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-left: 2px solid var(--border);
+    }
+
+    .log li {
+      position: relative;
+      display: grid;
+      grid-template-columns: 92px 70px minmax(0, 1fr);
+      gap: 12px;
+      padding: 7px 0 7px 22px;
+    }
+
+    .log li::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      top: 15px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 2px solid var(--accent);
+    }
+
+    .log li:first-child::before {
+      background: var(--accent);
+    }
+
+    .log time {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .log a {
+      font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+      font-size: 0.86rem;
+      text-decoration: none;
+      line-height: 1.95;
+    }
+
+    .log-foot {
+      margin: 14px 0 0 22px;
+      font-size: 0.95rem;
+    }
+
+    .steps {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .steps li {
+      margin-bottom: 14px;
+      padding-left: 6px;
+    }
+
+    .steps li::marker {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .steps strong {
+      display: block;
+    }
+
+    .steps span {
+      color: var(--muted);
+    }
+
+    .not-yet {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .not-yet li {
+      margin-bottom: 6px;
+    }
+
+    details {
+      border-bottom: 1px solid var(--border);
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 16px 0;
+      font-weight: 600;
+    }
+
+    details p {
+      margin: -4px 0 18px;
+      color: var(--muted);
+    }
+
+    footer {
+      padding: 32px 0 48px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid var(--border);
+      padding-top: 22px;
+    }
+
+    footer a {
+      color: var(--muted);
+    }
+
+    .shot {
+      position: relative;
+      transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1), box-shadow 0.45s ease;
+    }
+
+    .shot img {
+      cursor: zoom-in;
+      transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.25, 1);
+    }
+
+    .shot::after {
+      content: "Click to enlarge";
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: rgba(5, 7, 11, 0.78);
+      color: #e6edf7;
+      font-size: 0.8rem;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.25, 1);
+    }
+
+    .shot:hover::after,
+    .shot:focus-within::after {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (hover: hover) {
+      .shot:hover {
+        box-shadow: 0 34px 80px rgba(0, 0, 0, 0.45);
+      }
+
+      :root[data-theme="glass"] .shot:hover {
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6), 0 0 80px rgba(92, 176, 255, 0.16);
+      }
+
+      :root[data-theme="material"] .shot:hover {
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16), 0 18px 44px rgba(0, 0, 0, 0.16);
+      }
+    }
+
+    @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+      .shot:hover {
+        transform: translateY(-6px);
+      }
+
+      .shot:hover img {
+        transform: scale(1.015);
+      }
+
+      .bit:hover {
+        transform: translateY(-4px);
+      }
+    }
+
+    .shot img:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: -3px;
+    }
+
+    @media (hover: none) {
+      .shot::after {
+        opacity: 0.9;
+        transform: none;
+      }
+    }
+
+    .lightbox {
+      width: min(1600px, 94vw);
+      max-width: none;
+      max-height: none;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      overflow: visible;
+    }
+
+    .lightbox::backdrop {
+      background: rgba(4, 6, 10, 0.86);
+      backdrop-filter: blur(4px);
+      animation: lightbox-fade 0.28s ease both;
+    }
+
+    .lightbox.is-closing::backdrop {
+      animation: lightbox-fade 0.24s ease reverse both;
+    }
+
+    @keyframes lightbox-fade {
+      from {
+        opacity: 0;
+      }
+    }
+
+    .lightbox p,
+    .lightbox-close {
+      transition: opacity 0.2s ease;
+    }
+
+    .lightbox.is-moving p,
+    .lightbox.is-moving .lightbox-close {
+      opacity: 0;
+    }
+
+    .shot img.is-lifted {
+      visibility: hidden;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .lightbox::backdrop,
+      .lightbox.is-closing::backdrop {
+        animation: none;
+      }
+    }
+
+    .lightbox img {
+      width: auto;
+      max-width: 100%;
+      margin: 0 auto;
+      max-height: calc(100vh - 110px);
+      border-radius: 12px;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+      cursor: zoom-out;
+    }
+
+    .lightbox p {
+      margin: 12px 0 0;
+      color: #c9d6e8;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: -16px;
+      right: -16px;
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      background: #121822;
+      color: #e6edf7;
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .lightbox-close:focus-visible {
+      outline: 2px solid #8fd0ff;
+      outline-offset: 2px;
+    }
+
+    @media (max-width: 860px) {
+      .lightbox-close {
+        top: -46px;
+        right: 0;
+      }
+
+      .split,
+      .split.reverse,
+      .vs,
+      .cols,
+      .theme-cards {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .split,
+      .vs {
+        gap: 26px;
+      }
+
+      .split.reverse > :first-child {
+        order: 0;
+      }
+
+      .nav-right > a:not(.button) {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 44px;
+      }
+
+      .log li {
+        grid-template-columns: 70px minmax(0, 1fr);
+      }
+
+      .log time {
+        grid-column: 1 / -1;
+        line-height: 1.2;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .nav-right .button {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <nav class="wrap nav" aria-label="Main">
+      <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="30" height="30" />Glasswing</a>
+      <div class="nav-right">
+        <a href="#what">What it does</a>
+        <a href="#changelog">Changelog</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/SSCHRE/rclone-gui-glasswing">GitHub</a>
+        <div class="theme-switch" role="radiogroup" aria-label="Site theme">
+          <button type="button" role="radio" aria-checked="true" data-theme-choice="glass" title="Glass"><span class="swatch swatch-glass" aria-hidden="true"></span><span class="sr-only">Glass</span></button>
+          <button type="button" role="radio" aria-checked="false" data-theme-choice="material" title="Material"><span class="swatch swatch-material" aria-hidden="true"></span><span class="sr-only">Material</span></button>
+          <button type="button" role="radio" aria-checked="false" data-theme-choice="material-dark" title="Material Dark"><span class="swatch swatch-material-dark" aria-hidden="true"></span><span class="sr-only">Material Dark</span></button>
+        </div>
+        <a class="button primary" href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">Download</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="wrap">
+        <div class="hero-top">
+          <img src="assets/icon.png" alt="Glasswing icon" width="68" height="68" />
+          <h1>Glasswing</h1>
+        </div>
+        <p class="hero-lead">A free <strong>rclone GUI</strong> for Windows and Linux.</p>
+        <p class="hero-sub">Sync, copy, browse, mount and encrypt (and much more) your Google Drive, OneDrive, Dropbox, S3 or whatever else rclone talks to. Without having to remember which flag does what.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">Download the latest release</a>
+          <a class="button" href="https://github.com/SSCHRE/rclone-gui-glasswing">Source on GitHub</a>
+          <small>MIT licensed · installer, portable, AppImage and .deb</small>
+        </div>
+        <div class="hero-figure">
+          <figure class="shot">
+            <img data-shot="jobs" src="assets/screenshots/jobs.jpg" width="2880" height="1800" alt="Glasswing running a sync job from photos:2024 to nas-backup:Photos/2024, with a progress bar, live transfer speed graph and stats" />
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap vs">
+        <div class="terminal" aria-label="The same sync typed out as an rclone command">
+          <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+<pre><span class="prompt">$</span> rclone sync photos:2024 nas-backup:Photos/2024 \
+    --bwlimit 24M --transfers 3 -P
+<span class="dim">Transferred:   240.957 MiB / 416 MiB, 58%, 24.116 MiB/s, ETA 7s
+Checks:              8 / 16, 50%
+Transferred:         6 / 16, 38%
+Elapsed time:      10.4s
+Transferring:
+ *  2024/Kyoto/VID_4170.mp4: 61% /70Mi, 8.1Mi/s, 3s</span></pre>
+        </div>
+        <div class="vs-text">
+          <h2>Same rclone, less typing</h2>
+          <p>That's the sync from the screenshot above, typed out by hand. It works great, until you need it again next week and can't remember if it was <code>--transfers 3</code> or 4, or whether you meant sync or copy.</p>
+          <p>Glasswing runs exactly that command for you (you can even see it before it runs), saves it, and can do it every night at 2am while you sleep.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="what">
+      <div class="narrow">
+        <h2>Run jobs and actually see what's happening</h2>
+        <p class="muted">Copy, sync, move or bisync between any two remotes (or a local folder). While it runs you get the percentage, ETA, a live speed graph and a feed of what's being transferred, instead of a wall of log lines.</p>
+        <ul class="list">
+          <li>Dry run first if you're not sure what a sync will delete</li>
+          <li>Save jobs you run often and schedule them, they keep running from the tray</li>
+          <li>Cap the bandwidth, all day or just during working hours</li>
+          <li>Your own rclone flags still work if you need them</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <figure class="shot wide-shot"><img data-shot="browse" src="assets/screenshots/browse.jpg" width="2880" height="1800" loading="lazy" alt="Browsing an encrypted vault called private, showing folders and documents with an Encrypted vault badge" /></figure>
+        <div class="cols">
+          <div>
+            <h3>Browse any remote like a normal folder</h3>
+            <p>Click through your cloud storage, search a whole remote, preview photos, PDFs, text, audio, video and even what's inside a zip or 7z. Drag files in to upload, download, make folders, delete. If you find the folder you want to back up, send it straight to a job.</p>
+          </div>
+          <div>
+            <h3>Private vaults for the sensitive stuff</h3>
+            <p>A little wizard sets up an rclone crypt remote for you: pick where it lives, set a password, done. Files get encrypted on your PC before they go up, file names included. In Glasswing it's just another remote, with a lock on it so you don't forget which one it is.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="split reverse">
+          <div>
+            <h2>Know when a remote is filling up</h2>
+            <p>The Storage tab shows used and free space for every remote in one place, plus how fast each one is growing. If something is on track to be full in a couple of months, it tells you, and the tab gets a little red dot when a remote hits 90%.</p>
+            <p>There's an "Empty trash" button for providers that keep deleted files around, which on Google Drive can be a surprising amount of space.</p>
+          </div>
+          <figure class="shot tilt-left"><img data-shot="storage" src="assets/screenshots/storage.jpg" width="2880" height="1800" loading="lazy" alt="Storage dashboard showing used and free space per remote, with a usage trend and a full-in-about estimate for each one" /></figure>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="bits-head">
+          <h2>And a bunch of smaller things</h2>
+          <div class="bits-nav">
+            <button type="button" data-bits-scroll="-1" aria-label="Previous cards">←</button>
+            <button type="button" data-bits-scroll="1" aria-label="Next cards">→</button>
+          </div>
+        </div>
+        <div class="bits" tabindex="0" role="region" aria-label="Smaller features, scrolls sideways">
+          <div class="bit">
+            <h3>Mount as a drive</h3>
+            <p>Give a remote a drive letter and use it from Explorer, with a choice of cache mode. Windows only for now, and rclone needs <a href="https://winfsp.dev/">WinFsp</a> for it.</p>
+          </div>
+          <div class="bit">
+            <h3>See the command first</h3>
+            <p>Before a job runs you see the exact rclone command it's about to execute. Approve it once and it won't ask again for that job.</p>
+          </div>
+          <div class="bit">
+            <h3>Missed a scheduled run?</h3>
+            <p>If your PC was off at 2am, the job runs when Glasswing is back. You get a notification when a scheduled job starts, finishes or fails.</p>
+          </div>
+          <div class="bit">
+            <h3>Folders open instantly</h3>
+            <p>Recently visited folders are cached, so going back and forth in Browse doesn't mean waiting on the provider every time.</p>
+          </div>
+          <div class="bit">
+            <h3>Expired sign-ins</h3>
+            <p>When a provider's token runs out, hit Reconnect instead of setting the remote up again. You can view a remote's config too, with the secrets hidden.</p>
+          </div>
+          <div class="bit">
+            <h3>Raw logs</h3>
+            <p>If wanted you can see the direct rclone commands running with the raw logs.</p>
+          </div>
+          <div class="bit">
+            <h3>Flip through previews</h3>
+            <p>Opened a photo? Use previous and next to go through the rest of the folder without closing the preview.</p>
+          </div>
+          <div class="bit">
+            <h3>Adding remotes</h3>
+            <p>Most providers just need a browser sign-in. The good old <code>rclone config</code> wizard is one click away if you prefer it.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="themes">
+      <div class="wrap">
+        <div class="split">
+          <div>
+            <h2>Three themes</h2>
+            <p>The default is Glass, the dark see-through look. If that's not your thing there's Material, in light and dark. Go ahead and try them, the screenshots on this page change to your selection.</p>
+            <div class="theme-cards" role="radiogroup" aria-label="Site theme">
+              <button type="button" role="radio" aria-checked="true" data-theme-choice="glass"><span class="swatch swatch-glass" aria-hidden="true"></span><span>Glass<small>The default</small></span></button>
+              <button type="button" role="radio" aria-checked="false" data-theme-choice="material"><span class="swatch swatch-material" aria-hidden="true"></span><span>Material<small>Light</small></span></button>
+              <button type="button" role="radio" aria-checked="false" data-theme-choice="material-dark"><span class="swatch swatch-material-dark" aria-hidden="true"></span><span>Material<small>Dark</small></span></button>
+            </div>
+          </div>
+          <figure class="shot tilt-right"><img data-shot="vault" src="assets/screenshots/vault.jpg" width="2880" height="1800" loading="lazy" alt="Remote manager showing the New private vault wizard" /></figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="changelog">
+      <div class="narrow">
+        <h2>What's been happening</h2>
+        <p class="muted">Glasswing gets updated a lot. Here are the last few releases:</p>
+        <ul class="log">
+          <li><time datetime="2026-10-29">Oct 29</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v3.0.1">v3.0.1</a><span>Checks for new versions on startup, and lets you skip one</span></li>
+          <li><time datetime="2026-10-28">Oct 28</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v3.0.0">v3.0.0</a><span>The big one: storage dashboard, private vaults, the live speed graph and the Material themes</span></li>
+          <li><time datetime="2026-10-24">Oct 24</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.9.0">v2.9.0</a><span>Search a whole remote from the Browse tab</span></li>
+          <li><time datetime="2026-10-23">Oct 23</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.8.1">v2.8.1</a><span>Linux builds, as an AppImage and a .deb</span></li>
+          <li><time datetime="2026-10-22">Oct 22</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.8.0">v2.8.0</a><span>Scheduled jobs</span></li>
+          <li><time datetime="2026-10-21">Oct 21</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.7.5">v2.7.5</a><span>Bandwidth limits, also on a timetable</span></li>
+          <li><time datetime="2026-10-19">Oct 19</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.7.0">v2.7.0</a><span>Bisync, and a preview of the rclone command before a job runs</span></li>
+          <li><time datetime="2026-10-17">Oct 17</time><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/tag/v2.5.0">v2.5.0</a><span>Mount a remote as a drive</span></li>
+        </ul>
+        <p class="log-foot"><a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases">All releases on GitHub →</a></p>
+      </div>
+    </section>
+
+    <section id="get-started">
+      <div class="narrow">
+        <h2>Getting started</h2>
+        <ol class="steps">
+          <li><strong>Install rclone</strong><span>Grab it from <a href="https://rclone.org/install/">rclone.org</a>. If <code>rclone version</code> works in a terminal you're good.</span></li>
+          <li><strong>Download Glasswing</strong><span>From the <a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">releases page</a>. There's an installer and a portable exe for Windows, and an AppImage and .deb for Linux.</span></li>
+          <li><strong>Add a remote (or don't)</strong><span>If you already use rclone, your remotes just show up. Otherwise open Manage remotes and add one.</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="narrow">
+        <h2>What it doesn't do (yet)</h2>
+        <p class="muted">Being honest here so you don't download it for the wrong reasons:</p>
+        <ul class="not-yet">
+          <li>No macOS build yet. It's on the list.</li>
+          <li>Mounting only works on Windows for now.</li>
+          <li>It doesn't install rclone for you, you need that first.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="faq">
+      <div class="narrow">
+        <h2>FAQ</h2>
+        <details>
+          <summary>Is Glasswing free?</summary>
+          <p>Yep. Fully available on GitHub.</p>
+        </details>
+        <details>
+          <summary>Do I need rclone installed?</summary>
+          <p>Yes. Glasswing basically wraps your local rclone instance. Install rclone from <a href="https://rclone.org/install/">rclone.org</a> first and make sure it's on your PATH/available from the terminal/cmd.</p>
+        </details>
+        <details>
+          <summary>Does it store any of my credentials?</summary>
+          <p>No. It fully relies on your local rclone installation/configuration. Even adding remotes or anything similar in Glasswing only uses your local rclone installation</p>
+        </details>
+        <details>
+          <summary>Which cloud providers does it work with?</summary>
+          <p>Anything rclone supports: Google Drive, OneDrive, Dropbox, Amazon S3, Backblaze B2, pCloud, Mega, SFTP, WebDAV and <a href="https://rclone.org/overview/">MANY MORE</a>.</p>
+        </details>
+        <details>
+          <summary>Can I use rclone without the command line?</summary>
+          <p>That's pretty much the whole point. Running jobs, browsing, adding remotes, mounting and setting up encryption all happen in the app. You can still add your own flags to a job when you need something specific.</p>
+        </details>
+        <details>
+          <summary>Which operating systems are supported?</summary>
+          <p>Currently Windows and Linux* are supported. MacOS is planned</p>
+          <i>* rclone mount is currently only only supported on windows.</i>
+        </details>
+        <details>
+          <summary>Found a bug or have an idea?</summary>
+          <p>Open an issue on <a href="https://github.com/SSCHRE/rclone-gui-glasswing/issues">GitHub</a>.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <span>Glasswing · MIT license · not affiliated with the rclone project</span>
+      <span><a href="https://github.com/SSCHRE/rclone-gui-glasswing">GitHub</a> · <a href="https://rclone.org/">rclone.org</a></span>
+    </div>
+  </footer>
+
+  <dialog id="lightbox" class="lightbox" aria-label="Enlarged screenshot">
+    <button type="button" class="lightbox-close" aria-label="Close">×</button>
+    <img id="lightbox-image" alt="" />
+    <p id="lightbox-caption"></p>
+  </dialog>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var colors = { glass: "#0b0f16", material: "#f0f4f9", "material-dark": "#131314" };
+      var suffix = { glass: "", material: "-material", "material-dark": "-material-dark" };
+      var meta = document.querySelector('meta[name="theme-color"]');
+
+      function apply(theme) {
+        root.dataset.theme = theme;
+        meta.setAttribute("content", colors[theme]);
+        document.querySelectorAll("[data-theme-choice]").forEach(function (button) {
+          button.setAttribute("aria-checked", String(button.dataset.themeChoice === theme));
+        });
+        document.querySelectorAll("img[data-shot]").forEach(function (img) {
+          img.src = "assets/screenshots/" + img.dataset.shot + suffix[theme] + ".jpg";
+        });
+      }
+
+      function choose(theme) {
+        try {
+          localStorage.setItem("glasswing-site-theme", theme);
+        } catch (error) {}
+        var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (document.startViewTransition && !reduced) {
+          document.startViewTransition(function () {
+            apply(theme);
+          });
+        } else {
+          apply(theme);
+        }
+      }
+
+      document.querySelectorAll("[data-theme-choice]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          choose(button.dataset.themeChoice);
+        });
+      });
+
+      document.querySelectorAll('[role="radiogroup"]').forEach(function (group) {
+        group.addEventListener("keydown", function (event) {
+          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+            return;
+          }
+          var buttons = Array.prototype.slice.call(group.querySelectorAll("[data-theme-choice]"));
+          var index = buttons.indexOf(document.activeElement);
+          if (index === -1) {
+            return;
+          }
+          event.preventDefault();
+          var next = buttons[(index + (event.key === "ArrowRight" ? 1 : buttons.length - 1)) % buttons.length];
+          next.focus();
+          choose(next.dataset.themeChoice);
+        });
+      });
+
+      var lightbox = document.getElementById("lightbox");
+      var lightboxImage = document.getElementById("lightbox-image");
+      var lightboxCaption = document.getElementById("lightbox-caption");
+
+      var source = null;
+      var moving = null;
+      var closing = null;
+      var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      function flight(from, to) {
+        return [
+          {
+            transform: "translate(" + (from.left - to.left) + "px, " + (from.top - to.top) + "px) scale(" + from.width / to.width + ", " + from.height / to.height + ")",
+            borderRadius: "14px",
+          },
+          { transform: "none", borderRadius: "12px" },
+        ];
+      }
+
+      function reset() {
+        if (moving) {
+          moving.cancel();
+          moving = null;
+        }
+        if (closing) {
+          closing.onfinish = null;
+          closing.cancel();
+          closing = null;
+        }
+        lightbox.classList.remove("is-closing", "is-moving");
+        document.querySelectorAll("img.is-lifted").forEach(function (lifted) {
+          lifted.classList.remove("is-lifted");
+        });
+      }
+
+      function enlarge(img) {
+        if (!lightbox.showModal) {
+          window.open(img.src, "_blank", "noopener");
+          return;
+        }
+        reset();
+        source = img;
+        lightboxImage.src = img.src;
+        lightboxImage.alt = img.alt;
+        lightboxCaption.textContent = img.alt;
+        var animated = !reducedMotion.matches && Boolean(lightboxImage.animate);
+        var from = img.getBoundingClientRect();
+        lightbox.classList.toggle("is-moving", animated);
+        if (!lightbox.open) {
+          lightbox.showModal();
+        }
+        if (!animated) {
+          return;
+        }
+        var to = lightboxImage.getBoundingClientRect();
+        if (!to.width || !to.height) {
+          lightbox.classList.remove("is-moving");
+          return;
+        }
+        img.classList.add("is-lifted");
+        lightboxImage.style.transformOrigin = "top left";
+        moving = lightboxImage.animate(flight(from, to), { duration: 360, easing: "cubic-bezier(0.2, 0.9, 0.25, 1)" });
+        moving.onfinish = function () {
+          moving = null;
+          lightbox.classList.remove("is-moving");
+        };
+      }
+
+      function shrink() {
+        if (!lightbox.open || closing) {
+          return;
+        }
+        var target = source;
+        if (moving) {
+          moving.cancel();
+          moving = null;
+        }
+        if (reducedMotion.matches || !lightboxImage.animate || !target || !target.getClientRects().length) {
+          lightbox.close();
+          return;
+        }
+        var to = target.getBoundingClientRect();
+        var from = lightboxImage.getBoundingClientRect();
+        lightbox.classList.add("is-closing", "is-moving");
+        lightboxImage.style.transformOrigin = "top left";
+        closing = lightboxImage.animate(flight(to, from).reverse(), { duration: 280, easing: "cubic-bezier(0.4, 0, 0.6, 1)", fill: "forwards" });
+        closing.onfinish = function () {
+          lightbox.close();
+        };
+      }
+
+      document.querySelectorAll("img[data-shot]").forEach(function (img) {
+        img.tabIndex = 0;
+        img.setAttribute("role", "button");
+        img.setAttribute("aria-label", "Enlarge screenshot: " + img.alt);
+        img.addEventListener("click", function () {
+          enlarge(img);
+        });
+        img.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            enlarge(img);
+          }
+        });
+      });
+
+      lightbox.addEventListener("click", shrink);
+
+      lightbox.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          shrink();
+        }
+      });
+
+      lightbox.addEventListener("cancel", function (event) {
+        event.preventDefault();
+        shrink();
+      });
+
+      lightbox.addEventListener("close", function () {
+        reset();
+        source = null;
+      });
+
+      var bits = document.querySelector(".bits");
+      var bitButtons = document.querySelectorAll("[data-bits-scroll]");
+
+      function updateBits() {
+        var max = bits.scrollWidth - bits.clientWidth;
+        bits.classList.toggle("is-scrolled", bits.scrollLeft > 4);
+        bits.classList.toggle("at-end", bits.scrollLeft >= max - 4);
+        bitButtons[0].disabled = bits.scrollLeft <= 4;
+        bitButtons[1].disabled = bits.scrollLeft >= max - 4;
+      }
+
+      bitButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          bits.scrollBy({
+            left: Number(button.dataset.bitsScroll) * bits.clientWidth * 0.8,
+            behavior: reducedMotion.matches ? "auto" : "smooth",
+          });
+        });
+      });
+
+      bits.addEventListener("keydown", function (event) {
+        if (event.target !== bits || (event.key !== "ArrowRight" && event.key !== "ArrowLeft")) {
+          return;
+        }
+        event.preventDefault();
+        bits.scrollBy({ left: (event.key === "ArrowRight" ? 1 : -1) * 314, behavior: reducedMotion.matches ? "auto" : "smooth" });
+      });
+
+      bits.addEventListener("pointermove", function (event) {
+        var card = event.target.closest(".bit");
+        if (!card) {
+          return;
+        }
+        var rect = card.getBoundingClientRect();
+        card.style.setProperty("--spot-x", event.clientX - rect.left + "px");
+        card.style.setProperty("--spot-y", event.clientY - rect.top + "px");
+      });
+
+      var drag = null;
+      var settling = 0;
+      var suppressClick = false;
+
+      function settleBits(velocity) {
+        var origin = bits.getBoundingClientRect().left + 2;
+        var projected = -velocity * 180;
+        var best = Infinity;
+        bits.querySelectorAll(".bit").forEach(function (card) {
+          var offset = card.getBoundingClientRect().left - origin;
+          if (Math.abs(offset - projected) < Math.abs(best - projected)) {
+            best = offset;
+          }
+        });
+        bits.scrollBy({ left: best, behavior: reducedMotion.matches ? "auto" : "smooth" });
+        clearTimeout(settling);
+        settling = setTimeout(function () {
+          bits.classList.remove("is-dragging");
+        }, 500);
+      }
+
+      bits.addEventListener("pointerdown", function (event) {
+        if (event.pointerType !== "mouse" || event.button !== 0) {
+          return;
+        }
+        drag = { id: event.pointerId, startX: event.clientX, startLeft: bits.scrollLeft, lastX: event.clientX, lastTime: event.timeStamp, velocity: 0, moved: false };
+      });
+
+      bits.addEventListener("pointermove", function (event) {
+        if (!drag || event.pointerId !== drag.id) {
+          return;
+        }
+        var dx = event.clientX - drag.startX;
+        if (!drag.moved) {
+          if (Math.abs(dx) < 5) {
+            return;
+          }
+          drag.moved = true;
+          clearTimeout(settling);
+          bits.classList.add("is-dragging");
+          bits.setPointerCapture(event.pointerId);
+          window.getSelection().removeAllRanges();
+        }
+        var dt = event.timeStamp - drag.lastTime;
+        if (dt > 0) {
+          drag.velocity = 0.8 * ((event.clientX - drag.lastX) / dt) + 0.2 * drag.velocity;
+        }
+        drag.lastX = event.clientX;
+        drag.lastTime = event.timeStamp;
+        bits.scrollLeft = drag.startLeft - dx;
+      });
+
+      function endDrag(event) {
+        if (!drag || event.pointerId !== drag.id) {
+          return;
+        }
+        var finished = drag;
+        drag = null;
+        if (!finished.moved) {
+          return;
+        }
+        suppressClick = true;
+        setTimeout(function () {
+          suppressClick = false;
+        }, 0);
+        settleBits(event.timeStamp - finished.lastTime > 80 ? 0 : finished.velocity);
+      }
+
+      bits.addEventListener("pointerup", endDrag);
+      bits.addEventListener("pointercancel", endDrag);
+
+      bits.addEventListener("click", function (event) {
+        if (suppressClick) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+
+      bits.addEventListener("dragstart", function (event) {
+        event.preventDefault();
+      });
+
+      bits.addEventListener("scroll", updateBits, { passive: true });
+      window.addEventListener("resize", updateBits);
+      updateBits();
+
+      apply(suffix.hasOwnProperty(root.dataset.theme) ? root.dataset.theme : "glass");
+    })();
+  </script>
+</body>
+</html>
