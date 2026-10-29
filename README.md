@@ -40,6 +40,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 
 ### Other
 - **Bandwidth limit**: Set a bandwidth limit. Permanently or between specific hours.
+- **Themes**: Choose between the default glass theme, or Material theme (dark/light)
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
