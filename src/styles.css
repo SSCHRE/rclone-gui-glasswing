@@ -4782,3 +4782,39 @@ button:disabled {
   cursor: default;
   white-space: nowrap;
 }
+
+#check-for-updates {
+  position: relative;
+}
+
+.update-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--bg);
+  pointer-events: none;
+}
+
+#update-dialog .popup-card {
+  width: min(520px, calc(100vw - 48px));
+}
+
+.update-actions {
+  flex-wrap: wrap;
+}
+
+.update-actions .primary,
+.update-actions .secondary {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 88px;
+  white-space: nowrap;
+}
+
+.update-actions .update-skip {
+  margin-right: auto;
+}
