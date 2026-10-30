@@ -18,10 +18,18 @@ applyTheme(window.rcloneGui?.initialTheme);
 
 const ui = {};
 
+function themeItems() {
+  return ui.items.filter((item) => item.dataset.themeOption);
+}
+
+function visibleItems() {
+  return ui.items.filter((item) => !item.classList.contains("hidden"));
+}
+
 function render() {
   const theme = currentTheme();
   ui.toggle.title = `Theme: ${THEMES[theme].label}`;
-  for (const item of ui.items) {
+  for (const item of themeItems()) {
     item.setAttribute("aria-checked", String(item.dataset.themeOption === theme));
   }
 }
@@ -33,7 +41,7 @@ function isMenuOpen() {
 function openMenu() {
   ui.menu.classList.remove("hidden");
   ui.toggle.setAttribute("aria-expanded", "true");
-  (ui.items.find((item) => item.getAttribute("aria-checked") === "true") || ui.items[0]).focus();
+  (themeItems().find((item) => item.getAttribute("aria-checked") === "true") || ui.items[0]).focus();
 }
 
 function closeMenu({ focusToggle = false } = {}) {
@@ -83,21 +91,22 @@ function addRipple(event) {
 }
 
 function onMenuKeydown(event) {
-  const index = ui.items.indexOf(document.activeElement);
+  const items = visibleItems();
+  const index = items.indexOf(document.activeElement);
   if (event.key === "Escape") {
     event.stopPropagation();
     closeMenu({ focusToggle: true });
   } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
     const step = event.key === "ArrowDown" ? 1 : -1;
-    ui.items[(index + step + ui.items.length) % ui.items.length].focus();
+    items[(index + step + items.length) % items.length].focus();
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   ui.toggle = document.getElementById("theme-toggle");
   ui.menu = document.getElementById("theme-menu");
-  ui.items = [...ui.menu.querySelectorAll("[data-theme-option]")];
+  ui.items = [...ui.menu.querySelectorAll("[data-theme-option], [data-menu-toggle]")];
   render();
 
   ui.toggle.addEventListener("click", () => (isMenuOpen() ? closeMenu() : openMenu()));
@@ -105,7 +114,9 @@ document.addEventListener("DOMContentLoaded", () => {
   for (const item of ui.items) {
     item.addEventListener("click", () => {
       closeMenu({ focusToggle: true });
-      void switchTheme(item.dataset.themeOption);
+      if (item.dataset.themeOption) {
+        void switchTheme(item.dataset.themeOption);
+      }
     });
   }
   document.addEventListener("pointerdown", (event) => {

@@ -1254,6 +1254,83 @@ elements.checkForUpdates.addEventListener("click", () => {
   void checkForUpdates();
 });
 
+const explorerMenu = {
+  toggle: document.getElementById("explorer-menu-toggle"),
+  divider: document.getElementById("explorer-menu-divider"),
+  offer: document.getElementById("explorer-offer-dialog"),
+  offerYes: document.getElementById("explorer-offer-yes"),
+  offerNo: document.getElementById("explorer-offer-no"),
+};
+
+function receiveExplorerUploads(paths) {
+  if (!paths?.length) {
+    return;
+  }
+  setAppMode("browse");
+  window.RemoteBrowser?.queueUpload(paths);
+}
+
+function renderExplorerMenu(state) {
+  const supported = Boolean(state?.supported);
+  explorerMenu.toggle?.classList.toggle("hidden", !supported);
+  explorerMenu.divider?.classList.toggle("hidden", !supported);
+  explorerMenu.toggle?.setAttribute("aria-checked", String(Boolean(state?.enabled)));
+}
+
+function hideExplorerOffer() {
+  explorerMenu.offer?.classList.add("hidden");
+  explorerMenu.offer?.setAttribute("aria-hidden", "true");
+}
+
+async function setExplorerMenu(enabled) {
+  try {
+    renderExplorerMenu(await window.rcloneGui.setExplorerMenu(enabled));
+    showSnackbar(enabled
+      ? { title: "Added to Explorer", message: "Right-click files or folders and pick Upload with Glasswing. On Windows 11 it's under Show more options.", type: "success" }
+      : { title: "Removed from Explorer", message: "Upload with Glasswing is gone from the right-click menu.", type: "success" });
+  } catch (error) {
+    showSnackbar({ title: "Couldn't change the Explorer menu", message: String(error.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""), type: "error" });
+  }
+}
+
+async function initExplorerMenu() {
+  if (!window.rcloneGui?.getExplorerMenu) {
+    return;
+  }
+  window.rcloneGui.onExplorerUpload?.(receiveExplorerUploads);
+  receiveExplorerUploads(await window.rcloneGui.takeExplorerUploads().catch(() => []));
+  const state = await window.rcloneGui.getExplorerMenu().catch(() => null);
+  renderExplorerMenu(state);
+  if (state?.offer && explorerMenu.offer) {
+    setTimeout(() => {
+      explorerMenu.offer.classList.remove("hidden");
+      explorerMenu.offer.setAttribute("aria-hidden", "false");
+      explorerMenu.offerYes.focus();
+    }, 1500);
+  }
+}
+
+explorerMenu.toggle?.addEventListener("click", () => {
+  void setExplorerMenu(explorerMenu.toggle.getAttribute("aria-checked") !== "true");
+});
+explorerMenu.offerYes?.addEventListener("click", () => {
+  hideExplorerOffer();
+  void setExplorerMenu(true);
+});
+for (const dismiss of [explorerMenu.offerNo, explorerMenu.offer?.querySelector("[data-explorer-offer-close]")]) {
+  dismiss?.addEventListener("click", () => {
+    hideExplorerOffer();
+    void window.rcloneGui.dismissExplorerMenuOffer();
+  });
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && explorerMenu.offer && !explorerMenu.offer.classList.contains("hidden")) {
+    event.stopPropagation();
+    hideExplorerOffer();
+    void window.rcloneGui.dismissExplorerMenuOffer();
+  }
+}, true);
+void initExplorerMenu();
 setTimeout(() => {
   void checkForUpdates({ automatic: true });
   setInterval(() => void checkForUpdates({ automatic: true }), UPDATE_RECHECK_MS);

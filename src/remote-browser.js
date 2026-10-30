@@ -56,6 +56,8 @@ const previewUi = {
 const PREVIEW_EXTENSIONS = new Set([".txt", ".pdf", ".mp3", ".mp4", ".zip", ".7z", ".jpg", ".jpeg", ".png"]);
 
 let browseRemotes = [];
+let pendingUploads = [];
+const LAST_UPLOAD_KEY = "glasswing.lastUploadTarget";
 let vaultBacking = new Map();
 let vaultLookup = 0;
 let currentRemote = "";
@@ -504,6 +506,7 @@ function updateActionState() {
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
   remoteBrowser.remotePicker.disabled = loading;
+  renderPendingUpload();
   if (remoteBrowser.searchInput) {
     remoteBrowser.searchInput.disabled = !currentRemote;
     updateSearchButton();
@@ -996,6 +999,7 @@ function fillRemotePicker() {
 function setRemotes(names) {
   browseRemotes = Array.isArray(names) ? [...names] : [];
   fillRemotePicker();
+  restoreLastUploadTarget();
   void refreshVaults();
 }
 
@@ -1831,6 +1835,72 @@ async function uploadToCurrentFolder(localPaths) {
   }));
 
   uploadPanel.enqueue({ targetPath, items });
+  try {
+    localStorage.setItem(LAST_UPLOAD_KEY, JSON.stringify({ remote: currentRemote, subPath: currentSubPath }));
+  } catch {}
+  return true;
+}
+
+function restoreLastUploadTarget() {
+  if (currentRemote || !pendingUploads.length) {
+    return;
+  }
+  let last = null;
+  try {
+    last = JSON.parse(localStorage.getItem(LAST_UPLOAD_KEY) || "null");
+  } catch {}
+  if (!last?.remote || !browseRemotes.includes(last.remote)) {
+    return;
+  }
+  remoteBrowser.remotePicker.value = last.remote;
+  currentRemote = last.remote;
+  resetBrowseHistory(last.remote, "");
+  void navigateTo(last.subPath || "");
+}
+
+function renderPendingUpload() {
+  const bar = document.getElementById("browse-pending-upload");
+  if (!bar) {
+    return;
+  }
+  bar.classList.toggle("hidden", pendingUploads.length === 0);
+  if (!pendingUploads.length) {
+    return;
+  }
+  const names = pendingUploads.map(localBaseName);
+  const shown = names.slice(0, 3).join(", ");
+  const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  const title = document.getElementById("browse-pending-title");
+  title.textContent = `${names.length} item${names.length === 1 ? "" : "s"} from Explorer: ${shown}${more}`;
+  title.title = pendingUploads.join("\n");
+  document.getElementById("browse-pending-hint").textContent = currentRemote
+    ? `Will upload to ${currentPath()}. Go to another folder first if you like.`
+    : "Pick a remote, go to the folder you want, then click Upload here.";
+  document.getElementById("browse-pending-go").disabled = !canUpload();
+}
+
+function queueUpload(paths) {
+  for (const localPath of paths || []) {
+    if (typeof localPath === "string" && localPath && !pendingUploads.includes(localPath)) {
+      pendingUploads.push(localPath);
+    }
+  }
+  restoreLastUploadTarget();
+  renderPendingUpload();
+}
+
+function bindPendingUpload() {
+  document.getElementById("browse-pending-cancel")?.addEventListener("click", () => {
+    pendingUploads = [];
+    renderPendingUpload();
+  });
+  document.getElementById("browse-pending-go")?.addEventListener("click", async () => {
+    const paths = [...pendingUploads];
+    if (await uploadToCurrentFolder(paths)) {
+      pendingUploads = pendingUploads.filter((localPath) => !paths.includes(localPath));
+      renderPendingUpload();
+    }
+  });
 }
 
 function bindUploadDrop() {
@@ -2418,6 +2488,7 @@ function bindEvents() {
   });
 
   bindUploadDrop();
+  bindPendingUpload();
 
   remoteBrowser.previewBtn?.addEventListener("click", () => {
     void previewSelectedFile();
@@ -2714,6 +2785,7 @@ function hide() {
 window.RemoteBrowser = {
   init,
   setRemotes,
+  queueUpload,
   show,
   hide,
   reload: (context) => loadListing(context || "refresh"),

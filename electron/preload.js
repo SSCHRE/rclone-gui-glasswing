@@ -58,6 +58,15 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   pickUploadFiles: () => ipcRenderer.invoke("pick-upload-files"),
   measureLocalPaths: (paths) => ipcRenderer.invoke("measure-local-paths", paths),
   uploadToRemote: (payload) => ipcRenderer.invoke("upload-to-remote", payload),
+  takeExplorerUploads: () => ipcRenderer.invoke("take-explorer-uploads"),
+  onExplorerUpload: (callback) => {
+    const listener = (_event, paths) => callback(paths);
+    ipcRenderer.on("explorer-upload", listener);
+    return () => ipcRenderer.removeListener("explorer-upload", listener);
+  },
+  getExplorerMenu: () => ipcRenderer.invoke("get-explorer-menu"),
+  setExplorerMenu: (enabled) => ipcRenderer.invoke("set-explorer-menu", enabled),
+  dismissExplorerMenuOffer: () => ipcRenderer.invoke("dismiss-explorer-menu-offer"),
   cancelUpload: () => ipcRenderer.invoke("cancel-upload"),
 getPathForFile: (file) => webUtils.getPathForFile(file),
   onUploadProgress: (callback) => {
