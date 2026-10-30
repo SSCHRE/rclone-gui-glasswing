@@ -60,6 +60,8 @@ const elements = {
   updateLatest: document.getElementById("update-latest"),
   updateDate: document.getElementById("update-date"),
   updateLater: document.getElementById("update-later"),
+  updateSkip: document.getElementById("update-skip"),
+  updateDot: document.getElementById("update-dot"),
   updateOpen: document.getElementById("update-open"),
   jobHistoryPicker: document.getElementById("job-history-picker"),
   loadJob: document.getElementById("load-job"),
@@ -701,14 +703,26 @@ async function syncMinimumWindowSize(forceSnap = false) {
 
 
 
+const UPDATE_STARTUP_DELAY_MS = 5000;
+const UPDATE_RECHECK_MS = 24 * 60 * 60 * 1000;
 let updateReleaseUrl = "";
+let shownUpdateVersion = "";
+let pendingUpdate = null;
 
 function hideUpdateDialog() {
   elements.updateDialog.classList.add("hidden");
   elements.updateDialog.setAttribute("aria-hidden", "true");
 }
 
+function setUpdateIndicator(update) {
+  pendingUpdate = update;
+  elements.updateDot?.classList.toggle("hidden", !update);
+  elements.checkForUpdates.title = update ? `Update available: v${update.latestVersion}` : "Check for updates";
+  elements.checkForUpdates.setAttribute("aria-label", elements.checkForUpdates.title);
+}
+
 function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseUrl }) {
+  shownUpdateVersion = latestVersion;
   updateReleaseUrl = releaseUrl || "";
   elements.updateCurrent.textContent = `v${currentVersion}`;
   elements.updateLatest.textContent = `v${latestVersion}`;
@@ -724,13 +738,21 @@ function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseU
   (updateReleaseUrl ? elements.updateOpen : elements.updateLater).focus();
 }
 
-async function checkForUpdates() {
+async function checkForUpdates({ automatic = false } = {}) {
   try {
     const result = await window.rcloneGui.checkForUpdates();
-    
+
     if (result.hasUpdate) {
-      showUpdateDialog(result);
+      setUpdateIndicator(result.skipped && automatic ? null : result);
+      if (!automatic) {
+        showUpdateDialog(result);
+      } else if (!result.skipped && shownUpdateVersion !== result.latestVersion) {
+        showUpdateDialog(result);
+      }
+    } else if (automatic) {
+      setUpdateIndicator(null);
     } else {
+      setUpdateIndicator(null);
       showSnackbar({
         title: "Up to date",
         message: `You're on the latest version (v${result.currentVersion}).`,
@@ -738,6 +760,9 @@ async function checkForUpdates() {
       });
     }
   } catch (error) {
+    if (automatic) {
+      return;
+    }
     showSnackbar({
       title: "Update check failed",
       message: error.message || "Could not check for updates",
@@ -1054,6 +1079,23 @@ elements.manageRemotes?.addEventListener("click", () => {
 });
 elements.popupClose.addEventListener("click", hidePopup);
 elements.updateLater.addEventListener("click", hideUpdateDialog);
+elements.updateSkip?.addEventListener("click", async () => {
+  const version = shownUpdateVersion;
+  hideUpdateDialog();
+  if (pendingUpdate?.latestVersion === version) {
+    setUpdateIndicator(null);
+  }
+  try {
+    await window.rcloneGui.skipUpdateVersion(version);
+    showSnackbar({
+      title: "Version skipped",
+      message: `You won't be reminded about v${version}. The refresh button next to the version still checks.`,
+      type: "success",
+    });
+  } catch (error) {
+    showSnackbar({ title: "Couldn't skip that version", message: error.message || "", type: "error" });
+  }
+});
 elements.updateDialog.querySelector("[data-update-close]").addEventListener("click", hideUpdateDialog);
 elements.updateOpen.addEventListener("click", () => {
   if (updateReleaseUrl) {
@@ -1289,6 +1331,10 @@ document.addEventListener("keydown", (event) => {
   }
 }, true);
 void initExplorerMenu();
+setTimeout(() => {
+  void checkForUpdates({ automatic: true });
+  setInterval(() => void checkForUpdates({ automatic: true }), UPDATE_RECHECK_MS);
+}, UPDATE_STARTUP_DELAY_MS);
 
 
 
