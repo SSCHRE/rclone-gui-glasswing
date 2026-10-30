@@ -43,6 +43,7 @@ jobs:
           node --check src/job-schedule.js
           node --check electron/scheduler.js
           node --check electron/remote-search.js
+          node --check electron/explorer-menu.js
           node --check src/storage-usage.js
           node --check src/storage-view.js
           node --check electron/storage-history.js

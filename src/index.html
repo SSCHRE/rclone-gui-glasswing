@@ -68,6 +68,15 @@
                   <span class="context-menu-label">Material Dark</span>
                   <span class="theme-menu-check" aria-hidden="true">✓</span>
                 </button>
+                <div id="explorer-menu-divider" class="theme-menu-divider hidden" role="separator"></div>
+                <button id="explorer-menu-toggle" type="button" class="context-menu-item theme-menu-item hidden" role="menuitemcheckbox" aria-checked="false" data-menu-toggle>
+                  <svg class="theme-menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5" />
+                  </svg>
+                  <span class="context-menu-label">Upload from Explorer</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
               </div>
             </div>
           </div>
@@ -329,6 +338,21 @@
             <div id="browse-storage" class="browse-storage"></div>
           </div>
 
+          <div id="browse-pending-upload" class="browse-pending-upload hidden" aria-live="polite">
+            <svg class="browse-pending-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 16V4M7 9l5-5 5 5" />
+              <path d="M5 20h14" />
+            </svg>
+            <div class="browse-pending-text">
+              <strong id="browse-pending-title"></strong>
+              <span id="browse-pending-hint"></span>
+            </div>
+            <div class="browse-pending-actions">
+              <button id="browse-pending-cancel" type="button" class="secondary">Cancel</button>
+              <button id="browse-pending-go" type="button" class="primary">Upload here</button>
+            </div>
+          </div>
+
           <div id="browse-search-bar" class="browse-search-bar hidden" aria-live="polite">
             <span id="browse-search-spinner" class="browse-loading-spinner browse-search-spinner" aria-hidden="true"></span>
             <span id="browse-search-summary" class="browse-search-summary"></span>
@@ -473,6 +497,18 @@
         <button id="popup-close" type="button" class="primary">OK</button>
       </div>
     </div>
+    <div id="explorer-offer-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-explorer-offer-close></div>
+      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="explorer-offer-title" aria-describedby="explorer-offer-message">
+        <p id="explorer-offer-title" class="popup-title">Upload straight from Explorer?</p>
+        <p id="explorer-offer-message" class="popup-message">This adds <strong>Upload with Glasswing</strong> when you right-click files or folders in Windows Explorer. On Windows 11 it's under "Show more options". You can switch it off again in the menu behind the theme button.</p>
+        <div class="popup-actions explorer-offer-actions">
+          <button id="explorer-offer-no" type="button" class="secondary">No thanks</button>
+          <button id="explorer-offer-yes" type="button" class="primary">Add it</button>
+        </div>
+      </div>
+    </div>
+
     <div id="update-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-update-close></div>
       <div class="popup-card popup-card-form success" role="dialog" aria-modal="true" aria-labelledby="update-title" aria-describedby="update-message">

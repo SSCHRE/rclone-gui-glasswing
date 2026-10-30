@@ -9,6 +9,7 @@ const mounts = require("./mounts");
 const { createStorageHistory } = require("./storage-history");
 const scheduler = require("./scheduler");
 const remoteSearch = require("./remote-search");
+const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.rclone.gui.glasswing");
@@ -18,7 +19,7 @@ let mainWindow = null;
 let activeJob = null;
 let jobStarting = false;
 let appQuitting = false;
-let windowRevealed = !process.argv.includes("--hidden");
+let windowRevealed = !process.argv.includes("--hidden") || process.argv.some((arg) => arg.startsWith("--upload"));
 let closeConfirmed = false;
 let closeCheckInProgress = false;
 let mountsStopping = false;
@@ -3075,11 +3076,96 @@ ipcMain.handle("set-schedule-settings", async (_event, changes = {}) => {
   return getScheduleSettings();
 });
 
+let explorerMenu = null;
+let explorerUploads = [];
+let explorerUploadTimer = null;
+let explorerRendererReady = false;
+
+function getExplorerMenu() {
+  if (!explorerMenu) {
+    explorerMenu = app.isPackaged
+      ? createExplorerMenu({ executable: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath })
+      : createExplorerMenu({ executable: process.execPath, appArgs: [app.getAppPath()], iconPath: resolveAppIconPath() });
+  }
+  return explorerMenu;
+}
+
+function deliverExplorerUploads() {
+  if (explorerRendererReady && explorerUploads.length) {
+    send("explorer-upload", explorerUploads.splice(0));
+  }
+}
+
+function queueExplorerUploads(paths) {
+  for (const localPath of paths) {
+    if (!explorerUploads.includes(localPath)) {
+      explorerUploads.push(localPath);
+    }
+  }
+  clearTimeout(explorerUploadTimer);
+  explorerUploadTimer = setTimeout(deliverExplorerUploads, 400);
+  showWindow();
+}
+
+async function explorerMenuState() {
+  if (process.platform !== "win32") {
+    return { supported: false, enabled: false, offer: false };
+  }
+  const { enabled } = await getExplorerMenu().status();
+  return {
+    supported: true,
+    enabled,
+    offer: app.isPackaged && !enabled && !getAppSettings().explorerMenuAsked,
+  };
+}
+
+async function repairExplorerMenu() {
+  if (process.platform !== "win32" || getAppSettings().explorerMenu !== true) {
+    return;
+  }
+  const { enabled, current } = await getExplorerMenu().status();
+  if (enabled && !current) {
+    await getExplorerMenu().enable().catch(() => {});
+  }
+}
+
+ipcMain.handle("take-explorer-uploads", async () => {
+  explorerRendererReady = true;
+  return explorerUploads.splice(0);
+});
+
+ipcMain.handle("get-explorer-menu", async () => explorerMenuState());
+
+ipcMain.handle("set-explorer-menu", async (_event, enabled) => {
+  if (process.platform !== "win32") {
+    throw new Error("The Explorer menu is only available on Windows.");
+  }
+  if (enabled) {
+    await getExplorerMenu().enable();
+  } else {
+    await getExplorerMenu().disable();
+  }
+  await saveAppSettings({ explorerMenu: Boolean(enabled), explorerMenuAsked: true });
+  return explorerMenuState();
+});
+
+ipcMain.handle("dismiss-explorer-menu-offer", async () => {
+  await saveAppSettings({ explorerMenuAsked: true });
+  return true;
+});
+
 const hasInstanceLock = app.requestSingleInstanceLock();
 if (!hasInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", showWindow);
+  app.on("second-instance", (_event, argv) => {
+    const paths = uploadPathsFromArgv(argv);
+    if (paths.length) {
+      queueExplorerUploads(paths);
+    } else {
+      showWindow();
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -3088,6 +3174,11 @@ app.whenReady().then(() => {
   }
   Menu.setApplicationMenu(null);
   createWindow();
+  const launchUploads = uploadPathsFromArgv(process.argv);
+  if (launchUploads.length) {
+    queueExplorerUploads(launchUploads);
+  }
+  void repairExplorerMenu();
 
   void refreshSchedules();
   setTimeout(() => void checkSchedules(), SCHEDULER_FIRST_CHECK_MS);
