@@ -803,10 +803,22 @@ function compareVersions(left, right) {
   return 0;
 }
 
-ipcMain.handle("open-release-page", async (_event, url) => {
-  if (typeof url === "string" && url.startsWith("https://github.com/SSCHRE/rclone-gui-glasswing/")) {
-    await shell.openExternal(url);
+const RELEASES_PAGE_URL = "https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest";
+let latestReleaseUrl = RELEASES_PAGE_URL;
+
+function isOwnReleaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && url.hostname === "github.com"
+      && url.pathname.startsWith("/SSCHRE/rclone-gui-glasswing/releases/");
+  } catch {
+    return false;
   }
+}
+
+ipcMain.handle("open-release-page", async () => {
+  await shell.openExternal(latestReleaseUrl);
 });
 
 ipcMain.handle("check-for-updates", async () => {
@@ -833,13 +845,14 @@ ipcMain.handle("check-for-updates", async () => {
             const release = JSON.parse(data);
             const latestVersion = release.tag_name.replace(/^v/, "");
             const currentVersion = app.getVersion();
-            
+            latestReleaseUrl = isOwnReleaseUrl(release.html_url) ? release.html_url : RELEASES_PAGE_URL;
+
             resolve({
               currentVersion,
               latestVersion,
               hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
               skipped: getAppSettings().skippedUpdateVersion === latestVersion,
-              releaseUrl: release.html_url,
+              releaseUrl: latestReleaseUrl,
               publishedAt: release.published_at,
             });
           } catch (error) {
@@ -1388,13 +1401,13 @@ async function openRcloneConfigInLinuxTerminal() {
     throw new Error("Couldn't find a terminal app. Run \"rclone config\" in a terminal instead.");
   }
 
-  const script = path.join(os.tmpdir(), "glasswing-rclone-config.sh");
+  const scriptDir = await fs.mkdtemp(path.join(os.tmpdir(), "glasswing-"));
+  const script = path.join(scriptDir, "rclone-config.sh");
   await fs.writeFile(
     script,
-    '#!/bin/sh\nrclone config\nprintf "\\nPress Enter to close this window."\nread _\n',
-    { mode: 0o755 },
+    '#!/bin/sh\nrm -rf -- "$(dirname -- "$0")"\nrclone config\nprintf "\\nPress Enter to close this window."\nread _\n',
+    { mode: 0o700, flag: "wx" },
   );
-  await fs.chmod(script, 0o755);
 
   const [command, args] = terminal;
   const child = spawn(command, [...args, script], { detached: true, stdio: "ignore" });
@@ -2506,6 +2519,16 @@ function describeJobFailure(operation, output) {
   return {};
 }
 
+function requireJobPath(value, label) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${label} is required.`);
+  }
+  if (value.trim().startsWith("-")) {
+    throw new Error(`${label} can't start with "-". Put rclone flags in Extra args instead.`);
+  }
+  return value;
+}
+
 function buildJobArgs(job, { appLimits = true } = {}) {
   const operation = job?.operation;
   if (!JOB_OPERATIONS.includes(operation)) {
@@ -2514,8 +2537,8 @@ function buildJobArgs(job, { appLimits = true } = {}) {
 
   const args = [
     operation,
-    job.source,
-    job.destination,
+    requireJobPath(job.source, "Source"),
+    requireJobPath(job.destination, "Destination"),
     "--stats",
     "1s",
     "--stats-one-line",

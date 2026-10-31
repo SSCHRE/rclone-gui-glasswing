@@ -1111,7 +1111,7 @@ elements.updateSkip?.addEventListener("click", async () => {
 elements.updateDialog.querySelector("[data-update-close]").addEventListener("click", hideUpdateDialog);
 elements.updateOpen.addEventListener("click", () => {
   if (updateReleaseUrl) {
-    void window.rcloneGui.openReleasePage(updateReleaseUrl);
+    void window.rcloneGui.openReleasePage();
   }
   hideUpdateDialog();
 });

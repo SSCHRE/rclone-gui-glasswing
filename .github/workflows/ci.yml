@@ -28,7 +28,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Check JavaScript syntax
         run: |
@@ -72,7 +72,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Generate icons
         run: npm run icons
@@ -84,10 +84,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "PR build: packaging unpacked app only (no publish/signing)"
-            npx electron-builder --win dir --publish never
+            npm run build:dir -- --publish never
           else
             echo "Main build: portable + NSIS installers (no publish/signing)"
-            npx electron-builder --win --publish never
+            npm run build -- --publish never
           fi
 
       - name: Upload Windows artifacts
@@ -114,13 +114,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Generate icons
         run: npm run icons
 
       - name: Build Linux app
-        run: npx electron-builder --linux AppImage deb --publish never
+        run: npm run build:linux -- --publish never
 
       - name: Check Linux packages
         run: |
