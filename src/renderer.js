@@ -119,6 +119,18 @@ function hideSnackbar() {
   elements.snackbarRoot.setAttribute("aria-hidden", "true");
 }
 
+function snackbarMessageNodes(message) {
+  const parts = Array.isArray(message) ? message : [message];
+  return parts.map((part) => {
+    if (part && typeof part === "object") {
+      const strong = document.createElement("strong");
+      strong.textContent = String(part.strong ?? "");
+      return strong;
+    }
+    return String(part ?? "");
+  });
+}
+
 function showSnackbar({ title, message, type = "success" }) {
   hideSnackbar();
 
@@ -129,7 +141,7 @@ function showSnackbar({ title, message, type = "success" }) {
   };
   elements.snackbarIcon.textContent = icons[type] || "•";
   elements.snackbarTitle.textContent = title;
-  elements.snackbarMessage.innerHTML = message;
+  elements.snackbarMessage.replaceChildren(...snackbarMessageNodes(message));
   elements.snackbar.classList.add(type);
   elements.snackbarRoot.classList.remove("hidden");
   elements.snackbarRoot.setAttribute("aria-hidden", "false");
@@ -1191,8 +1203,8 @@ elements.scheduleJob.addEventListener("click", () => {
       showSnackbar({
         title: saved?.schedule?.enabled ? "Job scheduled" : "Schedule turned off",
         message: saved?.schedule?.enabled
-          ? `<strong>${escapeHtml(entry.name)}</strong> runs next ${escapeHtml(window.JobSchedule.formatNextRun(saved.schedule.nextRunAt))}.`
-          : `<strong>${escapeHtml(entry.name)}</strong> only runs when you start it.`,
+          ? [{ strong: entry.name }, ` runs next ${window.JobSchedule.formatNextRun(saved.schedule.nextRunAt)}.`]
+          : [{ strong: entry.name }, " only runs when you start it."],
         type: "success",
       });
     },
@@ -1354,7 +1366,7 @@ function attachToRunningJob(job) {
   if (job.scheduled) {
     showSnackbar({
       title: "Scheduled job running",
-      message: `<strong>${escapeHtml(job.scheduled.name)}</strong> started on schedule.`,
+      message: [{ strong: job.scheduled.name }, " started on schedule."],
       type: "running",
     });
   }
@@ -1389,21 +1401,15 @@ window.rcloneGui.onJobOutput(({ id, text }) => {
 
 
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-}
-
 window.rcloneGui.onMountsChanged?.(({ event }) => {
   if (!event) {
     return;
   }
 
-  const remote = escapeHtml(event.remote);
-  const mountPoint = escapeHtml(event.mountPoint);
   if (event.type === "mounted") {
     showSnackbar({
       title: "Drive mounted",
-      message: `<strong>${remote}</strong> is now available as ${mountPoint}`,
+      message: [{ strong: event.remote }, ` is now available as ${event.mountPoint}`],
       type: "success",
     });
   } else if (event.unexpected) {
@@ -1416,7 +1422,7 @@ window.rcloneGui.onMountsChanged?.(({ event }) => {
   } else {
     showSnackbar({
       title: "Drive unmounted",
-      message: `${mountPoint} (<strong>${remote}</strong>) is no longer mounted`,
+      message: [`${event.mountPoint} (`, { strong: event.remote }, ") is no longer mounted"],
       type: "success",
     });
   }

@@ -2001,7 +2001,9 @@ async function deleteSelectedFile() {
   deleteTitle.textContent = "Delete file";
   // Extract just the path part without the remote name
   const pathOnly = selectedPath.includes(':') ? selectedPath.split(':').slice(1).join(':') : selectedPath;
-  deleteMessage.innerHTML = `Are you sure you want to delete <strong>${pathOnly}</strong>? This cannot be undone.`;
+  const pathLabel = document.createElement("strong");
+  pathLabel.textContent = pathOnly;
+  deleteMessage.replaceChildren("Are you sure you want to delete ", pathLabel, "? This cannot be undone.");
   deleteDialog.classList.remove("hidden");
   deleteDialog.setAttribute("aria-hidden", "false");
   
@@ -2076,7 +2078,7 @@ async function deleteSelectedFile() {
       const deletedPath = deletedParts.length > 1 ? deletedParts.slice(1).join(':') : '';
       notify({
         title: "Delete complete",
-        message: `${deletedRemote}: <strong>${deletedPath}</strong>`,
+        message: [`${deletedRemote}: `, { strong: deletedPath }],
         type: "success",
       });
       browseMeter?.refresh();
