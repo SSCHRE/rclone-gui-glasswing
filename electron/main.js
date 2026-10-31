@@ -2546,12 +2546,26 @@ function buildJobArgs(job, { appLimits = true } = {}) {
   return args;
 }
 
-function quoteCommandArg(arg) {
-  const text = String(arg);
+function quoteWindowsArg(text) {
   if (text && !/[\s"'&|<>^()%!;`$]/.test(text)) {
     return text;
   }
-  return `"${text.replace(/"/g, '\\"')}"`;
+  const escaped = text
+    .replace(/(\\*)"/g, (_match, slashes) => `${slashes}${slashes}\\"`)
+    .replace(/(\\+)$/, (_match, slashes) => `${slashes}${slashes}`);
+  return `"${escaped}"`;
+}
+
+function quotePosixArg(text) {
+  if (/^[\w@%+=:,./-]+$/.test(text)) {
+    return text;
+  }
+  return `'${text.replace(/'/g, `'"'"'`)}'`;
+}
+
+function quoteCommandArg(arg) {
+  const text = String(arg);
+  return process.platform === "win32" ? quoteWindowsArg(text) : quotePosixArg(text);
 }
 
 const MAX_APPROVED_COMMANDS = 200;
