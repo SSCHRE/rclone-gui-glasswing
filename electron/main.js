@@ -9,6 +9,7 @@ const mounts = require("./mounts");
 const { createStorageHistory } = require("./storage-history");
 const scheduler = require("./scheduler");
 const remoteSearch = require("./remote-search");
+const { rcloneBinary } = require("./rclone-binary");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
 if (process.platform === "win32") {
@@ -616,7 +617,7 @@ function rcloneArgs(command, positionals, flags = []) {
 
 function runRclone(args, { interactive = false, timeoutMs = 0, binary = false, onSpawn = null } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("rclone", args, {
+    const child = spawn(rcloneBinary(), args, {
       windowsHide: !interactive,
       shell: false,
       env: process.env,
@@ -1428,7 +1429,7 @@ ipcMain.handle("open-rclone-config", async () => {
     return;
   }
 
-  const child = spawn("rclone", ["config"], {
+  const child = spawn(rcloneBinary(), ["config"], {
     detached: true,
     stdio: "ignore",
     windowsHide: false,
@@ -2307,7 +2308,7 @@ function startPreviewServe(parentPath) {
     // No basic auth: Chromium strips user:pass from media element fetches.
     // Small VFS chunks avoid the default 128Mi read-ahead that pulled whole MP3s.
     const child = spawn(
-      "rclone",
+      rcloneBinary(),
       rcloneArgs(["serve", "http"], [parentPath], [
         "--addr",
         "127.0.0.1:0",
@@ -2660,7 +2661,7 @@ async function startJob(job, { scheduled = null } = {}) {
     });
   } catch {}
 
-  const child = spawn("rclone", args, {
+  const child = spawn(rcloneBinary(), args, {
     windowsHide: true,
     shell: false,
   });
