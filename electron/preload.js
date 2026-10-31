@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   skipUpdateVersion: (version) => ipcRenderer.invoke("skip-update-version", version),
-  openReleasePage: (url) => ipcRenderer.invoke("open-release-page", url),
+  openReleasePage: () => ipcRenderer.invoke("open-release-page"),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
   listRemotes: () => ipcRenderer.invoke("list-remotes"),
   listRemoteEntries: () => ipcRenderer.invoke("list-remote-entries"),
