@@ -3,7 +3,12 @@ const fsSync = require("fs");
 const net = require("net");
 const { randomUUID } = require("crypto");
 
-const CACHE_MODES = new Set(["off", "minimal", "writes", "full"]);
+const CACHE_MODE_FLAGS = Object.freeze({
+  off: "--vfs-cache-mode=off",
+  minimal: "--vfs-cache-mode=minimal",
+  writes: "--vfs-cache-mode=writes",
+  full: "--vfs-cache-mode=full",
+});
 const MOUNT_READY_TIMEOUT_MS = 30000;
 const MOUNT_READY_POLL_MS = 250;
 const RC_REQUEST_TIMEOUT_MS = 3000;
@@ -127,20 +132,16 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
   if (mounts.has(remote)) {
     throw new Error(`"${remote}" is already mounted.`);
   }
-  if (!CACHE_MODES.has(cacheMode)) {
+  if (!Object.hasOwn(CACHE_MODE_FLAGS, cacheMode)) {
     throw new Error(`Unknown cache mode "${cacheMode}".`);
   }
+  const cacheModeFlag = CACHE_MODE_FLAGS[cacheMode];
 
   const mountPoint = `${letter}:`;
   const rc = { port: await getFreePort(), user: "glasswing", pass: randomUUID() };
-  const args = [
-    "mount",
-    `${remote}:`,
-    mountPoint,
-    "--volname",
-    remote,
-    "--vfs-cache-mode",
-    cacheMode,
+  const flags = [
+    `--volname=${remote}`,
+    cacheModeFlag,
     "--rc",
     "--rc-addr",
     `127.0.0.1:${rc.port}`,
@@ -150,12 +151,13 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
     rc.pass,
   ];
   if (readOnly) {
-    args.push("--read-only");
+    flags.push("--read-only");
   }
   if (bwlimit) {
-    args.push("--bwlimit", bwlimit);
+    flags.push(`--bwlimit=${bwlimit}`);
   }
 
+  const args = ["mount", ...flags, "--", `${remote}:`, mountPoint];
   const child = spawn("rclone", args, {
     windowsHide: true,
     shell: false,

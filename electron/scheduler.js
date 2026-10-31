@@ -31,7 +31,7 @@ function normalizeSchedule(input) {
   schedule.time = input.time;
 
   if (type === "weekly") {
-    const days = [...new Set((input.days || []).map(Number))].filter((day) => ALL_DAYS.includes(day)).sort();
+    const days = [...new Set((input.days || []).map(Number))].filter((day) => ALL_DAYS.includes(day)).sort((left, right) => left - right);
     if (days.length === 0) {
       throw new Error("Pick at least one day.");
     }
