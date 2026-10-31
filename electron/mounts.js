@@ -133,14 +133,9 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
 
   const mountPoint = `${letter}:`;
   const rc = { port: await getFreePort(), user: "glasswing", pass: randomUUID() };
-  const args = [
-    "mount",
-    `${remote}:`,
-    mountPoint,
-    "--volname",
-    remote,
-    "--vfs-cache-mode",
-    cacheMode,
+  const flags = [
+    `--volname=${remote}`,
+    `--vfs-cache-mode=${cacheMode}`,
     "--rc",
     "--rc-addr",
     `127.0.0.1:${rc.port}`,
@@ -150,13 +145,13 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
     rc.pass,
   ];
   if (readOnly) {
-    args.push("--read-only");
+    flags.push("--read-only");
   }
   if (bwlimit) {
-    args.push("--bwlimit", bwlimit);
+    flags.push(`--bwlimit=${bwlimit}`);
   }
 
-  const child = spawn("rclone", args, {
+  const child = spawn("rclone", ["mount", ...flags, "--", `${remote}:`, mountPoint], {
     windowsHide: true,
     shell: false,
     env: process.env,

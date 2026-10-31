@@ -45,7 +45,7 @@ function searchRemote(remotePath, query, { maxResults = DEFAULT_MAX_RESULTS, onB
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn("rclone", ["lsjson", "-R", "--no-mimetype", remotePath], { windowsHide: true, shell: false });
+    const child = spawn("rclone", ["lsjson", "-R", "--no-mimetype", "--", remotePath], { windowsHide: true, shell: false });
     onSpawn?.(child);
 
     let pending = "";

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, nativeTheme, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, nativeTheme, shell, protocol, net } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
@@ -610,6 +610,10 @@ async function confirmCloseWithMounts() {
   }
 }
 
+function rcloneArgs(command, positionals, flags = []) {
+  return [...[command].flat(), ...flags, "--", ...positionals.map(String)];
+}
+
 function runRclone(args, { interactive = false, timeoutMs = 0, binary = false, onSpawn = null } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn("rclone", args, {
@@ -679,16 +683,14 @@ async function fetchRemoteByteRange(source, offset, count, { timeoutMs = 120000 
   }
 
   const result = await runRclone(
-    [
-      "cat",
-      source,
+    rcloneArgs("cat", [source], [
       "--offset",
       String(offset),
       "--count",
       String(count),
       "--buffer-size",
       "128Ki",
-    ],
+    ]),
     { timeoutMs, binary: true },
   );
 
@@ -710,7 +712,7 @@ async function fetchRemoteTail(source, byteCount, options = {}) {
 }
 
 async function getRemoteObjectSize(source) {
-  const result = await runRclone(["lsjson", source, "--files-only"], { timeoutMs: 60000 });
+  const result = await runRclone(rcloneArgs("lsjson", [source], ["--files-only"]), { timeoutMs: 60000 });
   if (result.code !== 0) {
     throw new Error(result.stderr || result.stdout || `Failed to inspect "${source}"`);
   }
@@ -1000,12 +1002,7 @@ function normalizeRemoteBrowsePath(remotePath) {
 ipcMain.handle("list-remote-path", async (_event, remotePath) => {
   const target = normalizeRemoteBrowsePath(remotePath);
   const result = await runRclone(
-    [
-      "lsjson",
-      target,
-      "--max-depth",
-      "1",
-    ],
+    rcloneArgs("lsjson", [target], ["--max-depth", "1"]),
     { timeoutMs: 120000 },
   );
 
@@ -1083,7 +1080,7 @@ ipcMain.handle("get-remote-redacted", async (_event, name) => {
     throw new Error("Remote name is required.");
   }
 
-  const result = await runRclone(["config", "redacted", name.trim()]);
+  const result = await runRclone(rcloneArgs(["config", "redacted"], [name.trim()]));
   if (result.code !== 0) {
     throw new Error(result.stderr || `Failed to load remote "${name}"`);
   }
@@ -1096,7 +1093,7 @@ ipcMain.handle("delete-remote", async (_event, name) => {
     throw new Error("Remote name is required.");
   }
 
-  const result = await runRclone(["config", "delete", name.trim()]);
+  const result = await runRclone(rcloneArgs(["config", "delete"], [name.trim()]));
   if (result.code !== 0) {
     throw new Error(result.stderr || `Failed to delete remote "${name}"`);
   }
@@ -1185,7 +1182,7 @@ async function obscureSecret(secret) {
 }
 
 async function inspectVaultTarget(target) {
-  const result = await runRclone(["lsjson", target, "--max-depth", "1"], { timeoutMs: 60000 });
+  const result = await runRclone(rcloneArgs("lsjson", [target], ["--max-depth", "1"]), { timeoutMs: 60000 });
   if (result.code !== 0) {
     if (/directory not found|not found|doesn't exist|does not exist|cannot find/i.test(result.stderr)) {
       return { target, state: "missing", count: 0, looksLikeVault: false };
@@ -1243,12 +1240,12 @@ ipcMain.handle("create-vault", async (_event, payload) => {
   }
 
   const undo = async (message) => {
-    await runRclone(["config", "delete", name], { timeoutMs: 15000 }).catch(() => {});
+    await runRclone(rcloneArgs(["config", "delete"], [name]), { timeoutMs: 15000 }).catch(() => {});
     throw new Error(message);
   };
 
   if (before.state === "files") {
-    const opened = await runRclone(["lsjson", `${name}:`, "--max-depth", "1"], { timeoutMs: 60000 });
+    const opened = await runRclone(rcloneArgs("lsjson", [`${name}:`], ["--max-depth", "1"]), { timeoutMs: 60000 });
     if (opened.code !== 0) {
       await undo(cleanRcloneError(opened.stderr, "Couldn't open the vault."));
     }
@@ -1257,7 +1254,7 @@ ipcMain.handle("create-vault", async (_event, payload) => {
       await undo("Those passwords don't unlock this vault. Check both passwords and the file name setting, they have to match what you used before.");
     }
   } else {
-    const made = await runRclone(["mkdir", `${name}:`], { timeoutMs: 120000 });
+    const made = await runRclone(rcloneArgs("mkdir", [`${name}:`]), { timeoutMs: 120000 });
     if (made.code !== 0) {
       await undo(cleanRcloneError(made.stderr, "Couldn't create the vault folder."));
     }
@@ -1271,7 +1268,7 @@ ipcMain.handle("authorize-provider", async (_event, provider) => {
     throw new Error("Provider type is required.");
   }
 
-  const result = await runRclone(["authorize", provider.trim()], { interactive: true });
+  const result = await runRclone(rcloneArgs("authorize", [provider.trim()]), { interactive: true });
   if (result.code !== 0) {
     throw new Error(result.stderr || "Authorization failed or was cancelled.");
   }
@@ -1284,7 +1281,7 @@ ipcMain.handle("reconnect-remote", async (_event, name) => {
     throw new Error("Remote name is required.");
   }
 
-  const result = await runRclone(["config", "reconnect", name.trim()], { interactive: true });
+  const result = await runRclone(rcloneArgs(["config", "reconnect"], [name.trim()]), { interactive: true });
   if (result.code !== 0) {
     throw new Error(result.stderr || `Failed to reconnect remote "${name}"`);
   }
@@ -1457,7 +1454,7 @@ ipcMain.handle("get-remote-usage", async (_event, target) => {
 
   let result;
   try {
-    result = await runRclone(["about", /[:\\/]/.test(remote) ? remote : `${remote}:`, "--json"], { timeoutMs: 60000 });
+    result = await runRclone(rcloneArgs("about", [/[:\\/]/.test(remote) ? remote : `${remote}:`], ["--json"]), { timeoutMs: 60000 });
   } catch (error) {
     return { remote, error: error.message || "rclone about failed." };
   }
@@ -1511,7 +1508,7 @@ ipcMain.handle("cleanup-remote", async (_event, name) => {
     throw new Error("Wait for the current job to finish before emptying the trash.");
   }
 
-  const result = await runRclone(["cleanup", `${remote}:`], { timeoutMs: 10 * 60 * 1000 });
+  const result = await runRclone(rcloneArgs("cleanup", [`${remote}:`]), { timeoutMs: 10 * 60 * 1000 });
   if (result.code !== 0) {
     if (/doesn't support cleanup|not supported/i.test(result.stderr)) {
       throw new Error("This storage type can't empty its trash through rclone.");
@@ -1758,10 +1755,10 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
       const errors = [];
       const chunks = createChunkTracker();
       const result = await runRclone(
-        [
-          stat.isDirectory() ? "copy" : "copyto",
+        rcloneArgs(stat.isDirectory() ? "copy" : "copyto", [
           localPath,
           stagingDir ? joinRemoteChild(stagingDir, name) : destination,
+        ], [
           "--stats",
           "500ms",
           "--stats-log-level",
@@ -1774,7 +1771,7 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
           "1",
           "--use-json-log",
           ...bwlimitArgs(),
-        ],
+        ]),
         {
           timeoutMs: 0,
           onSpawn: (child) => {
@@ -1805,7 +1802,7 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
       let moveError = null;
       if (stagingDir && result.code === 0 && !upload.cancelled) {
         const moved = await runRclone(
-          ["moveto", joinRemoteChild(stagingDir, name), destination],
+          rcloneArgs("moveto", [joinRemoteChild(stagingDir, name), destination]),
           { timeoutMs: 0, onSpawn: (child) => { upload.child = child; } },
         );
         upload.child = null;
@@ -1814,7 +1811,7 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
         }
       }
       if (stagingDir) {
-        await runRclone(["purge", stagingDir], { timeoutMs: 60000 }).catch(() => {});
+        await runRclone(rcloneArgs("purge", [stagingDir]), { timeoutMs: 60000 }).catch(() => {});
       }
 
       if (upload.cancelled) {
@@ -1904,10 +1901,7 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   try {
     send("download-progress", { index: 0, bytes: 0, confirmed: 0, total: 0 });
     const result = await runRclone(
-      [
-        "copyto",
-        source,
-        localPath,
+      rcloneArgs("copyto", [source, localPath], [
         "--stats",
         "500ms",
         "--stats-log-level",
@@ -1918,7 +1912,7 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
         "1",
         "--use-json-log",
         ...bwlimitArgs(),
-      ],
+      ]),
       {
         timeoutMs: 0,
         onSpawn: (child) => {
@@ -1977,7 +1971,7 @@ ipcMain.handle("delete-remote-file", async (_event, payload) => {
   const source = normalizeRemoteBrowsePath(remotePath);
   // Use purge for directories (deletes directory and all contents), delete for files
   const command = isDir ? "purge" : "delete";
-  const result = await runRclone([command, source], {
+  const result = await runRclone(rcloneArgs(command, [source]), {
     timeoutMs: 0,
   });
 
@@ -2003,7 +1997,7 @@ ipcMain.handle("create-remote-folder", async (_event, payload) => {
   const folderPath = source.endsWith(":") ? `${source}${folderName}` : `${source}/${folderName}`;
   
   // Use rclone mkdir to create the directory
-  const result = await runRclone(["mkdir", folderPath], {
+  const result = await runRclone(rcloneArgs("mkdir", [folderPath]), {
     timeoutMs: 0,
   });
 
@@ -2235,6 +2229,25 @@ async function listZipEntriesFromRemote(source, archiveSize) {
 }
 
 let previewServe = null;
+
+const PREVIEW_MEDIA_SCHEME = "glasswing-media";
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: PREVIEW_MEDIA_SCHEME, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+]);
+
+function handlePreviewMediaRequest(request) {
+  const url = new URL(request.url);
+  if (!previewServe || url.hostname !== "preview") {
+    return new Response(null, { status: 404 });
+  }
+  const headers = new Headers();
+  const range = request.headers.get("range");
+  if (range) {
+    headers.set("range", range);
+  }
+  return net.fetch(`${previewServe.baseUrl}${url.pathname}`, { method: request.method, headers });
+}
 let previewFetchChild = null;
 const cancelledPreviewFetches = new WeakSet();
 
@@ -2295,10 +2308,7 @@ function startPreviewServe(parentPath) {
     // Small VFS chunks avoid the default 128Mi read-ahead that pulled whole MP3s.
     const child = spawn(
       "rclone",
-      [
-        "serve",
-        "http",
-        parentPath,
+      rcloneArgs(["serve", "http"], [parentPath], [
         "--addr",
         "127.0.0.1:0",
         "--vfs-cache-mode",
@@ -2309,7 +2319,7 @@ function startPreviewServe(parentPath) {
         "2M",
         "--buffer-size",
         "512k",
-      ],
+      ]),
       {
         windowsHide: true,
         shell: false,
@@ -2392,10 +2402,10 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
       throw new Error("Invalid media path for preview.");
     }
 
-    const serve = await startPreviewServe(parentPath);
+    await startPreviewServe(parentPath);
     // Avoid encodeURIComponent on the whole name: rclone serves path segments with
     // percent-encoding for reserved chars only (spaces -> %20 is fine via encodeURI).
-    const streamUrl = `${serve.baseUrl}/${encodeURI(fileName).replace(/#/g, "%23")}`;
+    const streamUrl = `${PREVIEW_MEDIA_SCHEME}://preview/${encodeURI(fileName).replace(/#/g, "%23")}`;
     return {
       kind: meta.kind,
       name: fileName,
@@ -2452,7 +2462,7 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
   try {
     await fs.mkdir(tmpDir, { recursive: true });
     let fetchChild = null;
-    const result = await runRclone(["copyto", source, localPath], {
+    const result = await runRclone(rcloneArgs("copyto", [source, localPath]), {
       timeoutMs: 0,
       onSpawn: (child) => {
         fetchChild = child;
@@ -2535,10 +2545,8 @@ function buildJobArgs(job, { appLimits = true } = {}) {
     throw new Error(`Unsupported operation: ${operation}`);
   }
 
-  const args = [
-    operation,
-    requireJobPath(job.source, "Source"),
-    requireJobPath(job.destination, "Destination"),
+  const paths = [requireJobPath(job.source, "Source"), requireJobPath(job.destination, "Destination")];
+  const flags = [
     "--stats",
     "1s",
     "--stats-one-line",
@@ -2547,26 +2555,26 @@ function buildJobArgs(job, { appLimits = true } = {}) {
   ];
 
   if (job.dryRun) {
-    args.push("--dry-run");
+    flags.push("--dry-run");
   }
 
   if (job.deleteExcluded && operation === "sync") {
-    args.push("--delete-excluded");
+    flags.push("--delete-excluded");
   }
 
   if (operation === "bisync") {
-    args.push("--color", "NEVER");
+    flags.push("--color", "NEVER");
     if (job.resync) {
-      args.push("--resync");
+      flags.push("--resync");
     }
   }
 
   if (appLimits) {
-    args.push(...bwlimitArgs());
+    flags.push(...bwlimitArgs());
   }
 
-  args.push(...parseExtraArgs(job.extraArgs));
-  return args;
+  flags.push(...parseExtraArgs(job.extraArgs));
+  return rcloneArgs(operation, paths, flags);
 }
 
 function quoteWindowsArg(text) {
@@ -3224,6 +3232,7 @@ app.whenReady().then(() => {
     return;
   }
   Menu.setApplicationMenu(null);
+  protocol.handle(PREVIEW_MEDIA_SCHEME, handlePreviewMediaRequest);
   createWindow();
   const launchUploads = uploadPathsFromArgv(process.argv);
   if (launchUploads.length) {
