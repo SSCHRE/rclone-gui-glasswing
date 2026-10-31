@@ -1,5 +1,4 @@
 const { spawn } = require("child_process");
-const { rcloneBinary } = require("./rclone-binary");
 
 const DEFAULT_MAX_RESULTS = 1000;
 const BATCH_INTERVAL_MS = 200;
@@ -46,7 +45,7 @@ function searchRemote(remotePath, query, { maxResults = DEFAULT_MAX_RESULTS, onB
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(rcloneBinary(), ["lsjson", "-R", "--no-mimetype", "--", remotePath], { windowsHide: true, shell: false });
+    const child = spawn("rclone", ["lsjson", "-R", "--no-mimetype", remotePath], { windowsHide: true, shell: false });
     onSpawn?.(child);
 
     let pending = "";

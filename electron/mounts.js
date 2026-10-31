@@ -2,7 +2,6 @@ const { spawn } = require("child_process");
 const fsSync = require("fs");
 const net = require("net");
 const { randomUUID } = require("crypto");
-const { rcloneBinary } = require("./rclone-binary");
 
 const CACHE_MODE_FLAGS = Object.freeze({
   off: "--vfs-cache-mode=off",
@@ -158,7 +157,8 @@ async function startMount({ remote, driveLetter, cacheMode = "writes", readOnly 
     flags.push(`--bwlimit=${bwlimit}`);
   }
 
-  const child = spawn(rcloneBinary(), ["mount", ...flags, "--", `${remote}:`, mountPoint], {
+  const args = ["mount", ...flags, "--", `${remote}:`, mountPoint];
+  const child = spawn("rclone", args, {
     windowsHide: true,
     shell: false,
     env: process.env,

@@ -50,7 +50,6 @@ jobs:
           node --check src/storage-usage.js
           node --check src/storage-view.js
           node --check electron/storage-history.js
-          node --check electron/rclone-binary.js
           node --check src/theme.js
           node --check scripts/generate-icons.js
 
