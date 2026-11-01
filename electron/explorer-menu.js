@@ -27,7 +27,7 @@ function createExplorerMenu({ executable, appArgs = [], iconPath }) {
     if (!result.ok) {
       return null;
     }
-    const match = result.stdout.match(/REG_(?:EXPAND_)?SZ\s+(.*)\s*$/m);
+    const match = result.stdout.match(/REG_(?:EXPAND_)?SZ\s+(\S.*)$/m);
     return match ? match[1].trim() : null;
   }
 

@@ -543,7 +543,7 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
+  void mainWindow.loadFile(path.join(__dirname, "..", "src", "index.html"));
   cacheContentChrome(mainWindow);
 
   // Windows mouse side buttons arrive as app-command, not reliable mouse events.
@@ -830,8 +830,8 @@ function stopActiveJob() {
 ipcMain.handle("get-app-version", async () => app.getVersion());
 
 function compareVersions(left, right) {
-  const leftParts = String(left).split(/[.-]/).map((part) => parseInt(part, 10) || 0);
-  const rightParts = String(right).split(/[.-]/).map((part) => parseInt(part, 10) || 0);
+  const leftParts = String(left).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = String(right).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
   const length = Math.max(leftParts.length, rightParts.length);
 
   for (let index = 0; index < length; index++) {
@@ -1026,6 +1026,18 @@ ipcMain.handle("list-remotes", async () => listRemoteNames());
 
 ipcMain.handle("list-remote-entries", async () => readRemoteEntries());
 
+function trimSlashes(value) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "/") {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
 function normalizeRemoteBrowsePath(remotePath) {
   const raw = String(remotePath || "").trim();
   const match = /^([A-Za-z0-9][A-Za-z0-9_-]*):(.*)$/.exec(raw);
@@ -1190,7 +1202,7 @@ async function resolveVaultTarget(payload) {
   if (!remote || !(await listRemoteNames()).includes(remote)) {
     throw new Error(`Remote "${remote}" was not found in your rclone config.`);
   }
-  const cleanFolder = folder.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const cleanFolder = trimSlashes(folder.replace(/\\/g, "/"));
   if (cleanFolder.split("/").some((part) => part === "..")) {
     throw new Error("The folder can't contain \"..\".");
   }
@@ -1678,7 +1690,7 @@ const DRIME_ROOT_UPLOAD_ERROR =
   "Drime doesn't accept large files at the top level of a remote. Open or create a folder and upload into it instead.";
 
 function parseSizeSuffix(value) {
-  const match = /^\s*([\d.]+)\s*([bkmgtp])?i?b?\s*$/i.exec(String(value ?? ""));
+  const match = /^([\d.]+)\s*([bkmgtp])?i?b?$/i.exec(String(value ?? "").trim());
   if (!match) {
     return null;
   }
@@ -2605,10 +2617,17 @@ function quoteWindowsArg(text) {
   if (text && !/[\s"'&|<>^()%!;`$]/.test(text)) {
     return text;
   }
-  const escaped = text
-    .replace(/(\\*)"/g, (_match, slashes) => `${slashes}${slashes}\\"`)
-    .replace(/(\\+)$/, (_match, slashes) => `${slashes}${slashes}`);
-  return `"${escaped}"`;
+  let quoted = "";
+  let slashes = 0;
+  for (const char of text) {
+    if (char === "\\") {
+      slashes += 1;
+      continue;
+    }
+    quoted += char === '"' ? `${"\\".repeat(slashes * 2 + 1)}"` : `${"\\".repeat(slashes)}${char}`;
+    slashes = 0;
+  }
+  return `"${quoted}${"\\".repeat(slashes * 2)}"`;
 }
 
 function quotePosixArg(text) {
@@ -3251,7 +3270,7 @@ if (!hasInstanceLock) {
   });
 }
 
-app.whenReady().then(() => {
+void app.whenReady().then(() => {
   if (!hasInstanceLock) {
     return;
   }

@@ -587,9 +587,21 @@ async function startJobFromForm() {
 
 
 
+function trimSlashes(value) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "/") {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
 function formatRemotePath(remote, subPath) {
 
-  const trimmedPath = subPath.trim().replace(/^\/+|\/+$/g, "");
+  const trimmedPath = trimSlashes(subPath.trim());
 
   return trimmedPath ? `${remote}:${trimmedPath}` : `${remote}:`;
 
@@ -663,7 +675,7 @@ function measureRequiredContentSize() {
   void app.offsetHeight;
 
   const appTop = app.getBoundingClientRect().top;
-  const paddingBottom = parseFloat(getComputedStyle(app).paddingBottom) || 0;
+  const paddingBottom = Number.parseFloat(getComputedStyle(app).paddingBottom) || 0;
   let contentBottom = layout.getBoundingClientRect().bottom - appTop;
 
   if (elements.status?.textContent) {
@@ -1478,6 +1490,6 @@ window.rcloneGui.onJobFinished(({ id, success, message, cancelled, needsResync }
 
 
 
-init();
+void init();
 
 

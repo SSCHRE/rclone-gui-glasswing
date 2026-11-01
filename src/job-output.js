@@ -1,19 +1,17 @@
 const MAX_ACTIVITY_ITEMS = 80;
 
-const STATS_ANYWHERE =
-  /(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+-\s+(.+?)\s+\/\s+([^,]+),\s*([\d.]+%|-),\s*([^,]+),\s*ETA\s*(\S+(?:\s+\([^)]*\))?)/;
+const STATS_TIMESTAMP = /(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) - /;
 
-const STATS_TRANSFERRED =
-  /Transferred:\s+(.+?)\s+\/\s+([^,]+),\s*([\d.]+%|-),\s*([^,]+),\s*ETA\s*(\S+(?:\s+\([^)]*\))?)/;
+const STATS_PERCENT = /^(?:[\d.]+%|-)$/;
 
 const STATS_CHECKS = /^Checks:\s+(\d+)\s*\/\s*(\d+)/;
 
 const FILE_TRANSFER_COUNT = /\(xfr#(\d+)\/(\d+)\)/;
 
 const LOG_LINE =
-  /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(ERROR|NOTICE|INFO)\s+:\s*(.+)$/;
+  /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(ERROR|NOTICE|INFO)\s+:\s*(\S.*)$/;
 
-const SIMPLE_LOG_LINE = /^(ERROR|NOTICE|INFO)\s+:\s*(.+)$/;
+const SIMPLE_LOG_LINE = /^(ERROR|NOTICE|INFO)\s+:\s*(\S.*)$/;
 
 function parsePercent(value) {
   if (!value || value === "-") {
@@ -24,24 +22,40 @@ function parsePercent(value) {
   return match ? Number.parseFloat(match[1]) : null;
 }
 
-function extractStats(line) {
-  const match = line.match(STATS_ANYWHERE);
-  if (!match) {
+function parseStatsBody(body) {
+  const [amounts, percent, speed, ...rest] = body.split(",");
+  const separator = amounts.indexOf(" / ");
+  const eta = rest.join(",").trim();
+  if (separator < 0 || !STATS_PERCENT.test(String(percent).trim()) || !speed || !eta.startsWith("ETA")) {
     return null;
   }
 
   return {
-    timestamp: match[1],
-    transferred: match[2].trim(),
-    total: match[3].trim(),
-    percent: match[4],
-    speed: match[5].trim(),
-    eta: match[6].trim(),
+    transferred: amounts.slice(0, separator).trim(),
+    total: amounts.slice(separator + 3).trim(),
+    percent: percent.trim(),
+    speed: speed.trim(),
+    eta: eta.slice(3).trim(),
   };
 }
 
+function extractStats(line) {
+  const match = STATS_TIMESTAMP.exec(line);
+  if (!match) {
+    return null;
+  }
+
+  const stats = parseStatsBody(line.slice(match.index + match[0].length));
+  return stats ? { timestamp: match[1], ...stats } : null;
+}
+
+function extractTransferredStats(line) {
+  const start = line.indexOf("Transferred:");
+  return start < 0 ? null : parseStatsBody(line.slice(start + "Transferred:".length).trim());
+}
+
 function cleanEta(eta) {
-  return eta.replace(/\s+\((?:xfr|chk|err)[^)]*\)/gi, "").trim();
+  return eta.replace(/\((?:xfr|chk|err)[^)]*\)/gi, "").trim();
 }
 
 function truncatePath(value, maxLength = 72) {
@@ -216,15 +230,9 @@ class JobOutputPanel {
       return;
     }
 
-    const transferredStats = line.match(STATS_TRANSFERRED);
+    const transferredStats = extractTransferredStats(line);
     if (transferredStats) {
-      this.updateTransferStats({
-        transferred: transferredStats[1].trim(),
-        total: transferredStats[2].trim(),
-        percent: transferredStats[3],
-        speed: transferredStats[4].trim(),
-        eta: transferredStats[5].trim(),
-      });
+      this.updateTransferStats(transferredStats);
       return;
     }
 

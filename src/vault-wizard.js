@@ -10,6 +10,18 @@
   let inspectTimer = null;
   let inspectToken = 0;
 
+  function trimSlashes(value) {
+    let start = 0;
+    let end = value.length;
+    while (start < end && value[start] === "/") {
+      start += 1;
+    }
+    while (end > start && value[end - 1] === "/") {
+      end -= 1;
+    }
+    return value.slice(start, end);
+  }
+
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) {
@@ -80,7 +92,7 @@
     if (state.local) {
       return state.folder || "a folder on this computer";
     }
-    return `${state.remote}:${state.folder.replace(/^\/+|\/+$/g, "")}`;
+    return `${state.remote}:${trimSlashes(state.folder)}`;
   }
 
   function isExisting() {

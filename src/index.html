@@ -164,10 +164,10 @@
               <div class="collapsible-body">
                 <div class="remote-insert">
                   <div class="remote-fields">
-                    <select id="remote-picker">
+                    <select id="remote-picker" aria-label="Remote">
                       <option value="">Select a configured remote...</option>
                     </select>
-                    <input id="remote-path" type="text" placeholder="optional/path" />
+                    <input id="remote-path" type="text" placeholder="optional/path" aria-label="Path inside the remote" />
                   </div>
                   <div class="remote-actions">
                     <button id="insert-remote-source" type="button" class="secondary">To source</button>
@@ -696,7 +696,7 @@
             <div id="remote-panel-detail" class="remote-panel-detail hidden">
               <div class="remote-detail-header">
                 <div>
-                  <h3 id="remote-detail-name" class="remote-detail-name"></h3>
+                  <h3 id="remote-detail-name" class="remote-detail-name">Remote</h3>
                   <span id="remote-detail-type" class="remote-type-badge"></span>
                 </div>
                 <div class="remote-detail-actions">

@@ -451,8 +451,6 @@ select:focus {
   outline: none;
   border-color: rgba(92, 176, 255, 0.55);
   background: rgba(8, 12, 18, 0.96);
-  box-shadow: 0 0 0 2px rgba(92, 176, 255, 0.12);
-  transform: translateY(-1px);
   box-shadow: 0 0 0 4px rgba(92, 176, 255, 0.12);
   transform: translateY(-1px);
 }
