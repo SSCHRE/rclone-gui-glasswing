@@ -1039,20 +1039,44 @@ function trimSlashes(value) {
   return value.slice(start, end);
 }
 
-function normalizeRemoteBrowsePath(remotePath) {
+const REMOTE_NAMES_CACHE_MS = 10000;
+let remoteNamesCache = null;
+
+async function cachedRemoteNames() {
+  if (!remoteNamesCache || Date.now() - remoteNamesCache.at > REMOTE_NAMES_CACHE_MS) {
+    remoteNamesCache = { at: Date.now(), names: listRemoteNames() };
+  }
+  try {
+    return await remoteNamesCache.names;
+  } catch (error) {
+    remoteNamesCache = null;
+    throw error;
+  }
+}
+
+async function browsableRemote(requested) {
+  const cached = (await cachedRemoteNames()).find((name) => name === requested);
+  if (cached) {
+    return cached;
+  }
+  remoteNamesCache = null;
+  return configuredRemote(requested);
+}
+
+async function normalizeRemoteBrowsePath(remotePath) {
   const raw = String(remotePath || "").trim();
   const match = /^([A-Za-z0-9][A-Za-z0-9_-]*):(.*)$/.exec(raw);
   if (!match) {
     throw new Error('Path must look like "remote:" or "remote:folder/path".');
   }
 
-  const remote = match[1];
+  const remote = await browsableRemote(match[1]);
   const subPath = match[2].replace(/^\/+/, "").replace(/\\/g, "/");
   return subPath ? `${remote}:${subPath}` : `${remote}:`;
 }
 
 ipcMain.handle("list-remote-path", async (_event, remotePath) => {
-  const target = normalizeRemoteBrowsePath(remotePath);
+  const target = await normalizeRemoteBrowsePath(remotePath);
   const result = await runRclone(
     rcloneArgs("lsjson", [target], ["--max-depth", "1"]),
     { timeoutMs: 120000 },
@@ -1099,7 +1123,7 @@ ipcMain.handle("search-remote", async (_event, { remotePath, query, token }) => 
   stopRemoteSearch();
   let child = null;
   try {
-    const summary = await remoteSearch.searchRemote(normalizeRemoteBrowsePath(remotePath), query, {
+    const summary = await remoteSearch.searchRemote(await normalizeRemoteBrowsePath(remotePath), query, {
       onSpawn: (spawned) => {
         child = spawned;
         activeRemoteSearch = spawned;
@@ -1199,10 +1223,7 @@ async function resolveVaultTarget(payload) {
     return path.resolve(folder);
   }
 
-  const remote = String(payload?.remote || "").trim();
-  if (!remote || !(await listRemoteNames()).includes(remote)) {
-    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
-  }
+  const remote = await configuredRemote(payload?.remote);
   const cleanFolder = trimSlashes(folder.replace(/\\/g, "/"));
   if (cleanFolder.split("/").some((part) => part === "..")) {
     throw new Error("The folder can't contain \"..\".");
@@ -1798,7 +1819,7 @@ ipcMain.handle("upload-to-remote", async (_event, payload) => {
     throw new Error("An upload is already running.");
   }
 
-  const target = normalizeRemoteBrowsePath(payload?.remotePath);
+  const target = await normalizeRemoteBrowsePath(payload?.remotePath);
   const localPaths = Array.isArray(payload?.localPaths)
     ? payload.localPaths.filter((localPath) => typeof localPath === "string" && localPath.trim())
     : [];
@@ -1973,7 +1994,7 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
     throw new Error("A local save path is required.");
   }
 
-  const source = normalizeRemoteBrowsePath(remotePath);
+  const source = await normalizeRemoteBrowsePath(remotePath);
   const download = { child: null, cancelled: false };
   activeDownload = download;
   const errors = [];
@@ -2049,7 +2070,7 @@ ipcMain.handle("delete-remote-file", async (_event, payload) => {
     throw new Error("A remote path is required.");
   }
 
-  const source = normalizeRemoteBrowsePath(remotePath);
+  const source = await normalizeRemoteBrowsePath(remotePath);
   // Use purge for directories (deletes directory and all contents), delete for files
   const command = isDir ? "purge" : "delete";
   const result = await runRclone(rcloneArgs(command, [source]), {
@@ -2073,7 +2094,7 @@ ipcMain.handle("create-remote-folder", async (_event, payload) => {
     throw new Error("Remote path and folder name are required.");
   }
 
-  const source = normalizeRemoteBrowsePath(remotePath);
+  const source = await normalizeRemoteBrowsePath(remotePath);
   // Build the folder path: remote:current/path/newFolder
   const folderPath = source.endsWith(":") ? `${source}${folderName}` : `${source}/${folderName}`;
   
@@ -2471,7 +2492,7 @@ ipcMain.handle("open-remote-preview", async (_event, remotePath, options = {}) =
     throw new Error("Wait for the current job to finish before opening a preview.");
   }
 
-  const source = normalizeRemoteBrowsePath(remotePath);
+  const source = await normalizeRemoteBrowsePath(remotePath);
   const meta = previewKindFromPath(source);
   if (!meta) {
     throw new Error("Preview supports .txt, .pdf, .mp3, .mp4, .zip, .7z, .jpg, .jpeg, and .png files only.");
