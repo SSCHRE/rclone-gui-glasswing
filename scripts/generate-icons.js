@@ -1,6 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
-const pngToIco = require("png-to-ico");
+const pngToIcoModule = require('png-to-ico');
+const pngToIco = pngToIcoModule.default || pngToIcoModule;
 const { readPNG, resize } = require("png-to-ico/lib/png");
 const { PNG } = require("pngjs");
 
