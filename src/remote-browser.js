@@ -320,11 +320,20 @@ function navigatePreview(direction) {
   void previewSelectedFile();
 }
 
+function trimSlashes(value) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "/") {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
 function formatRemotePath(remote, subPath = "") {
-  const trimmed = String(subPath || "")
-    .trim()
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\\/g, "/");
+  const trimmed = trimSlashes(String(subPath || "").trim()).replace(/\\/g, "/");
   return trimmed ? `${remote}:${trimmed}` : `${remote}:`;
 }
 
@@ -333,15 +342,12 @@ function joinSubPath(base, name) {
     .filter(Boolean)
     .join("/")
     .replace(/\\/g, "/")
-    .replace(/\/+/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  return parts;
+    .replace(/\/+/g, "/");
+  return trimSlashes(parts);
 }
 
 function parentSubPath(subPath) {
-  const trimmed = String(subPath || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
+  const trimmed = trimSlashes(String(subPath || "").replace(/\\/g, "/"));
   if (!trimmed) {
     return "";
   }
@@ -867,9 +873,7 @@ function pushBrowseHistory(remote, subPath) {
 
   const entry = {
     remote,
-    subPath: String(subPath || "")
-      .replace(/\\/g, "/")
-      .replace(/^\/+|\/+$/g, ""),
+    subPath: trimSlashes(String(subPath || "").replace(/\\/g, "/")),
   };
   const current = browseHistory[browseHistoryIndex];
   if (current && current.remote === entry.remote && current.subPath === entry.subPath) {
@@ -891,9 +895,7 @@ function resetBrowseHistory(remote, subPath = "") {
 
 async function navigateTo(subPath, { recordHistory = true } = {}) {
   endSearchMode();
-  const targetSubPath = String(subPath || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
+  const targetSubPath = trimSlashes(String(subPath || "").replace(/\\/g, "/"));
   
   const token = ++loadToken;
   const targetPath = formatRemotePath(currentRemote, targetSubPath);
@@ -1219,10 +1221,7 @@ function openPreviewDialog(payload) {
 }
 
 function normalizeZipEntryPath(name) {
-  return String(name || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  return trimSlashes(String(name || "").replace(/\\/g, "/"));
 }
 
 function buildZipFolderListing(allEntries, currentPath) {
@@ -1345,9 +1344,7 @@ function navigateZipTo(path, { recordHistory = true } = {}) {
     return;
   }
 
-  const next = String(path || "")
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "");
+  const next = trimSlashes(String(path || "").replace(/\\/g, "/"));
 
   if (recordHistory) {
     const history = Array.isArray(zipPreviewState.history) ? zipPreviewState.history : [""];

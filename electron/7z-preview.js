@@ -19,6 +19,14 @@ const NID = {
   EncodedHeader: 0x17,
 };
 
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function resolve7zaPath() {
   let binary = path7za;
   if (binary.includes("app.asar")) {
@@ -180,7 +188,7 @@ function parseSevenZListOutput(stdout) {
     }
 
     entries.push({
-      name: name.replace(/\/+$/, ""),
+      name: trimTrailingSlashes(name),
       size: folderFlag || !Number.isFinite(size) ? null : size,
       compressedSize: folderFlag || !Number.isFinite(packed) ? null : packed,
       isDir: Boolean(folderFlag),
