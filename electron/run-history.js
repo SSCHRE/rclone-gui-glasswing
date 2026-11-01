@@ -5,7 +5,7 @@ const { randomUUID } = require("crypto");
 const MAX_RUNS = 300;
 const MAX_LOG_CHARS = 16000;
 
-const STATS_LINE = /-\s+(.+?)\s+\/\s+([^,]+),\s*(?:[\d.]+%|-),\s*([^,]+),\s*ETA\b/;
+const STATS_LINE = /-\s+([^/\s][^/]*)\/([^,]+),\s*(?:[\d.]+%|-),([^,]+),\s*ETA\b/;
 const TRANSFER_COUNT = /\(xfr#(\d+)\/(\d+)\)/;
 const ERROR_LINE = /(?:^|\s)ERROR\s+:/;
 
