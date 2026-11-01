@@ -33,6 +33,7 @@
       "en-US"
     ],
     "compression": "store",
+    "afterPack": "build/after-pack.js",
     "directories": {
       "output": "dist"
     },

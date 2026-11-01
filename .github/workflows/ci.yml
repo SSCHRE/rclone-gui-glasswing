@@ -138,8 +138,6 @@ jobs:
           for size in 16 32 48 128 256 512; do grep -q "hicolor/${size}x${size}/apps/glasswing.png" /tmp/deb-contents.txt; done
           chmod +x dist/*.AppImage
           (cd dist && ./*.AppImage --appimage-extract >/dev/null)
-          echo "=== 7zip-bin linux folder ==="
-          ls -laR dist/squashfs-root/resources/app.asar.unpacked/node_modules/7zip-bin/linux
           test -x dist/squashfs-root/glasswing || { echo "MISSING: glasswing binary"; exit 1; }
           test -x dist/squashfs-root/resources/app.asar.unpacked/node_modules/7zip-bin/linux/x64/7za || { echo "MISSING: 7za"; exit 1; }
           rm -rf dist/squashfs-root
