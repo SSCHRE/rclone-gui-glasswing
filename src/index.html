@@ -37,6 +37,7 @@
           <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">Jobs</button>
           <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
           <button id="mode-storage" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="storage">Storage</button>
+          <button id="mode-history" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="history">History</button>
         </nav>
         <div class="header-actions">
           <button id="bwlimit-button" type="button" class="secondary bwlimit-button" title="Bandwidth limit for all transfers">
@@ -425,6 +426,35 @@
             <h3 class="storage-section-title">This PC</h3>
             <div id="storage-local-grid" class="storage-grid"></div>
           </div>
+        </section>
+      </main>
+      <main id="history-view" class="layout history-layout hidden" data-app-view="history" hidden>
+        <section class="panel history-panel">
+          <div class="storage-header">
+            <div>
+              <h2>History</h2>
+              <p id="run-history-summary" class="storage-summary"></p>
+            </div>
+            <div class="storage-header-actions">
+              <label class="storage-sort">
+                <span>Job</span>
+                <select id="run-history-job">
+                  <option value="">All jobs</option>
+                </select>
+              </label>
+              <label class="storage-sort">
+                <span>Show</span>
+                <select id="run-history-filter">
+                  <option value="all">All runs</option>
+                  <option value="failed">Failed only</option>
+                  <option value="scheduled">Scheduled only</option>
+                </select>
+              </label>
+              <button id="run-history-clear" type="button" class="secondary">Clear history</button>
+            </div>
+          </div>
+          <ul id="run-history-list" class="run-history-list"></ul>
+          <p id="run-history-empty" class="run-history-empty hidden">Nothing here yet. Finished jobs show up here.</p>
         </section>
       </main>
       </div>
@@ -835,6 +865,7 @@
     <script src="remote-browser.js"></script>
     <script src="bandwidth-settings.js"></script>
     <script src="job-schedule.js"></script>
+    <script src="run-history.js"></script>
     <script src="storage-view.js"></script>
     <script src="renderer.js"></script>
   </body>

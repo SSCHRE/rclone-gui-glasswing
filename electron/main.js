@@ -7,6 +7,7 @@ const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
 const { createStorageHistory } = require("./storage-history");
+const { createRunHistory, createRunTracker } = require("./run-history");
 const scheduler = require("./scheduler");
 const remoteSearch = require("./remote-search");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
@@ -1534,6 +1535,50 @@ function getStorageHistory() {
   return storageHistory;
 }
 
+let runHistory = null;
+
+function getRunHistory() {
+  if (!runHistory) {
+    runHistory = createRunHistory({ directory: app.getPath("userData") });
+  }
+  return runHistory;
+}
+
+async function recordJobRun(jobState, { success, cancelled, message }) {
+  const { job } = jobState;
+  const savedJob = jobState.historyId
+    ? (await readJobHistory()).find((entry) => entry.id === jobState.historyId)
+    : null;
+  try {
+    await getRunHistory().record({
+      jobId: savedJob?.id || null,
+      name: savedJob?.name || jobState.scheduled?.name || null,
+      operation: job.operation,
+      source: job.source,
+      destination: job.destination,
+      dryRun: !!job.dryRun,
+      deleteExcluded: !!job.deleteExcluded,
+      extraArgs: (job.extraArgs || "").trim(),
+      scheduled: Boolean(jobState.scheduled),
+      startedAt: jobState.startedAt,
+      finishedAt: Date.now(),
+      status: cancelled ? "cancelled" : success ? "success" : "failed",
+      message: message || "",
+      ...jobState.tracker.finish(),
+      log: jobState.outputTail,
+    });
+    send("runs-changed");
+  } catch {}
+}
+
+ipcMain.handle("list-runs", async () => getRunHistory().list());
+ipcMain.handle("get-run-log", async (_event, runId) => getRunHistory().getLog(String(runId)));
+ipcMain.handle("clear-runs", async () => {
+  const runs = await getRunHistory().clear();
+  send("runs-changed");
+  return runs;
+});
+
 ipcMain.handle("get-storage-history", async (_event, targets) =>
   getStorageHistory().get(Array.isArray(targets) ? targets.map(String) : undefined),
 );
@@ -2716,6 +2761,8 @@ async function startJob(job, { scheduled = null } = {}) {
     outputTail: "",
     scheduled,
     historyId,
+    startedAt: Date.now(),
+    tracker: createRunTracker(),
   };
 
   activeJob = jobState;
@@ -2733,6 +2780,7 @@ async function startJob(job, { scheduled = null } = {}) {
     stream.on("data", (chunk) => {
       const text = chunk.toString();
       jobState.outputTail = (jobState.outputTail + text).slice(-JOB_OUTPUT_TAIL_CHARS);
+      jobState.tracker.push(text);
       send("job-output", {
         id: jobState.id,
         type,
@@ -3131,6 +3179,7 @@ function onJobSettled(jobState, { success, cancelled, message }) {
     return;
   }
   jobState.settled = true;
+  void recordJobRun(jobState, { success, cancelled, message });
 
   if (jobState.scheduled && !cancelled) {
     const { name } = jobState.scheduled;

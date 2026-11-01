@@ -3876,6 +3876,145 @@ button:disabled {
   font-size: 0.84rem;
 }
 
+.history-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.history-panel {
+  gap: 18px;
+  overflow-y: auto;
+  animation: fadeLeft 0.65s var(--ease-out) both;
+}
+
+#run-history-job {
+  max-width: 260px;
+  text-overflow: ellipsis;
+}
+
+.run-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.run-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--panel-highlight);
+}
+
+.run-history-item.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.run-history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.run-history-row .job-badge {
+  flex-shrink: 0;
+}
+
+.run-history-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.run-history-name,
+.run-history-paths {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-history-name {
+  font-weight: 600;
+}
+
+.run-history-paths {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.run-history-when {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.run-history-when span {
+  color: var(--muted);
+}
+
+.run-history-detail,
+.run-history-message {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.run-history-detail {
+  color: var(--muted);
+}
+
+.run-history-message {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.run-history-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.run-history-item-actions .secondary {
+  width: auto;
+  padding: 5px 12px;
+  font-size: 0.84rem;
+}
+
+.command-preview.run-history-log {
+  max-height: 220px;
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.run-history-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+#run-history-clear.is-armed {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+@media (max-width: 560px) {
+  .run-history-row {
+    flex-wrap: wrap;
+  }
+
+  .run-history-when {
+    flex-direction: row;
+    gap: 8px;
+  }
+}
+
 .checkbox input:disabled,
 .checkbox input:disabled ~ span {
   cursor: not-allowed;

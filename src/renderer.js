@@ -46,6 +46,7 @@ const elements = {
   modeJobs: document.getElementById("mode-jobs"),
   modeBrowse: document.getElementById("mode-browse"),
   modeStorage: document.getElementById("mode-storage"),
+  modeHistory: document.getElementById("mode-history"),
   jobsView: document.getElementById("jobs-view"),
   browseView: document.getElementById("browse-view"),
 
@@ -88,6 +89,7 @@ const elements = {
 const outputPanel = new JobOutputPanel(document.querySelector(".output-panel"));
 
 let activeJobId = null;
+let jobRunning = false;
 let remotes = [];
 let jobHistory = [];
 let statusHideTimeout = null;
@@ -225,6 +227,8 @@ function setStatus(text, tone = "", options = {}) {
 
 
 function setRunning(isRunning) {
+  jobRunning = isRunning;
+  window.RunHistory?.syncLoadButtons();
   elements.runJob.disabled = isRunning;
   elements.stopJob.disabled = !isRunning;
   elements.operation.disabled = isRunning;
@@ -825,7 +829,7 @@ function refreshPathMeters() {
 }
 
 function setAppMode(mode) {
-  const nextMode = ["browse", "storage"].includes(mode) ? mode : "jobs";
+  const nextMode = ["browse", "storage", "history"].includes(mode) ? mode : "jobs";
   const browsing = nextMode === "browse";
 
   elements.jobsView?.classList.toggle("hidden", nextMode !== "jobs");
@@ -837,6 +841,7 @@ function setAppMode(mode) {
     [elements.modeJobs, "jobs"],
     [elements.modeBrowse, "browse"],
     [elements.modeStorage, "storage"],
+    [elements.modeHistory, "history"],
   ]) {
     button?.classList.toggle("is-active", nextMode === buttonMode);
     button?.setAttribute("aria-selected", String(nextMode === buttonMode));
@@ -847,6 +852,12 @@ function setAppMode(mode) {
     window.StorageView?.show();
   } else {
     window.StorageView?.hide();
+  }
+
+  if (nextMode === "history") {
+    window.RunHistory?.show();
+  } else {
+    window.RunHistory?.hide();
   }
 
   if (browsing) {
@@ -1064,6 +1075,7 @@ elements.refreshRemotes.addEventListener("click", () => loadRemotes({ showFeedba
 elements.modeJobs?.addEventListener("click", () => setAppMode("jobs"));
 elements.modeBrowse?.addEventListener("click", () => setAppMode("browse"));
 elements.modeStorage?.addEventListener("click", () => setAppMode("storage"));
+elements.modeHistory?.addEventListener("click", () => setAppMode("history"));
 
 window.StorageView?.setOptions({
   notify: showSnackbar,
@@ -1383,6 +1395,23 @@ function attachToRunningJob(job) {
     });
   }
 }
+
+window.RunHistory?.setOptions({
+  canLoad: () => !jobRunning,
+  onLoad: (run) => {
+    setAppMode("jobs");
+    applyJobToForm(run, { fromSavedJob: true });
+    if (jobHistory.some((entry) => entry.id === run.jobId)) {
+      fillJobHistoryPicker(run.jobId);
+    }
+    updateHistoryActions();
+    showSnackbar({
+      title: "Job loaded",
+      message: `Loaded the settings from ${escapeHtml(run.name ? `"${run.name}"` : "that run")}.`,
+      type: "success",
+    });
+  },
+});
 
 window.rcloneGui.onJobStarted((job) => {
   if (!job.scheduled) {
