@@ -126,11 +126,16 @@ jobs:
         run: |
           ls -lh dist/*.AppImage dist/*.deb
           dpkg-deb --info dist/*.deb
-          dpkg-deb --info dist/*.deb postinst | grep -q "chmod 4755"
-          dpkg-deb --info dist/*.deb postinst | grep -q "apparmor_parser --replace"
-          dpkg-deb --fsys-tarfile dist/*.deb | tar -xO ./usr/share/applications/glasswing.desktop | grep -x "StartupWMClass=rclone-glasswing-gui"
-          dpkg-deb --contents dist/*.deb | grep -E "glasswing$|\.desktop$|icons/.*\.png$"
-          for size in 16 32 48 128 256 512; do dpkg-deb --contents dist/*.deb | grep -q "hicolor/${size}x${size}/apps/glasswing.png"; done
+          # Write listings to files first: piping into `grep -q` exits early,
+          # which makes dpkg-deb/tar fail with "write error" under pipefail.
+          dpkg-deb --info dist/*.deb postinst > /tmp/postinst.txt
+          grep -q "chmod 4755" /tmp/postinst.txt
+          grep -q "apparmor_parser --replace" /tmp/postinst.txt
+          dpkg-deb --fsys-tarfile dist/*.deb | tar -xO ./usr/share/applications/glasswing.desktop > /tmp/glasswing.desktop
+          grep -x "StartupWMClass=rclone-glasswing-gui" /tmp/glasswing.desktop
+          dpkg-deb --contents dist/*.deb > /tmp/deb-contents.txt
+          grep -E "glasswing$|\.desktop$|icons/.*\.png$" /tmp/deb-contents.txt
+          for size in 16 32 48 128 256 512; do grep -q "hicolor/${size}x${size}/apps/glasswing.png" /tmp/deb-contents.txt; done
           chmod +x dist/*.AppImage
           (cd dist && ./*.AppImage --appimage-extract >/dev/null)
           test -x dist/squashfs-root/glasswing
