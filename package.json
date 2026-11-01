@@ -77,7 +77,9 @@
       "maintainer": "SSCHRE",
       "artifactName": "Glasswing-${version}-${arch}.${ext}",
       "desktop": {
-        "StartupWMClass": "rclone-glasswing-gui"
+        "entry": {
+          "StartupWMClass": "rclone-glasswing-gui"
+        }
       }
     },
     "files": [
