@@ -771,6 +771,45 @@ async function listRemoteNames() {
     .filter(Boolean);
 }
 
+async function configuredRemote(value) {
+  const requested = String(value ?? "").trim();
+  const remote = (await listRemoteNames()).find((name) => name === requested);
+  if (!remote) {
+    throw new Error(requested ? `Remote "${requested}" was not found in your rclone config.` : "Remote name is required.");
+  }
+  return remote;
+}
+
+let providersCache = null;
+
+async function listProviders() {
+  if (!providersCache) {
+    const result = await runRclone(["config", "providers"]);
+    if (result.code !== 0) {
+      throw new Error(result.stderr || "Failed to load rclone providers");
+    }
+    providersCache = JSON.parse(result.stdout);
+  }
+  return providersCache;
+}
+
+async function knownProvider(value) {
+  const requested = String(value ?? "").trim();
+  const provider = (await listProviders()).find((entry) => entry.Name === requested);
+  if (!provider) {
+    throw new Error(requested ? `Unknown provider type "${requested}".` : "Provider type is required.");
+  }
+  return provider;
+}
+
+function knownProviderOption(provider, key) {
+  const option = (provider.Options || []).find((entry) => entry.Name === key);
+  if (!option) {
+    throw new Error(`"${key}" isn't a setting for ${provider.Name} remotes.`);
+  }
+  return option.Name;
+}
+
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
@@ -1066,36 +1105,23 @@ ipcMain.handle("search-remote", async (_event, { remotePath, query, token }) => 
 
 ipcMain.handle("cancel-remote-search", async () => stopRemoteSearch());
 
-ipcMain.handle("get-config-providers", async () => {
-  const result = await runRclone(["config", "providers"]);
-  if (result.code !== 0) {
-    throw new Error(result.stderr || "Failed to load rclone providers");
-  }
-
-  return JSON.parse(result.stdout);
-});
+ipcMain.handle("get-config-providers", async () => listProviders());
 
 ipcMain.handle("get-remote-redacted", async (_event, name) => {
-  if (!name?.trim()) {
-    throw new Error("Remote name is required.");
-  }
-
-  const result = await runRclone(rcloneArgs(["config", "redacted"], [name.trim()]));
+  const remote = await configuredRemote(name);
+  const result = await runRclone(rcloneArgs(["config", "redacted"], [remote]));
   if (result.code !== 0) {
-    throw new Error(result.stderr || `Failed to load remote "${name}"`);
+    throw new Error(result.stderr || `Failed to load remote "${remote}"`);
   }
 
   return result.stdout.trim();
 });
 
 ipcMain.handle("delete-remote", async (_event, name) => {
-  if (!name?.trim()) {
-    throw new Error("Remote name is required.");
-  }
-
-  const result = await runRclone(rcloneArgs(["config", "delete"], [name.trim()]));
+  const remote = await configuredRemote(name);
+  const result = await runRclone(rcloneArgs(["config", "delete"], [remote]));
   if (result.code !== 0) {
-    throw new Error(result.stderr || `Failed to delete remote "${name}"`);
+    throw new Error(result.stderr || `Failed to delete remote "${remote}"`);
   }
 
   return readRemoteEntries();
@@ -1103,10 +1129,9 @@ ipcMain.handle("delete-remote", async (_event, name) => {
 
 ipcMain.handle("create-remote", async (_event, payload) => {
   const name = payload?.name?.trim();
-  const type = payload?.type?.trim();
   const options = payload?.options || {};
 
-  if (!name || !type) {
+  if (!name) {
     throw new Error("Remote name and provider type are required.");
   }
 
@@ -1114,18 +1139,20 @@ ipcMain.handle("create-remote", async (_event, payload) => {
     throw new Error("Remote name must start with a letter or number and contain only letters, numbers, underscore, or hyphen.");
   }
 
-  const args = ["config", "create", name, type];
+  const provider = await knownProvider(payload?.type);
+  const args = ["config", "create", name, provider.Name];
   for (const [key, value] of Object.entries(options)) {
     if (value === "" || value == null) {
       continue;
     }
 
+    const optionName = knownProviderOption(provider, key);
     if (typeof value === "boolean") {
-      args.push(`${key}=${value ? "true" : "false"}`);
+      args.push(`${optionName}=${value ? "true" : "false"}`);
       continue;
     }
 
-    args.push(`${key}=${String(value)}`);
+    args.push(`${optionName}=${String(value)}`);
   }
 
   // Obscure password-type values for backends like koofr that require it.
@@ -1263,12 +1290,9 @@ ipcMain.handle("create-vault", async (_event, payload) => {
   return { name, target, entries: await readRemoteEntries() };
 });
 
-ipcMain.handle("authorize-provider", async (_event, provider) => {
-  if (!provider?.trim()) {
-    throw new Error("Provider type is required.");
-  }
-
-  const result = await runRclone(rcloneArgs("authorize", [provider.trim()]), { interactive: true });
+ipcMain.handle("authorize-provider", async (_event, providerName) => {
+  const provider = await knownProvider(providerName);
+  const result = await runRclone(rcloneArgs("authorize", [provider.Name]), { interactive: true });
   if (result.code !== 0) {
     throw new Error(result.stderr || "Authorization failed or was cancelled.");
   }
@@ -1277,13 +1301,10 @@ ipcMain.handle("authorize-provider", async (_event, provider) => {
 });
 
 ipcMain.handle("reconnect-remote", async (_event, name) => {
-  if (!name?.trim()) {
-    throw new Error("Remote name is required.");
-  }
-
-  const result = await runRclone(rcloneArgs(["config", "reconnect"], [name.trim()]), { interactive: true });
+  const remote = await configuredRemote(name);
+  const result = await runRclone(rcloneArgs(["config", "reconnect"], [remote]), { interactive: true });
   if (result.code !== 0) {
-    throw new Error(result.stderr || `Failed to reconnect remote "${name}"`);
+    throw new Error(result.stderr || `Failed to reconnect remote "${remote}"`);
   }
 
   return result.stdout.trim();
@@ -1316,13 +1337,7 @@ ipcMain.handle("set-bwlimit", async (_event, value) => {
 });
 
 ipcMain.handle("mount-remote", async (_event, payload) => {
-  const remote = payload?.remote?.trim();
-  if (!remote) {
-    throw new Error("Remote name is required.");
-  }
-  if (!(await listRemoteNames()).includes(remote)) {
-    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
-  }
+  const remote = await configuredRemote(payload?.remote);
 
   const mount = await mounts.startMount(
     {
@@ -1446,15 +1461,27 @@ function describeAboutFailure(stderr) {
     .replace(/^about call failed:\s*/, "");
 }
 
+const DRIVE_ROOTS = process.platform === "win32"
+  ? Array.from({ length: 24 }, (_, index) => `${String.fromCharCode(67 + index)}:\\`)
+  : ["/"];
+
+async function usageTarget(value) {
+  const requested = String(value ?? "").trim();
+  const driveRoot = DRIVE_ROOTS.find((root) => root === requested.toUpperCase());
+  if (driveRoot) {
+    return driveRoot;
+  }
+  const remote = await configuredRemote(requested.replace(/:$/, ""));
+  return `${remote}:`;
+}
+
 ipcMain.handle("get-remote-usage", async (_event, target) => {
   const remote = String(target || "").trim();
-  if (!remote || remote.startsWith("-")) {
-    throw new Error("Remote name is required.");
-  }
+  const aboutTarget = await usageTarget(remote);
 
   let result;
   try {
-    result = await runRclone(rcloneArgs("about", [/[:\\/]/.test(remote) ? remote : `${remote}:`], ["--json"]), { timeoutMs: 60000 });
+    result = await runRclone(rcloneArgs("about", [aboutTarget], ["--json"]), { timeoutMs: 60000 });
   } catch (error) {
     return { remote, error: error.message || "rclone about failed." };
   }
@@ -1500,10 +1527,7 @@ ipcMain.handle("get-storage-history", async (_event, targets) =>
 );
 
 ipcMain.handle("cleanup-remote", async (_event, name) => {
-  const remote = String(name || "").trim();
-  if (!remote || !(await listRemoteNames()).includes(remote)) {
-    throw new Error(`Remote "${remote}" was not found in your rclone config.`);
-  }
+  const remote = await configuredRemote(name);
   if (activeJob) {
     throw new Error("Wait for the current job to finish before emptying the trash.");
   }
