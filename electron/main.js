@@ -568,11 +568,11 @@ function createWindow() {
       hideToTray();
       return;
     }
-    if (closeConfirmed || !mounts.hasMounts()) {
+    if (closeConfirmed || (!activeJob && !mounts.hasMounts())) {
       return;
     }
     event.preventDefault();
-    void confirmCloseWithMounts();
+    void confirmClose();
   });
 
   if (icon) {
@@ -580,13 +580,54 @@ function createWindow() {
   }
 }
 
-async function confirmCloseWithMounts() {
+async function confirmStopActiveJob() {
+  if (!activeJob) {
+    return true;
+  }
+
+  const options = {
+    type: "warning",
+    title: "Job still running",
+    message: activeJob.scheduled
+      ? `The scheduled job "${activeJob.scheduled.name}" is still running.`
+      : `A ${activeJob.job.operation} job is still running.`,
+    detail: "Quitting Glasswing stops the job. Files that were already transferred stay where they are.",
+    buttons: ["Keep running", "Stop job and quit"],
+    defaultId: 0,
+    cancelId: 0,
+  };
+  const parent = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : null;
+  const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+  return response === 1;
+}
+
+async function quitFromTray() {
   if (closeCheckInProgress) {
     return;
   }
   closeCheckInProgress = true;
 
   try {
+    if (await confirmStopActiveJob()) {
+      appQuitting = true;
+      app.quit();
+    }
+  } finally {
+    closeCheckInProgress = false;
+  }
+}
+
+async function confirmClose() {
+  if (closeCheckInProgress) {
+    return;
+  }
+  closeCheckInProgress = true;
+
+  try {
+    if (!(await confirmStopActiveJob())) {
+      return;
+    }
+
     const pending = await mounts.getTotalPendingUploads();
     if (pending > 0 && mainWindow && !mainWindow.isDestroyed()) {
       const { response } = await dialog.showMessageBox(mainWindow, {
@@ -1812,9 +1853,6 @@ function stopActiveUpload() {
 }
 
 ipcMain.handle("upload-to-remote", async (_event, payload) => {
-  if (activeJob) {
-    throw new Error("Wait for the current job to finish before uploading.");
-  }
   if (activeUpload) {
     throw new Error("An upload is already running.");
   }
@@ -3084,10 +3122,7 @@ function updateTray() {
       { type: "separator" },
       {
         label: "Quit Glasswing",
-        click: () => {
-          appQuitting = true;
-          app.quit();
-        },
+        click: () => void quitFromTray(),
       },
     ]),
   );
