@@ -764,6 +764,58 @@
                 </div>
                 <p id="remote-mount-hint" class="remote-mount-hint"></p>
               </section>
+              <section id="remote-serve" class="remote-mount remote-serve hidden" aria-labelledby="remote-serve-title">
+                <div class="remote-mount-heading">
+                  <h4 id="remote-serve-title" class="remote-mount-title">Share over the network</h4>
+                  <span id="remote-serve-status" class="remote-mount-status"></span>
+                </div>
+                <div class="remote-mount-controls remote-serve-controls">
+                  <label class="field remote-serve-protocol">
+                    <span>Protocol</span>
+                    <select id="remote-serve-protocol"></select>
+                  </label>
+                  <label class="field remote-serve-port">
+                    <span>Port</span>
+                    <input id="remote-serve-port" type="text" inputmode="numeric" maxlength="5" autocomplete="off" />
+                  </label>
+                  <label class="field remote-serve-folder">
+                    <span>Folder (optional)</span>
+                    <input id="remote-serve-folder" type="text" placeholder="e.g. Photos/2024" autocomplete="off" spellcheck="false" />
+                  </label>
+                </div>
+                <div class="remote-mount-controls remote-serve-controls">
+                  <label class="field remote-serve-user">
+                    <span>Username</span>
+                    <input id="remote-serve-user" type="text" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <label class="field remote-serve-pass">
+                    <span>Password</span>
+                    <input id="remote-serve-pass" type="password" autocomplete="new-password" />
+                  </label>
+                  <label class="field remote-serve-cache">
+                    <span>File cache</span>
+                    <select id="remote-serve-cache">
+                      <option value="off">Off</option>
+                      <option value="minimal">Minimal</option>
+                      <option value="writes">Writes</option>
+                      <option value="full">Full (media)</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="remote-mount-controls remote-serve-controls">
+                  <label class="checkbox remote-serve-check">
+                    <input id="remote-serve-readonly" type="checkbox" checked />
+                    Read-only
+                  </label>
+                  <label class="checkbox remote-serve-check">
+                    <input id="remote-serve-network" type="checkbox" />
+                    Allow other devices on my network
+                  </label>
+                  <button id="remote-serve-btn" type="button" class="primary">Start serving</button>
+                </div>
+                <p id="remote-serve-hint" class="remote-mount-hint"></p>
+                <ul id="remote-serve-list" class="remote-serve-list hidden"></ul>
+              </section>
               <pre id="remote-detail-config" class="remote-config-block"></pre>
             </div>
 
@@ -860,6 +912,7 @@
     <script src="job-output.js"></script>
     <script src="vault-wizard.js"></script>
     <script src="remote-manager.js"></script>
+    <script src="remote-serve.js"></script>
     <script src="transfer-panel.js"></script>
     <script src="storage-usage.js"></script>
     <script src="remote-browser.js"></script>

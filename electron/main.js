@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
+const serves = require("./serves");
 const { createStorageHistory } = require("./storage-history");
 const { createRunHistory, createRunTracker } = require("./run-history");
 const scheduler = require("./scheduler");
@@ -23,7 +24,7 @@ let appQuitting = false;
 let windowRevealed = !process.argv.includes("--hidden") || process.argv.some((arg) => arg.startsWith("--upload"));
 let closeConfirmed = false;
 let closeCheckInProgress = false;
-let mountsStopping = false;
+let mountsAndServesStopping = false;
 
 const WINDOW_ABSOLUTE_MIN_WIDTH = 760;
 const WINDOW_ABSOLUTE_MIN_HEIGHT = 520;
@@ -568,7 +569,7 @@ function createWindow() {
       hideToTray();
       return;
     }
-    if (closeConfirmed || (!activeJob && !mounts.hasMounts())) {
+    if (closeConfirmed || (!activeJob && !mounts.hasMounts() && !serves.hasServes())) {
       return;
     }
     event.preventDefault();
@@ -596,9 +597,35 @@ async function confirmStopActiveJob() {
     defaultId: 0,
     cancelId: 0,
   };
+  return (await showQuitWarning(options)) === 1;
+}
+
+async function confirmStopServes() {
+  const running = serves.listServes();
+  if (running.length === 0) {
+    return true;
+  }
+
+  const [first] = running;
+  const options = {
+    type: "warning",
+    title: "Still sharing",
+    message:
+      running.length === 1
+        ? `"${first.remote}" is still being shared over ${first.label} at ${first.url}`
+        : `${running.length} serves are still sharing your remotes.`,
+    detail: "Quitting Glasswing stops sharing. Anyone connected from another device loses access right away.",
+    buttons: ["Keep sharing", "Stop sharing and quit"],
+    defaultId: 0,
+    cancelId: 0,
+  };
+  return (await showQuitWarning(options)) === 1;
+}
+
+async function showQuitWarning(options) {
   const parent = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : null;
   const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
-  return response === 1;
+  return response;
 }
 
 async function quitFromTray() {
@@ -608,7 +635,7 @@ async function quitFromTray() {
   closeCheckInProgress = true;
 
   try {
-    if (await confirmStopActiveJob()) {
+    if ((await confirmStopActiveJob()) && (await confirmStopServes())) {
       appQuitting = true;
       app.quit();
     }
@@ -624,7 +651,7 @@ async function confirmClose() {
   closeCheckInProgress = true;
 
   try {
-    if (!(await confirmStopActiveJob())) {
+    if (!(await confirmStopActiveJob()) || !(await confirmStopServes())) {
       return;
     }
 
@@ -1431,6 +1458,60 @@ ipcMain.handle("mount-remote", async (_event, payload) => {
 ipcMain.handle("unmount-remote", async (_event, remote, options) => {
   const result = await mounts.stopMount(String(remote || ""), { force: Boolean(options?.force) });
   return { ...result, status: mounts.getStatus() };
+});
+
+function sendServesChanged(event = null) {
+  send("serves-changed", { serves: serves.listServes(), event });
+}
+
+async function resolveServeTarget(payload) {
+  const remote = await configuredRemote(payload?.remote);
+  const cleanFolder = trimSlashes(String(payload?.folder || "").trim().replace(/\\/g, "/"));
+  if (cleanFolder.split("/").some((part) => part === "..")) {
+    throw new Error("The folder can't contain \"..\".");
+  }
+  return { remote, folder: cleanFolder, target: `${remote}:${cleanFolder}` };
+}
+
+ipcMain.handle("get-serve-status", async () => serves.getStatus());
+
+ipcMain.handle("start-serve", async (_event, payload) => {
+  const { remote, folder, target } = await resolveServeTarget(payload);
+
+  const serve = await serves.startServe(
+    {
+      remote,
+      path: folder,
+      target,
+      protocol: String(payload?.protocol || ""),
+      port: payload?.port,
+      network: payload?.network === true,
+      user: payload?.user,
+      pass: payload?.pass,
+      readOnly: payload?.readOnly !== false,
+      cacheMode: payload?.cacheMode,
+      bwlimit: getBwlimit(),
+    },
+    { onExit: (info) => sendServesChanged({ type: "stopped", ...info }) },
+  );
+  sendServesChanged({ type: "started", ...serve });
+  return serves.getStatus();
+});
+
+ipcMain.handle("stop-serve", async (_event, id) => {
+  await serves.stopServe(id);
+  return serves.getStatus();
+});
+
+ipcMain.handle("open-serve", async (_event, id) => {
+  const serve = serves.findServe(id);
+  if (!serve) {
+    throw new Error("That serve isn't running anymore.");
+  }
+  if (!serve.browsable) {
+    throw new Error(`${serve.label} can't be opened in a browser.`);
+  }
+  await shell.openExternal(serve.localUrl);
 });
 
 ipcMain.handle("open-mount", async (_event, remote) => {
@@ -3427,12 +3508,12 @@ app.on("before-quit", (event) => {
   stopActiveUpload();
   stopActiveDownload();
 
-  if (mounts.hasMounts() || mountsStopping) {
+  if (mounts.hasMounts() || serves.hasServes() || mountsAndServesStopping) {
     event.preventDefault();
-    if (!mountsStopping) {
-      mountsStopping = true;
-      void mounts.stopAllMounts().finally(() => {
-        mountsStopping = false;
+    if (!mountsAndServesStopping) {
+      mountsAndServesStopping = true;
+      void Promise.all([mounts.stopAllMounts(), serves.stopAllServes()]).finally(() => {
+        mountsAndServesStopping = false;
         app.quit();
       });
     }

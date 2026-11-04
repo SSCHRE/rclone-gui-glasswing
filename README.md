@@ -35,6 +35,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal
 - **Remote mounting**: Mount your rclone remote to as a system drive
+- **Serve a remote**: share a remote (or a folder in it) over HTTP, WebDAV, FTP or SFTP, just on your pc or to other devices on your network
 - **Storage overview**: Monitor your remote space/usage in 1 simple view
 - **Vault wizard**: Create an rclone crypt vault in the Remote manager
 
@@ -124,7 +125,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Linux build (AppImage / `.deb`)
 - [x] Sync preview
 - [x] Run/job history
-- [ ] Rclone serve
+- [x] Rclone serve
 - [x] Search remote
 - [ ] Split screen browse
 - [ ] Rclone self update

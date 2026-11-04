@@ -78,8 +78,8 @@ function updateForm() {
   const hasRate = Boolean(readForm()) || (bw.scheduled.checked && Number(bw.rate.value) > 0);
   bw.hours.classList.toggle("hidden", !bw.scheduled.checked);
   bw.note.textContent = bw.scheduled.checked
-    ? "Applies to transfers or jobs you start after saving. Drives that are already mounted pick up a schedule the next time they're mounted."
-    : "Applies to transfers or jobs you start after saving. Mounted drives update instantly.";
+    ? "Applies to transfers or jobs you start after saving. Drives that are already mounted pick up a schedule the next time they're mounted, and running serves the next time they start."
+    : "Applies to transfers or jobs you start after saving. Mounted drives update instantly, running serves pick it up the next time they start.";
 
   if (!hasRate) {
     bw.hint.textContent = "No limit: transfers run at full speed.";
