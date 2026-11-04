@@ -1,6 +1,8 @@
 const { spawn } = require("child_process");
+const fs = require("fs");
 const net = require("net");
 const os = require("os");
+const path = require("path");
 
 const PROTOCOLS = Object.freeze({
   http: Object.freeze({ command: "http", label: "HTTP", scheme: "http", defaultPort: 8080, browsable: true, requiresAuth: false }),
@@ -152,6 +154,27 @@ function canConnect(port) {
   });
 }
 
+function isFile(candidate) {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function findRcloneBinary() {
+  const fileName = process.platform === "win32" ? "rclone.exe" : "rclone";
+  const found = String(process.env.PATH || "")
+    .split(path.delimiter)
+    .filter((dir) => dir && path.isAbsolute(dir))
+    .map((dir) => path.join(dir, fileName))
+    .find(isFile);
+  if (!found) {
+    throw new Error("rclone was not found on your PATH.");
+  }
+  return found;
+}
+
 function serveEnv(aliasName, target, { userName, password, bwlimit }) {
   const configPrefix = `RCLONE_CONFIG_${aliasName.toUpperCase()}`;
   const env = {
@@ -232,6 +255,8 @@ async function startServe(
     throw new Error(`${protocolDef.label} needs a username and password.`);
   }
 
+  const rcloneBinary = findRcloneBinary();
+
   const serve = {
     remote,
     path,
@@ -269,7 +294,7 @@ async function startServe(
 
   const aliasName = `glasswingserve${portNumber}`;
   const args = ["serve", protocolDef.command, ...flags, "--", `${aliasName}:`];
-  const child = spawn("rclone", args, {
+  const child = spawn(rcloneBinary, args, {
     windowsHide: true,
     shell: false,
     env: serveEnv(aliasName, target, { userName, password, bwlimit }),
