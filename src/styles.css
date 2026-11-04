@@ -2401,6 +2401,104 @@ button:disabled {
   color: var(--danger);
 }
 
+.remote-serve-controls + .remote-serve-controls {
+  margin-top: 12px;
+}
+
+.remote-serve-protocol {
+  width: 130px;
+}
+
+.remote-serve-port {
+  width: 100px;
+}
+
+.remote-serve-folder,
+.remote-serve-user,
+.remote-serve-pass,
+.remote-serve-cache {
+  flex: 1 1 160px;
+}
+
+.remote-serve-check {
+  padding-bottom: 10px;
+}
+
+.remote-serve-controls .remote-serve-check:last-of-type {
+  margin-right: auto;
+}
+
+.remote-serve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remote-serve-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(115, 224, 163, 0.16);
+  background: rgba(115, 224, 163, 0.04);
+}
+
+.remote-serve-item-info {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.remote-serve-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.remote-serve-item-target {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-serve-item-url {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  word-break: break-all;
+  user-select: text;
+}
+
+.remote-serve-item-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.remote-serve-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.remote-serve-item-actions .primary,
+.remote-serve-item-actions .secondary,
+.remote-serve-item-actions .danger {
+  width: auto;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+}
+
 .remote-add-title {
   margin: 0 0 16px;
   font-size: 1.05rem;

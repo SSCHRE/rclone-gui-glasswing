@@ -110,6 +110,9 @@ function showPanel(mode) {
   remoteManager.panelDetail.classList.toggle("hidden", mode !== "detail");
   remoteManager.panelAdd.classList.toggle("hidden", mode !== "add");
   remoteManager.panelVault.classList.toggle("hidden", mode !== "vault");
+  if (mode !== "detail") {
+    window.RemoteServe?.hide();
+  }
   if (mode !== "vault") {
     window.VaultWizard?.reset();
   }
@@ -303,6 +306,7 @@ async function selectRemote(name) {
   renderRemoteList();
   showPanel("detail");
   renderMountPanel();
+  window.RemoteServe?.show(name);
   remoteManager.detailName.textContent = name;
   remoteManager.detailType.textContent = "…";
   remoteManager.detailConfig.textContent = "Loading remote settings…";
@@ -747,6 +751,7 @@ function closeRemoteManager() {
   remoteManager.dialog.setAttribute("aria-hidden", "true");
   showCreateError("");
   selectedRemoteName = null;
+  window.RemoteServe?.hide();
   window.VaultWizard?.reset();
 }
 
@@ -854,6 +859,11 @@ async function deleteSelectedRemote() {
 
   if (getMount(selectedRemoteName)) {
     window.alert(`Unmount "${selectedRemoteName}" before deleting it.`);
+    return;
+  }
+
+  if (window.RemoteServe?.isServing(selectedRemoteName)) {
+    window.alert(`Stop serving "${selectedRemoteName}" before deleting it.`);
     return;
   }
 

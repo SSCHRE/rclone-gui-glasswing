@@ -778,6 +778,19 @@
     background: var(--md-surface-low);
   }
 
+  & .remote-serve-item {
+    border-color: transparent;
+    background: var(--md-surface-lowest);
+  }
+
+  & .remote-serve-item-url {
+    color: var(--md-on-surface);
+  }
+
+  & .remote-serve-item-meta {
+    color: var(--md-on-surface-variant);
+  }
+
   & .remote-mount-title,
   & .remote-detail-name,
   & .remote-add-title {

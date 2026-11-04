@@ -45,6 +45,15 @@ contextBridge.exposeInMainWorld("rcloneGui", {
     ipcRenderer.on("mounts-changed", listener);
     return () => ipcRenderer.removeListener("mounts-changed", listener);
   },
+  getServeStatus: () => ipcRenderer.invoke("get-serve-status"),
+  startServe: (payload) => ipcRenderer.invoke("start-serve", payload),
+  stopServe: (id) => ipcRenderer.invoke("stop-serve", id),
+  openServe: (id) => ipcRenderer.invoke("open-serve", id),
+  onServesChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("serves-changed", listener);
+    return () => ipcRenderer.removeListener("serves-changed", listener);
+  },
   getConfigFilePath: () => ipcRenderer.invoke("get-config-file-path"),
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   pickSaveFile: (defaultName) => ipcRenderer.invoke("pick-save-file", defaultName),

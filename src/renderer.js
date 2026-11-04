@@ -1469,6 +1469,33 @@ window.rcloneGui.onMountsChanged?.(({ event }) => {
   }
 });
 
+window.rcloneGui.onServesChanged?.(({ event }) => {
+  if (!event) {
+    return;
+  }
+
+  if (event.type === "started") {
+    showSnackbar({
+      title: `${event.label} serve started`,
+      message: [{ strong: event.remote }, ` is being shared at ${event.url}`],
+      type: "success",
+    });
+  } else if (event.unexpected) {
+    showPopup({
+      title: `${event.label} serve stopped`,
+      message: `The serve for "${event.remote}" on port ${event.port} stopped unexpectedly. ${event.message}`,
+      type: "error",
+      autoClose: false,
+    });
+  } else {
+    showSnackbar({
+      title: `${event.label} serve stopped`,
+      message: [{ strong: event.remote }, ` is no longer shared on port ${event.port}`],
+      type: "success",
+    });
+  }
+});
+
 window.rcloneGui.onJobFinished(({ id, success, message, cancelled, needsResync }) => {
 
   if (id !== activeJobId) {
