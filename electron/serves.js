@@ -152,6 +152,26 @@ function canConnect(port) {
   });
 }
 
+function serveEnv(aliasName, target, { userName, password, bwlimit }) {
+  const configPrefix = `RCLONE_CONFIG_${aliasName.toUpperCase()}`;
+  const env = {
+    ...process.env,
+    [`${configPrefix}_TYPE`]: "alias",
+    [`${configPrefix}_REMOTE`]: target,
+  };
+  delete env.RCLONE_USER;
+  delete env.RCLONE_PASS;
+  delete env.RCLONE_BWLIMIT;
+  if (userName) {
+    env.RCLONE_USER = userName;
+    env.RCLONE_PASS = password;
+  }
+  if (bwlimit) {
+    env.RCLONE_BWLIMIT = bwlimit;
+  }
+  return env;
+}
+
 function redact(text, secret) {
   return secret ? text.split(secret).join("***") : text;
 }
@@ -246,18 +266,13 @@ async function startServe(
   if (readOnly) {
     flags.push("--read-only");
   }
-  if (userName) {
-    flags.push(`--user=${userName}`, `--pass=${password}`);
-  }
-  if (bwlimit) {
-    flags.push(`--bwlimit=${bwlimit}`);
-  }
 
-  const args = ["serve", protocolDef.command, ...flags, "--", target];
+  const aliasName = `glasswingserve${portNumber}`;
+  const args = ["serve", protocolDef.command, ...flags, "--", `${aliasName}:`];
   const child = spawn("rclone", args, {
     windowsHide: true,
     shell: false,
-    env: process.env,
+    env: serveEnv(aliasName, target, { userName, password, bwlimit }),
   });
   serve.child = child;
 
@@ -297,7 +312,7 @@ async function startServe(
         return;
       }
       probing = true;
-      canConnect(portNumber).then(markReady);
+      void canConnect(portNumber).then(markReady);
     }, SERVE_READY_POLL_MS);
 
     const timer = setTimeout(() => {
