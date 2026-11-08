@@ -128,6 +128,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Run/job history
 - [x] Rclone serve
 - [x] Search remote
+- [x] Cloud migration wizard
 - [ ] Split screen browse
 - [ ] Rclone self update
 
