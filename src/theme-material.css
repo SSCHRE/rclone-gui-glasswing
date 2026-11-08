@@ -841,6 +841,63 @@
     font-weight: 500;
   }
 
+  & .migration-badge {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+  }
+
+  & .migration-location,
+  & .migration-choice,
+  & .migration-stat,
+  & .migration-card,
+  & .migration-report {
+    border-color: var(--md-outline-variant);
+    background: var(--md-surface-lowest);
+  }
+
+  & .migration-choice.is-selected {
+    border-color: var(--md-primary);
+    background: var(--md-primary-container);
+  }
+
+  & .migration-card:hover {
+    border-color: var(--md-primary);
+  }
+
+  & .migration-chip {
+    border-color: var(--md-primary);
+    color: var(--md-primary);
+  }
+
+  & .migration-chip.is-done,
+  & .migration-chip.is-verified {
+    border-color: var(--md-success);
+    color: var(--md-success);
+  }
+
+  & .migration-chip.is-needs-attention {
+    border-color: var(--md-warning);
+    color: var(--md-warning);
+  }
+
+  & .migration-chip.is-cleaning {
+    border-color: var(--md-error);
+    color: var(--md-error);
+  }
+
+  & .migration-progress {
+    background: var(--md-surface-highest);
+  }
+
+  & .migration-progress-fill {
+    background: var(--md-primary);
+  }
+
+  & .migration-empty-icon {
+    background: var(--md-primary-container);
+    border-color: var(--md-outline-variant);
+  }
+
   & .browse-table thead th {
     background: var(--md-surface-low);
     backdrop-filter: none;

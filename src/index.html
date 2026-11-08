@@ -89,7 +89,13 @@
       <main id="jobs-view" class="layout" data-app-view="jobs">
         <section class="panel panel-form">
           <div class="form-body">
-            <h2>Job</h2>
+            <div class="panel-title-row">
+              <h2>Job</h2>
+              <button id="migration-open" type="button" class="secondary migration-open-btn" title="Move everything from one cloud to another">
+                Cloud migration
+                <span id="migration-badge" class="migration-badge hidden"></span>
+              </button>
+            </div>
 
             <details class="form-section job-history-section collapsible" id="job-history-collapsible">
               <summary class="collapsible-summary">
@@ -629,6 +635,16 @@
       </div>
     </div>
 
+    <div id="migration-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-migration-close></div>
+      <div class="popup-card popup-card-migration" role="dialog" aria-modal="true" aria-labelledby="migration-title">
+        <div class="migration-head">
+          <p id="migration-title" class="popup-title">Cloud migration</p>
+          <button id="migration-close" type="button" class="secondary migration-close" aria-label="Close">✕</button>
+        </div>
+        <div id="migration-body" class="migration-body"></div>
+      </div>
+    </div>
     <div id="schedule-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-schedule-close></div>
       <div class="popup-card popup-card-form popup-card-schedule" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
@@ -911,6 +927,7 @@
     <script src="speed-graph.js"></script>
     <script src="job-output.js"></script>
     <script src="vault-wizard.js"></script>
+    <script src="migration-wizard.js"></script>
     <script src="remote-manager.js"></script>
     <script src="remote-serve.js"></script>
     <script src="transfer-panel.js"></script>
