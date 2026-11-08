@@ -114,6 +114,24 @@ openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-prev
     ipcRenderer.on("runs-changed", listener);
     return () => ipcRenderer.removeListener("runs-changed", listener);
   },
+  listMigrations: () => ipcRenderer.invoke("migration-list"),
+  scanMigration: (payload) => ipcRenderer.invoke("migration-scan", payload),
+  cancelMigrationTask: () => ipcRenderer.invoke("migration-cancel"),
+  createMigration: (payload) => ipcRenderer.invoke("migration-create", payload),
+  runMigrationNow: (id) => ipcRenderer.invoke("migration-run-now", id),
+  verifyMigration: (id) => ipcRenderer.invoke("migration-verify", id),
+  cleanupMigration: (id) => ipcRenderer.invoke("migration-cleanup", id),
+  removeMigration: (id) => ipcRenderer.invoke("migration-remove", id),
+  onMigrationsChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("migrations-changed", listener);
+    return () => ipcRenderer.removeListener("migrations-changed", listener);
+  },
+  onMigrationProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("migration-progress", listener);
+    return () => ipcRenderer.removeListener("migration-progress", listener);
+  },
   onSchedulesChanged: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("schedules-changed", listener);

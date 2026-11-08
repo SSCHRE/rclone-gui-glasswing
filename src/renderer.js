@@ -1089,6 +1089,8 @@ window.StorageView?.setOptions({
   },
 });
 
+window.MigrationWizard?.init({ onNotify: showSnackbar });
+
 window.RemoteBrowser?.init({
   onUsePath: useBrowsePath,
   onNotify: showSnackbar,

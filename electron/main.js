@@ -10,6 +10,7 @@ const serves = require("./serves");
 const { createStorageHistory } = require("./storage-history");
 const { createRunHistory, createRunTracker } = require("./run-history");
 const scheduler = require("./scheduler");
+const migrations = require("./migrations");
 const remoteSearch = require("./remote-search");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
@@ -3317,6 +3318,7 @@ function onJobSettled(jobState, { success, cancelled, message }) {
   }
   jobState.settled = true;
   void recordJobRun(jobState, { success, cancelled, message });
+  void handleMigrationRunFinished(jobState, { success, cancelled, message });
 
   if (jobState.scheduled && !cancelled) {
     const { name } = jobState.scheduled;
@@ -3327,6 +3329,530 @@ function onJobSettled(jobState, { success, cancelled, message }) {
   }
   setTimeout(() => void runQueuedSchedule(), 1000);
 }
+
+let migrationStore = null;
+let migrationTask = null;
+const MIGRATION_WRAPPER_TYPES = new Set(["crypt", "alias", "chunker", "compress", "hasher"]);
+
+function getMigrationStore() {
+  if (!migrationStore) {
+    migrationStore = migrations.createMigrationStore({ directory: app.getPath("userData") });
+  }
+  return migrationStore;
+}
+
+function sendMigrationsChanged() {
+  send("migrations-changed");
+}
+
+function remoteNameOf(remotePath) {
+  return remotePath.slice(0, remotePath.indexOf(":"));
+}
+
+function isInsideRemotePath(outer, inner) {
+  return inner.startsWith(outer.endsWith(":") ? outer : `${outer}/`);
+}
+
+function assertDistinctMigrationPaths(source, destination) {
+  if (source === destination) {
+    throw new Error("Pick two different places.");
+  }
+  if (isInsideRemotePath(source, destination) || isInsideRemotePath(destination, source)) {
+    throw new Error("One folder is inside the other. Pick two separate places.");
+  }
+}
+
+async function readConfigDump() {
+  try {
+    const result = await runRclone(["config", "dump"], { timeoutMs: 30000 });
+    return result.code === 0 ? parseConfigDump(result.stdout) : {};
+  } catch {
+    return {};
+  }
+}
+
+function effectiveRemoteType(dump, name, depth = 0) {
+  const settings = dump[name];
+  if (!settings || depth > 5) {
+    return "";
+  }
+  const wrapped = typeof settings.remote === "string" && settings.remote.includes(":") ? settings.remote : "";
+  if (MIGRATION_WRAPPER_TYPES.has(settings.type) && wrapped) {
+    return effectiveRemoteType(dump, wrapped.slice(0, wrapped.indexOf(":")), depth + 1) || settings.type;
+  }
+  return settings.type || "";
+}
+
+async function typicalTransferSpeed() {
+  const runs = await getRunHistory().list();
+  const speeds = runs
+    .filter((run) => run.status === "success" && !run.dryRun)
+    .map((run) => migrations.parseSize(run.speed))
+    .filter((speed) => speed > 64 * 1024)
+    .slice(0, 15)
+    .sort((left, right) => left - right);
+  return speeds.length ? speeds[Math.floor(speeds.length / 2)] : null;
+}
+
+function rcloneErrorText(stderr) {
+  const line = String(stderr || "").trim().split(/\r?\n/).findLast(Boolean) || "";
+  return line.replace(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\s+\w+\s*:\s*/, "");
+}
+
+function clockTime(date = new Date()) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function sanitizeMigrationScan(scan) {
+  const number = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
+  return {
+    files: number(scan?.files),
+    bytes: number(scan?.bytes),
+    free: number(scan?.free),
+    scannedAt: Date.now(),
+  };
+}
+
+function migrationSchedule(migration) {
+  return { enabled: true, type: "daily", time: migration.startTime || clockTime(), catchUp: true };
+}
+
+function enqueueMigrationRun(jobId) {
+  if (!scheduleQueue.some((queued) => queued.id === jobId)) {
+    scheduleQueue.push({ id: jobId, missed: false });
+  }
+  void runQueuedSchedule();
+}
+
+function staleMigrationStatus(migration) {
+  if (migrationTask?.id === migration.id) {
+    return null;
+  }
+  if (migration.status === "cleaning") {
+    return "verified";
+  }
+  return migration.status === "verifying" ? "copied" : null;
+}
+
+async function describeMigrations() {
+  const store = getMigrationStore();
+  const jobs = await readJobHistory();
+  const described = [];
+  for (const migration of await store.list()) {
+    const stale = staleMigrationStatus(migration);
+    const current = stale ? (await store.update(migration.id, { status: stale })) || migration : migration;
+    const job = jobs.find((entry) => entry.id === current.jobId);
+    described.push({
+      ...current,
+      jobMissing: !job,
+      nextRunAt: job?.schedule?.enabled ? job.schedule.nextRunAt : null,
+      running: Boolean(activeJob && activeJob.historyId === current.jobId),
+      queued: scheduleQueue.some((queued) => queued.id === current.jobId),
+      task: migrationTask?.id === current.id ? migrationTask.kind : null,
+    });
+  }
+  return described;
+}
+
+async function handleMigrationRunFinished(jobState, result) {
+  if (!jobState.historyId || jobState.job.dryRun) {
+    return;
+  }
+  const store = getMigrationStore();
+  const migration = await store.findByJob(jobState.historyId);
+  if (migration?.status !== "copying") {
+    return;
+  }
+
+  const outcome = migrations.classifyRun({ ...result, output: jobState.outputTail });
+  const copied = migrations.parseSize(jobState.tracker.finish().transferred) || 0;
+  await store.update(migration.id, (current) => ({
+    runs: (current.runs || 0) + 1,
+    copiedBytes: (current.copiedBytes || 0) + copied,
+    lastRunAt: Date.now(),
+    lastOutcome: outcome,
+    lastError: outcome === "failed" ? result.message || "rclone exited with an error." : "",
+  }));
+
+  if (outcome === "complete") {
+    await setJobSchedule(migration.jobId, { enabled: false });
+    await store.update(migration.id, { status: "copied" });
+    sendMigrationsChanged();
+    verifyMigration(migration.id).catch(() => {});
+    return;
+  }
+  sendMigrationsChanged();
+  if (outcome === "failed") {
+    notifyInBackground(`"${migration.name}" hit a problem`, "It tries again at the next run.");
+  }
+}
+
+function migrationLogReader(task, migrationId, errors, onEntry) {
+  return createJsonLogReader((entry) => {
+    const text = String(entry.msg || "");
+    if (entry.level === "error" && text) {
+      errors.push(text.trim());
+    }
+    onEntry?.(text);
+    if (entry.stats) {
+      const done = task.kind === "delete" ? entry.stats.deletes : entry.stats.checks;
+      send("migration-progress", {
+        id: migrationId,
+        kind: task.kind,
+        done: Number(done) || 0,
+        total: task.kind === "delete" ? task.total : Number(entry.stats.totalChecks) || 0,
+      });
+    }
+  });
+}
+
+async function runMigrationCheck(migration, task) {
+  const store = getMigrationStore();
+  const paths = await store.reportPaths(migration.id);
+  await fs.rm(paths.combined, { force: true });
+  await fs.rm(paths.matched, { force: true });
+  const source = await normalizeRemoteBrowsePath(migration.source);
+  const destination = await normalizeRemoteBrowsePath(migration.destination);
+  const errors = [];
+  let method = "hash";
+
+  const result = await runRclone(
+    rcloneArgs("check", [source, destination], [
+      "--one-way",
+      "--combined",
+      paths.combined,
+      "--match",
+      paths.matched,
+      "--use-json-log",
+      "--stats",
+      "1s",
+      "--stats-log-level",
+      "NOTICE",
+    ]),
+    {
+      timeoutMs: 0,
+      onSpawn: (child) => {
+        task.child = child;
+        child.stderr.on("data", migrationLogReader(task, migration.id, errors, (text) => {
+          if (/no common hash/i.test(text)) {
+            method = "size";
+          }
+        }));
+      },
+    },
+  );
+  task.child = null;
+  if (task.cancelled) {
+    return null;
+  }
+
+  const report = migrations.parseCheckReport(await fs.readFile(paths.combined, "utf8").catch(() => ""));
+  if (result.code !== 0 && report.matched + report.missing + report.differ + report.errors === 0) {
+    throw new Error(errors.at(-1) || rcloneErrorText(result.stderr) || "rclone check failed.");
+  }
+  return { ...report, method, paths };
+}
+
+function beginMigrationTask(id, kind) {
+  if (migrationTask) {
+    throw new Error("Another migration check is still running.");
+  }
+  migrationTask = { id, kind, child: null, cancelled: false, total: 0 };
+  return migrationTask;
+}
+
+async function verifyMigration(id) {
+  const store = getMigrationStore();
+  const migration = await store.get(id);
+  if (!migration) {
+    throw new Error("Migration not found.");
+  }
+  if (activeJob && activeJob.historyId === migration.jobId) {
+    throw new Error("Wait for the copy to finish first.");
+  }
+
+  const task = beginMigrationTask(id, "verify");
+  const before = migration.status === "verifying" ? "copied" : migration.status;
+  await store.update(id, { status: "verifying" });
+  sendMigrationsChanged();
+  try {
+    const report = await runMigrationCheck(migration, task);
+    if (!report) {
+      await store.update(id, { status: before });
+      return null;
+    }
+    const { paths, ...verify } = report;
+    const clean = !verify.missing && !verify.differ && !verify.errors;
+    let status = "needs-attention";
+    if (clean) {
+      status = migration.mode === "move" ? "verified" : "done";
+    }
+    await store.update(id, { status, verify: { ...verify, checkedAt: Date.now() } });
+    notifyInBackground(
+      clean ? `"${migration.name}" is verified` : `"${migration.name}" needs a look`,
+      clean ? `All ${verify.matched.toLocaleString()} files arrived safely.` : "Some files are missing or different. Open the migration to see which.",
+    );
+    return verify;
+  } catch (error) {
+    await store.update(id, { status: "needs-attention", verify: { error: error.message, checkedAt: Date.now() } });
+    throw error;
+  } finally {
+    migrationTask = null;
+    sendMigrationsChanged();
+  }
+}
+
+async function deleteVerifiedOriginals(migration, task, matchedFile) {
+  const source = await normalizeRemoteBrowsePath(migration.source);
+  const errors = [];
+  const result = await runRclone(
+    rcloneArgs("delete", [source], [
+      "--files-from-raw",
+      matchedFile,
+      "--use-json-log",
+      "--stats",
+      "1s",
+      "--stats-log-level",
+      "NOTICE",
+    ]),
+    {
+      timeoutMs: 0,
+      onSpawn: (child) => {
+        task.child = child;
+        child.stderr.on("data", migrationLogReader(task, migration.id, errors));
+      },
+    },
+  );
+  task.child = null;
+  if (!task.cancelled && result.code !== 0) {
+    throw new Error(errors.at(-1) || rcloneErrorText(result.stderr) || "Couldn't delete the originals.");
+  }
+  if (!task.cancelled) {
+    await runRclone(rcloneArgs("rmdirs", [source], ["--leave-root"]), { timeoutMs: 0 }).catch(() => {});
+  }
+}
+
+async function cleanupMigration(id) {
+  const store = getMigrationStore();
+  const migration = await store.get(id);
+  if (migration?.mode !== "move" || migration.status !== "verified") {
+    throw new Error("Only a verified move can delete its originals.");
+  }
+
+  const task = beginMigrationTask(id, "cleanup");
+  await store.update(id, { status: "cleaning" });
+  sendMigrationsChanged();
+  try {
+    const report = await runMigrationCheck(migration, task);
+    if (!report) {
+      await store.update(id, { status: "verified" });
+      return null;
+    }
+    const { paths, ...verify } = report;
+    if (verify.missing || verify.differ || verify.errors) {
+      await store.update(id, { status: "needs-attention", verify: { ...verify, checkedAt: Date.now() } });
+      throw new Error("Something changed since the last check, so nothing was deleted. Have a look at the report.");
+    }
+
+    task.kind = "delete";
+    task.total = verify.matched;
+    try {
+      await deleteVerifiedOriginals(migration, task, paths.matched);
+    } catch (error) {
+      await store.update(id, { status: "verified" });
+      throw error;
+    }
+    if (task.cancelled) {
+      await store.update(id, { status: "verified" });
+      return null;
+    }
+    await store.update(id, { status: "done", cleanup: { deleted: verify.matched, deletedAt: Date.now() } });
+    return { deleted: verify.matched };
+  } finally {
+    migrationTask = null;
+    sendMigrationsChanged();
+  }
+}
+
+function parseAboutFree(about) {
+  if (about?.code !== 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(about.stdout);
+    return typeof parsed.free === "number" ? parsed.free : null;
+  } catch {
+    return null;
+  }
+}
+
+ipcMain.handle("migration-list", async () => describeMigrations());
+
+ipcMain.handle("migration-scan", async (_event, payload) => {
+  const source = await normalizeRemoteBrowsePath(payload?.source);
+  const destination = await normalizeRemoteBrowsePath(payload?.destination);
+  assertDistinctMigrationPaths(source, destination);
+  const task = beginMigrationTask(null, "scan");
+  try {
+    const [size, about, dump, bytesPerSecond] = await Promise.all([
+      runRclone(rcloneArgs("size", [source], ["--json"]), {
+        timeoutMs: 0,
+        onSpawn: (child) => {
+          task.child = child;
+        },
+      }),
+      runRclone(rcloneArgs("about", [`${remoteNameOf(destination)}:`], ["--json"]), { timeoutMs: 60000 }).catch(() => null),
+      readConfigDump(),
+      typicalTransferSpeed().catch(() => null),
+    ]);
+    if (task.cancelled) {
+      return { cancelled: true };
+    }
+    if (size.code !== 0) {
+      throw new Error(rcloneErrorText(size.stderr) || "Couldn't count the files on the source.");
+    }
+
+    const counted = JSON.parse(size.stdout || "{}");
+    const free = parseAboutFree(about);
+    const sourceType = effectiveRemoteType(dump, remoteNameOf(source));
+    const destType = effectiveRemoteType(dump, remoteNameOf(destination));
+    const sameRemote = remoteNameOf(source) === remoteNameOf(destination);
+    const bytes = Number(counted.bytes) || 0;
+    return {
+      cancelled: false,
+      source,
+      destination,
+      files: Number(counted.count) || 0,
+      bytes,
+      free,
+      sourceType,
+      destType,
+      sameRemote,
+      bytesPerSecond,
+      dailyCapBytes: migrations.dailyCapFor(destType),
+      tips: migrations.tipsFor({ sourceType, destType, sameRemote, bytes, free }),
+    };
+  } finally {
+    migrationTask = null;
+  }
+});
+
+ipcMain.handle("migration-cancel", async () => {
+  if (!migrationTask) {
+    return;
+  }
+  migrationTask.cancelled = true;
+  const child = migrationTask.child;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {}
+  }
+});
+
+function migrationWindow(payload) {
+  if (payload?.nightly !== true) {
+    return { windowHours: null, startTime: null };
+  }
+  const startTime = String(payload.startTime || "");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+    throw new Error("Pick a valid start time.");
+  }
+  return { windowHours: Math.min(23, Math.max(1, Math.round(Number(payload.windowHours) || 6))), startTime };
+}
+
+ipcMain.handle("migration-create", async (_event, payload) => {
+  const source = await normalizeRemoteBrowsePath(payload?.source);
+  const destination = await normalizeRemoteBrowsePath(payload?.destination);
+  assertDistinctMigrationPaths(source, destination);
+  const { windowHours, startTime } = migrationWindow(payload);
+
+  const store = getMigrationStore();
+  if ((await store.list()).some((entry) => entry.source === source && entry.destination === destination && entry.status !== "done")) {
+    throw new Error("There's already a migration between these folders.");
+  }
+
+  const destType = effectiveRemoteType(await readConfigDump(), remoteNameOf(destination));
+  const job = {
+    operation: "copy",
+    source,
+    destination,
+    dryRun: false,
+    deleteExcluded: false,
+    extraArgs: migrations.migrationFlags({ destType, windowHours }).join(" "),
+  };
+  const name = String(payload?.name || "").trim().slice(0, 80) || `Migrate ${remoteNameOf(source)} → ${remoteNameOf(destination)}`;
+  const saved = (await upsertJobHistory(job, { name })).find((entry) => entry.signature === jobSignature(job));
+  if (!saved) {
+    throw new Error("Couldn't save the migration job.");
+  }
+
+  const migration = await store.create({
+    name,
+    source,
+    destination,
+    mode: payload?.mode === "move" ? "move" : "copy",
+    jobId: saved.id,
+    windowHours,
+    startTime,
+    destType,
+    status: "copying",
+    scan: sanitizeMigrationScan(payload?.scan),
+  });
+  await setJobSchedule(saved.id, migrationSchedule(migration));
+  if (!startTime) {
+    enqueueMigrationRun(saved.id);
+  }
+  sendMigrationsChanged();
+  return migration;
+});
+
+ipcMain.handle("migration-run-now", async (_event, id) => {
+  const store = getMigrationStore();
+  const migration = await store.get(id);
+  if (!migration) {
+    throw new Error("Migration not found.");
+  }
+  if (!["copying", "copied", "needs-attention"].includes(migration.status)) {
+    throw new Error("This migration has nothing left to copy.");
+  }
+  await store.update(id, { status: "copying" });
+  await setJobSchedule(migration.jobId, migrationSchedule(migration));
+  enqueueMigrationRun(migration.jobId);
+  sendMigrationsChanged();
+});
+
+ipcMain.handle("migration-verify", async (_event, id) => {
+  const verify = await verifyMigration(id);
+  return verify ? { matched: verify.matched, missing: verify.missing, differ: verify.differ, errors: verify.errors } : null;
+});
+
+ipcMain.handle("migration-cleanup", async (_event, id) => cleanupMigration(id));
+
+ipcMain.handle("migration-remove", async (_event, id) => {
+  const store = getMigrationStore();
+  const migration = await store.get(id);
+  if (!migration) {
+    return;
+  }
+  if (activeJob && activeJob.historyId === migration.jobId) {
+    throw new Error("Stop the running copy first.");
+  }
+  if (migrationTask?.id === id) {
+    throw new Error("Wait for the check to finish, or cancel it first.");
+  }
+  const queuedIndex = scheduleQueue.findIndex((queued) => queued.id === migration.jobId);
+  if (queuedIndex >= 0) {
+    scheduleQueue.splice(queuedIndex, 1);
+  }
+  await withJobHistory(async () => {
+    const entries = await readJobHistory();
+    return writeJobHistory(entries.filter((entry) => entry.id !== migration.jobId));
+  });
+  await refreshSchedules();
+  await store.remove(id);
+  sendMigrationsChanged();
+});
 
 ipcMain.handle("get-active-job", async () =>
   activeJob

@@ -19,6 +19,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Saved jobs**: save, load, update and remove jobs for quick re-use
 - **Stop job**: cancel a running transfer
 - **Schedule jobs**: Schedule saved jobs to be run at specific times
+- **Cloud migration**: move a whole cloud to another one. It checks size and free space first, keeps going in the background (or only at night) over as many days as it needs, handles stuff like Google Drive's 750 GB/day limit, checks every file at the end and can delete the originals once they're verified
 
 ### Browse
 - **Remote browser**: navigate folders on any remote, sort by column, reload or cancel slow listings
