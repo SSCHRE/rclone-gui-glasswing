@@ -1,0 +1,900 @@
+@property --bw-from {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 33.333%;
+}
+
+@property --bw-to {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 75%;
+}
+
+:root {
+  --icon-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='12' height='12' rx='2.5'/%3E%3Cpath d='M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5'/%3E%3C/svg%3E");
+  --icon-clock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+  --icon-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M10 9v6'/%3E%3Cpath d='M14 9v6'/%3E%3C/svg%3E");
+  --cmd-prompt: var(--faint);
+  --cmd-program: var(--text-strong);
+  --cmd-verb: var(--accent-strong);
+  --cmd-flag: color-mix(in srgb, var(--accent-2) 70%, var(--muted));
+  --cmd-value: var(--text);
+  --cmd-path: color-mix(in srgb, var(--success) 82%, var(--text));
+  --cmd-separator: var(--faint);
+  --seg-thumb: color-mix(in srgb, var(--text) 9%, transparent);
+  --seg-thumb-border: var(--hairline-strong);
+  --dialog-footer-bg: var(--ink-4);
+}
+
+.dialog-head {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.dialog-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: 0 6px 18px -10px var(--accent-glow);
+  transition:
+    color var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+
+.dialog-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dialog-head-text {
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.dialog-head .popup-title {
+  margin-bottom: 3px;
+}
+
+.dialog-head .popup-message {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+
+.dialog-seg {
+  --seg-n: 4;
+  --seg-i: 0;
+  position: relative;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  padding: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  isolation: isolate;
+}
+
+.dialog-seg::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  z-index: -1;
+  width: calc((100% - 6px) / var(--seg-n));
+  border: 1px solid var(--seg-thumb-border);
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
+    var(--seg-thumb);
+  box-shadow: var(--shadow-1);
+  translate: calc(var(--seg-i) * 100%) 0;
+  transition:
+    translate var(--dur-3) var(--ease-spring-soft),
+    opacity var(--dur-2) var(--ease-out);
+}
+
+.dialog-seg:not(:has(input:checked))::before {
+  opacity: 0;
+}
+
+.dialog-seg:has(> :nth-child(2) > input:checked) {
+  --seg-i: 1;
+}
+
+.dialog-seg:has(> :nth-child(3) > input:checked) {
+  --seg-i: 2;
+}
+
+.dialog-seg:has(> :nth-child(4) > input:checked) {
+  --seg-i: 3;
+}
+
+.dialog-seg:has(> :nth-child(5) > input:checked) {
+  --seg-i: 4;
+}
+
+.dialog-seg:has(> :nth-child(6) > input:checked) {
+  --seg-i: 5;
+}
+
+.dialog-seg-option {
+  position: relative;
+  display: grid;
+  cursor: pointer;
+}
+
+.dialog-seg-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dialog-seg-option span {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transition:
+    color var(--dur-2) var(--ease-out),
+    scale var(--dur-1) var(--ease-out);
+}
+
+.dialog-seg-option:hover span {
+  color: var(--text);
+}
+
+.dialog-seg-option:active span {
+  scale: 0.96;
+}
+
+.dialog-seg-option input:checked + span {
+  color: var(--text-strong);
+}
+
+.dialog-seg-option input:focus-visible + span {
+  box-shadow: var(--focus-ring);
+}
+
+#bwlimit-dialog .bwlimit-rate-group,
+#schedule-dialog .schedule-hours-group {
+  gap: 0;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+
+#bwlimit-dialog .bwlimit-rate-group:hover,
+#schedule-dialog .schedule-hours-group:hover {
+  border-color: var(--input-border-hover);
+}
+
+#bwlimit-dialog .bwlimit-rate-group:focus-within,
+#schedule-dialog .schedule-hours-group:focus-within {
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-ring);
+}
+
+#bwlimit-dialog .bwlimit-rate-group > *,
+#schedule-dialog .schedule-hours-group > input {
+  min-height: calc(var(--control-h) - 2px);
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+#bwlimit-dialog .bwlimit-rate-group input,
+#schedule-dialog .schedule-hours-group input {
+  font-variant-numeric: tabular-nums;
+}
+
+#bwlimit-dialog input[type="number"]::-webkit-inner-spin-button,
+#bwlimit-dialog input[type="number"]::-webkit-outer-spin-button,
+#schedule-dialog input[type="number"]::-webkit-inner-spin-button,
+#schedule-dialog input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+#bwlimit-dialog .bwlimit-rate-group .bwlimit-unit {
+  flex: 0 0 96px;
+  width: 96px;
+  border-left: 1px solid var(--hairline);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+#bwlimit-dialog .bwlimit-rate-group .bwlimit-unit:hover,
+#bwlimit-dialog .bwlimit-rate-group .bwlimit-unit:focus {
+  color: var(--text);
+}
+
+#bwlimit-dialog :is(input[type="time"]),
+#schedule-dialog :is(input[type="time"]) {
+  color-scheme: dark;
+  font-variant-numeric: tabular-nums;
+}
+
+#bwlimit-dialog input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+#bwlimit-dialog input[type="time"]::-webkit-datetime-edit-minute-field:focus,
+#schedule-dialog input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+#schedule-dialog input[type="time"]::-webkit-datetime-edit-minute-field:focus {
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+
+@keyframes dialogReveal {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.popup-card.popup-card-bwlimit {
+  width: min(500px, 100%);
+}
+
+#bwlimit-dialog .bwlimit-speed {
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+#bwlimit-dialog .bwlimit-presets {
+  --seg-n: 6;
+}
+
+#bwlimit-dialog .bwlimit-rate-group {
+  margin-top: var(--space-1);
+  animation: dialogReveal var(--dur-3) var(--ease-emph);
+}
+
+#bwlimit-dialog .bwlimit-scheduled-toggle {
+  width: fit-content;
+}
+
+#bwlimit-dialog .bwlimit-hours {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0 26px;
+  animation: dialogReveal var(--dur-3) var(--ease-emph);
+}
+
+#bwlimit-dialog .bwlimit-hours-inputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+#bwlimit-dialog .bwlimit-hours-inputs input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.bwlimit-hours-arrow {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--faint);
+}
+
+.bwlimit-timeline {
+  --bw-free: color-mix(in srgb, var(--text) 8%, transparent);
+  --bw-limited: var(--warning);
+  display: grid;
+  gap: 6px;
+  transition:
+    --bw-from var(--dur-3) var(--ease-out),
+    --bw-to var(--dur-3) var(--ease-out);
+}
+
+.bwlimit-timeline-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--bw-free) 0 var(--bw-from),
+    var(--bw-limited) var(--bw-from) var(--bw-to),
+    var(--bw-free) var(--bw-to) 100%
+  );
+  box-shadow: 0 0 12px -4px var(--warning-glow);
+}
+
+.bwlimit-timeline.is-wrapped .bwlimit-timeline-track {
+  background: linear-gradient(
+    90deg,
+    var(--bw-limited) 0 var(--bw-to),
+    var(--bw-free) var(--bw-to) var(--bw-from),
+    var(--bw-limited) var(--bw-from) 100%
+  );
+}
+
+.bwlimit-timeline.is-empty .bwlimit-timeline-track {
+  background: var(--bw-free);
+  box-shadow: none;
+}
+
+.bwlimit-timeline-ticks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+#bwlimit-dialog .bwlimit-hint {
+  --hint-color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  animation: none;
+}
+
+#bwlimit-dialog .bwlimit-hint::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hint-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hint-color) 18%, transparent);
+  transition: background-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+
+#bwlimit-dialog .bwlimit-hint[data-state="off"] {
+  --hint-color: var(--success);
+}
+
+#bwlimit-dialog .bwlimit-hint[data-state="limited"] {
+  --hint-color: var(--warning);
+}
+
+#bwlimit-dialog .bwlimit-hint[data-state="warn"],
+#bwlimit-dialog .bwlimit-hint[data-state="error"] {
+  --hint-color: var(--danger);
+  color: var(--danger);
+}
+
+#bwlimit-dialog .bwlimit-note {
+  margin: 0 0 var(--space-5) 15px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  animation: none;
+}
+
+#bwlimit-dialog .bwlimit-actions .bwlimit-clear {
+  margin-right: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+#bwlimit-dialog .bwlimit-actions .bwlimit-clear:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.popup-card.popup-card-command {
+  width: min(660px, 100%);
+}
+
+#run-confirm-dialog .popup-card[data-risk="destructive"] .dialog-icon {
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
+    var(--warning-soft);
+  color: var(--warning);
+  box-shadow: 0 6px 18px -10px var(--warning-glow);
+}
+
+#run-confirm-dialog .popup-card[data-risk="destructive"] #run-confirm-message {
+  color: color-mix(in srgb, var(--warning) 78%, var(--text));
+}
+
+#run-confirm-dialog .popup-card[data-risk="dry"] .dialog-icon {
+  border-color: color-mix(in srgb, var(--accent-2) 26%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
+    color-mix(in srgb, var(--accent-2) 12%, transparent);
+  color: var(--accent-2);
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+
+.command-preview {
+  max-height: 220px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  tab-size: 2;
+}
+
+#run-confirm-command::before,
+.command-preview.schedule-command::before {
+  content: "$";
+  margin-right: 1ch;
+  color: var(--cmd-prompt);
+  user-select: none;
+}
+
+.command-preview :is(.cmd-program, .cmd-verb, .cmd-flag) {
+  white-space: nowrap;
+}
+
+.command-preview .cmd-program {
+  color: var(--cmd-program);
+  font-weight: 600;
+}
+
+.command-preview .cmd-verb {
+  color: var(--cmd-verb);
+  font-weight: 600;
+}
+
+.command-preview .cmd-flag {
+  color: var(--cmd-flag);
+}
+
+.command-preview .cmd-value {
+  color: var(--cmd-value);
+}
+
+.command-preview .cmd-path {
+  color: var(--cmd-path);
+}
+
+.command-preview .cmd-separator {
+  color: var(--cmd-separator);
+}
+
+.command-preview-well {
+  position: relative;
+  margin-bottom: var(--space-4);
+}
+
+.command-preview-well .command-preview {
+  max-height: min(240px, 34vh);
+  padding: 16px 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40px),
+    color-mix(in srgb, var(--ink-0) 82%, transparent);
+}
+
+.command-preview-remember-row {
+  display: grid;
+  gap: 3px;
+  margin-bottom: var(--space-5);
+}
+
+.command-preview-remember {
+  width: fit-content;
+}
+
+.command-preview-remember-hint {
+  margin: 0 0 0 26px;
+  color: var(--faint);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+#run-confirm-dialog .command-preview-actions #run-confirm-copy {
+  margin-right: auto;
+  min-width: 0;
+}
+
+#run-confirm-copy::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  mask: var(--icon-copy) center / contain no-repeat;
+}
+
+#run-confirm-copy.is-copied {
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+#run-confirm-copy.is-copied::before {
+  mask-image: var(--icon-check);
+  animation: dialogCheckDraw var(--dur-3) var(--ease-out) both;
+}
+
+#run-confirm-copy.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+#run-confirm-copy.is-failed::before {
+  mask-image: var(--icon-alert);
+}
+
+@keyframes dialogCheckDraw {
+  from {
+    clip-path: inset(0 100% 0 0);
+    scale: 0.7;
+  }
+
+  60% {
+    scale: 1.12;
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+    scale: 1;
+  }
+}
+
+.popup-card.popup-card-schedule {
+  width: min(540px, 100%);
+  max-height: calc(100vh - 2 * var(--space-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#schedule-dialog .schedule-job-name {
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+#schedule-dialog .schedule-type-field {
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+#schedule-dialog .schedule-type {
+  --seg-n: 4;
+}
+
+.schedule-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4) var(--space-5);
+}
+
+.schedule-when:not(:has(> :not(.hidden))) {
+  display: none;
+}
+
+#schedule-dialog .schedule-when-row {
+  margin-bottom: 0;
+  animation: dialogReveal var(--dur-3) var(--ease-emph);
+}
+
+#schedule-dialog #schedule-days-row {
+  flex: 1 1 100%;
+}
+
+#schedule-dialog .schedule-hours-group {
+  align-items: center;
+  width: 190px;
+}
+
+#schedule-dialog .schedule-hours-group input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#schedule-dialog .schedule-unit {
+  padding: 0 12px 0 4px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  pointer-events: none;
+}
+
+#schedule-dialog #schedule-time {
+  width: 150px;
+}
+
+.schedule-days-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.schedule-days-head > span {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.schedule-days-quick {
+  display: flex;
+  gap: 2px;
+}
+
+#schedule-dialog .schedule-days-preset {
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+#schedule-dialog .schedule-days-preset:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+#schedule-dialog .schedule-days-preset.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+#schedule-dialog .schedule-days-preset:active {
+  scale: 0.95;
+}
+
+#schedule-dialog .schedule-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#schedule-dialog .schedule-day {
+  position: relative;
+  display: grid;
+  cursor: pointer;
+}
+
+#schedule-dialog .schedule-day input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+#schedule-dialog .schedule-day span {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  pointer-events: none;
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+  animation: dialogChipRelease var(--dur-3) var(--ease-spring);
+}
+
+#schedule-dialog .schedule-day:hover span {
+  border-color: var(--input-border-hover);
+  color: var(--text);
+}
+
+#schedule-dialog .schedule-day input:checked + span {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent),
+    color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-strong);
+  box-shadow: 0 6px 16px -8px var(--accent-glow);
+  animation: dialogChipPop var(--dur-4) var(--ease-spring);
+}
+
+#schedule-dialog .schedule-day input:focus-visible + span {
+  box-shadow: var(--focus-ring);
+}
+
+@keyframes dialogChipPop {
+  from {
+    scale: 0.84;
+  }
+}
+
+@keyframes dialogChipRelease {
+  from {
+    scale: 0.92;
+  }
+}
+
+#schedule-dialog .schedule-catchup {
+  width: fit-content;
+  margin-top: var(--space-4);
+}
+
+.schedule-next {
+  --next-color: var(--accent);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: center;
+  margin: var(--space-5) 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--next-color) 20%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--next-color) 8%, transparent);
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+
+.schedule-next::before {
+  content: "";
+  grid-row: 1 / span 2;
+  width: 18px;
+  height: 18px;
+  background: var(--next-color);
+  mask: var(--icon-clock) center / contain no-repeat;
+}
+
+.schedule-next[data-state="off"] {
+  --next-color: var(--muted);
+  border-color: var(--hairline);
+  background: var(--surface-hover);
+}
+
+.schedule-next[data-state="off"]::before {
+  mask-image: var(--icon-pause);
+}
+
+.schedule-next[data-state="error"] {
+  --next-color: var(--danger);
+}
+
+.schedule-next[data-state="error"]::before {
+  mask-image: var(--icon-alert);
+}
+
+.schedule-next-title {
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-next[data-state="off"] .schedule-next-title {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.schedule-next[data-state="error"] .schedule-next-title {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.schedule-next-detail {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.schedule-section-label {
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.schedule-command-wrap {
+  margin-bottom: var(--space-5);
+}
+
+.command-preview.schedule-command {
+  max-height: 116px;
+}
+
+.schedule-background {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hairline);
+}
+
+.schedule-background .schedule-section-label {
+  margin-bottom: 0;
+}
+
+.schedule-background .checkbox {
+  width: fit-content;
+}
+
+.schedule-login-note {
+  color: var(--faint);
+}
+
+#schedule-error {
+  margin: var(--space-4) 0 0;
+}
+
+#schedule-dialog .schedule-actions {
+  position: sticky;
+  bottom: calc(-1 * var(--space-5));
+  z-index: 2;
+  margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-5));
+  padding: var(--space-5) var(--space-6) var(--space-5);
+  background: linear-gradient(180deg, transparent, var(--dialog-footer-bg) var(--space-4));
+}
+
+#save-job-dialog .popup-field {
+  margin-bottom: var(--space-6);
+}
+
+#save-job-dialog #save-job-name {
+  min-height: 40px;
+  font-size: var(--fs-lg);
+}
+
+@media (max-height: 760px) {
+  .dialog-head {
+    margin-bottom: var(--space-4);
+  }
+
+  .schedule-next {
+    margin: var(--space-4) 0;
+  }
+
+  .schedule-command-wrap {
+    margin-bottom: var(--space-4);
+  }
+}

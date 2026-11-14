@@ -14,6 +14,7 @@ const STATUS_LABELS = { success: "Done", failed: "Failed", cancelled: "Cancelled
 const STATUS_BADGES = { success: "success", failed: "error", cancelled: "cancelled" };
 const OPERATION_LABELS = { copy: "Copy", sync: "Sync", move: "Move", bisync: "Bisync" };
 const CLEAR_CONFIRM_MS = 4000;
+const MAX_STAGGER_INDEX = 14;
 
 let runs = [];
 let loadError = "";
@@ -41,6 +42,30 @@ function formatWhen(timestamp) {
   return `${date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) })} ${time}`;
 }
 
+function formatDay(timestamp) {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 function formatDuration(ms) {
   const seconds = Math.max(0, Math.round(ms / 1000));
   if (seconds < 60) {
@@ -61,21 +86,24 @@ function plural(count, word) {
 function runDetails(run) {
   const details = [];
   if (run.transferred && !/^0(\.0+)?\s*B?$/i.test(run.transferred)) {
-    details.push(run.total && run.total !== run.transferred ? `${run.transferred} of ${run.total}` : run.transferred);
+    details.push({
+      kind: "size",
+      text: run.total && run.total !== run.transferred ? `${run.transferred} of ${run.total}` : run.transferred,
+    });
   }
   if (run.files) {
-    details.push(plural(run.files, "file"));
+    details.push({ kind: "files", text: plural(run.files, "file") });
   }
   if (run.errors) {
-    details.push(plural(run.errors, "error"));
+    details.push({ kind: "errors", text: plural(run.errors, "error") });
   }
   if (run.scheduled) {
-    details.push("Scheduled");
+    details.push({ kind: "scheduled", text: "Scheduled" });
   }
   if (run.dryRun) {
-    details.push("Dry run");
+    details.push({ kind: "dry-run", text: "Dry run" });
   }
-  return details.length ? details.join(" · ") : "Nothing transferred";
+  return details.length ? details : [{ kind: "empty", text: "Nothing transferred" }];
 }
 
 function el(tag, className, text) {
@@ -162,8 +190,8 @@ async function toggleLog(run, item, button) {
     button.textContent = "Show log";
     return;
   }
-  const log = el("pre", "command-preview run-history-log", "Loading…");
-  item.append(log);
+  const log = el("pre", "run-history-log", "Loading…");
+  item.querySelector(".run-history-body").append(log);
   openLogs.set(run.id, log);
   button.textContent = "Hide log";
   try {
@@ -174,32 +202,42 @@ async function toggleLog(run, item, button) {
   }
 }
 
-function renderRun(run) {
+function renderRun(run, index) {
   const item = el("li", `run-history-item is-${run.status}`);
+  item.style.setProperty("--i", String(Math.min(index, MAX_STAGGER_INDEX)));
+  item.append(el("span", "run-history-dot"));
 
+  const body = el("div", "run-history-body");
   const row = el("div", "run-history-row");
-  row.append(el("span", `job-badge ${STATUS_BADGES[run.status] || ""}`, STATUS_LABELS[run.status] || run.status));
 
   const main = el("div", "run-history-main");
   const operation = OPERATION_LABELS[run.operation] || run.operation;
-  main.append(el("p", "run-history-name", run.name ? `${run.name} (${operation.toLowerCase()})` : `${operation} job`));
+  const heading = el("p", "run-history-name");
+  heading.append(
+    el("span", "run-history-title", run.name || `${operation} job`),
+    el("span", "run-history-op", operation),
+  );
+  main.append(heading);
   const paths = el("p", "run-history-paths", `${run.source} → ${run.destination}`);
   paths.title = paths.textContent;
   main.append(paths);
   row.append(main);
 
   const when = el("div", "run-history-when");
-  when.append(el("time", "", formatWhen(run.startedAt)));
-  when.lastChild.dateTime = new Date(run.startedAt).toISOString();
-  when.lastChild.title = new Date(run.startedAt).toLocaleString();
-  when.append(el("span", "", formatDuration(run.finishedAt - run.startedAt)));
+  const time = el("time", "", formatTime(run.startedAt));
+  time.dateTime = new Date(run.startedAt).toISOString();
+  time.title = new Date(run.startedAt).toLocaleString();
+  when.append(time, el("span", "run-history-duration", formatDuration(run.finishedAt - run.startedAt)));
   row.append(when);
-  item.append(row);
+  body.append(row);
 
-  item.append(el("p", "run-history-detail", runDetails(run)));
-  if (run.status === "failed" && run.message) {
-    item.append(el("p", "run-history-message", run.message));
-  }
+  const foot = el("div", "run-history-foot");
+  const detail = el("p", "run-history-detail");
+  detail.append(
+    el("span", `job-badge ${STATUS_BADGES[run.status] || ""}`, STATUS_LABELS[run.status] || run.status),
+    ...runDetails(run).map(({ kind, text }) => el("span", `run-history-chip is-${kind}`, text)),
+  );
+  foot.append(detail);
 
   const actions = el("div", "run-history-item-actions");
   const loadBtn = el("button", "secondary run-history-load", "Load job");
@@ -212,13 +250,36 @@ function renderRun(run) {
   });
   actions.append(loadBtn);
   if (run.hasLog) {
-    const logBtn = el("button", "secondary", "Show log");
+    const logBtn = el("button", "secondary run-history-log-toggle", "Show log");
     logBtn.type = "button";
     logBtn.addEventListener("click", () => void toggleLog(run, item, logBtn));
     actions.append(logBtn);
   }
-  item.append(actions);
+  foot.append(actions);
+  body.append(foot);
+
+  if (run.status === "failed" && run.message) {
+    body.append(el("p", "run-history-message", run.message));
+  }
+
+  item.append(body);
   return item;
+}
+
+function renderRunList(visible) {
+  const nodes = [];
+  let lastDay = "";
+  visible.forEach((run, index) => {
+    const day = formatDay(run.startedAt);
+    if (day !== lastDay) {
+      lastDay = day;
+      const header = el("li", "run-history-day", day);
+      header.style.setProperty("--i", String(Math.min(index, MAX_STAGGER_INDEX)));
+      nodes.push(header);
+    }
+    nodes.push(renderRun(run, index));
+  });
+  return nodes;
 }
 
 function canLoad() {
@@ -241,7 +302,7 @@ function render() {
   openLogs.clear();
   renderJobOptions();
   const visible = filteredRuns();
-  ui.list.replaceChildren(...visible.map(renderRun));
+  ui.list.replaceChildren(...renderRunList(visible));
   ui.empty.textContent = loadError || (runs.length ? "No runs match this filter." : "Nothing here yet. Finished jobs show up here.");
   ui.empty.classList.toggle("hidden", visible.length > 0);
   ui.clearBtn.disabled = runs.length === 0;

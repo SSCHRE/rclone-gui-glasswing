@@ -52,7 +52,7 @@ const elements = {
 
   status: document.getElementById("status"),
   popupRoot: document.getElementById("popup-root"),
-  popupCard: document.querySelector(".popup-card"),
+  popupCard: document.querySelector("#popup-root .popup-card"),
   popupTitle: document.getElementById("popup-title"),
   popupMessage: document.getElementById("popup-message"),
   popupClose: document.getElementById("popup-close"),
@@ -72,7 +72,6 @@ const elements = {
   scheduleJob: document.getElementById("schedule-job"),
   jobHistoryMeta: document.getElementById("job-history-meta"),
   jobHistoryCollapsible: document.getElementById("job-history-collapsible"),
-  pathsCollapsible: document.getElementById("paths-collapsible"),
   remoteInsertCollapsible: document.getElementById("remote-insert-collapsible"),
   jobHistoryCount: document.getElementById("job-history-count"),
   saveJobDialog: document.getElementById("save-job-dialog"),
@@ -135,13 +134,8 @@ function snackbarMessageNodes(message) {
 
 function showSnackbar({ title, message, type = "success" }) {
   hideSnackbar();
+  void elements.snackbar.offsetWidth;
 
-  const icons = {
-    success: "✓",
-    error: "!",
-    running: "▶",
-  };
-  elements.snackbarIcon.textContent = icons[type] || "•";
   elements.snackbarTitle.textContent = title;
   elements.snackbarMessage.replaceChildren(...snackbarMessageNodes(message));
   elements.snackbar.classList.add(type);
@@ -371,7 +365,6 @@ function applyJobToForm(entry, { fromSavedJob = false } = {}) {
   updatePathMeters({ immediate: true });
 
   if (fromSavedJob) {
-    elements.pathsCollapsible.open = true;
     elements.remoteInsertCollapsible.open = false;
   }
 }
@@ -767,6 +760,9 @@ function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseU
 }
 
 async function checkForUpdates({ automatic = false } = {}) {
+  if (!automatic) {
+    elements.checkForUpdates.classList.add("is-checking");
+  }
   try {
     const result = await window.rcloneGui.checkForUpdates();
 
@@ -796,6 +792,10 @@ async function checkForUpdates({ automatic = false } = {}) {
       message: error.message || "Could not check for updates",
       type: "error",
     });
+  } finally {
+    if (!automatic) {
+      elements.checkForUpdates.classList.remove("is-checking");
+    }
   }
 }
 const STORAGE_METER_INPUT_DELAY_MS = 600;
@@ -828,6 +828,41 @@ function refreshPathMeters() {
   pathMeters?.destination.refresh();
 }
 
+const modeIndicator = document.querySelector(".nav-indicator");
+
+function positionModeIndicator() {
+  const active = document.querySelector(".mode-switch-btn.is-active");
+  if (!modeIndicator || !active) {
+    return;
+  }
+
+  modeIndicator.style.setProperty("--indicator-x", `${active.offsetLeft}px`);
+  modeIndicator.style.setProperty("--indicator-y", `${active.offsetTop}px`);
+  modeIndicator.style.width = `${active.offsetWidth}px`;
+  modeIndicator.style.height = `${active.offsetHeight}px`;
+
+  if (!modeIndicator.classList.contains("is-ready")) {
+    void modeIndicator.offsetWidth;
+    modeIndicator.classList.add("is-ready");
+  }
+}
+
+if (modeIndicator && window.ResizeObserver) {
+  new ResizeObserver(() => positionModeIndicator()).observe(modeIndicator.parentElement);
+}
+
+function updateTitlebar(navButton) {
+  const title = document.getElementById("titlebar-title");
+  const icon = document.getElementById("titlebar-icon");
+  if (!title || !icon) {
+    return;
+  }
+  const label = navButton.querySelector(".nav-label")?.textContent || "";
+  title.textContent = label;
+  const glyph = navButton.querySelector(".nav-icon")?.cloneNode(true);
+  icon.replaceChildren(...(glyph ? [glyph] : []));
+}
+
 function setAppMode(mode) {
   const nextMode = ["browse", "storage", "history"].includes(mode) ? mode : "jobs";
   const browsing = nextMode === "browse";
@@ -845,7 +880,11 @@ function setAppMode(mode) {
   ]) {
     button?.classList.toggle("is-active", nextMode === buttonMode);
     button?.setAttribute("aria-selected", String(nextMode === buttonMode));
+    if (nextMode === buttonMode && button) {
+      updateTitlebar(button);
+    }
   }
+  positionModeIndicator();
 
   if (nextMode === "storage") {
     window.StorageView?.setRemotes(remotes);
@@ -1004,6 +1043,58 @@ elements.operation.addEventListener("change", () => {
 
 });
 
+const operationSegment = document.getElementById("operation-segment");
+const operationChoices = [...operationSegment.querySelectorAll("[data-operation-choice]")];
+
+function syncOperationSegment() {
+  const index = Math.max(
+    0,
+    operationChoices.findIndex((choice) => choice.dataset.operationChoice === elements.operation.value),
+  );
+  operationSegment.style.setProperty("--segment-index", String(index));
+  operationChoices.forEach((choice, choiceIndex) => {
+    choice.setAttribute("aria-checked", String(choiceIndex === index));
+    choice.tabIndex = choiceIndex === index ? 0 : -1;
+  });
+}
+
+function chooseOperation(value) {
+  if (elements.operation.disabled || elements.operation.value === value) {
+    return;
+  }
+  elements.operation.value = value;
+  elements.operation.dispatchEvent(new Event("change"));
+}
+
+operationChoices.forEach((choice, choiceIndex) => {
+  choice.addEventListener("click", () => chooseOperation(choice.dataset.operationChoice));
+  choice.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) {
+      return;
+    }
+    event.preventDefault();
+    const next = operationChoices[(choiceIndex + step + operationChoices.length) % operationChoices.length];
+    chooseOperation(next.dataset.operationChoice);
+    if (!elements.operation.disabled) {
+      next.focus();
+    }
+  });
+});
+
+elements.operation.addEventListener("change", syncOperationSegment);
+syncOperationSegment();
+
+document.getElementById("swap-paths").addEventListener("click", () => {
+  if (elements.source.disabled || elements.destination.disabled) {
+    return;
+  }
+  [elements.source.value, elements.destination.value] = [elements.destination.value, elements.source.value];
+  for (const input of [elements.source, elements.destination]) {
+    input.dispatchEvent(new Event("change"));
+  }
+});
+
 
 
 document.querySelectorAll("[data-target]").forEach((button) => {
@@ -1076,6 +1167,7 @@ elements.modeJobs?.addEventListener("click", () => setAppMode("jobs"));
 elements.modeBrowse?.addEventListener("click", () => setAppMode("browse"));
 elements.modeStorage?.addEventListener("click", () => setAppMode("storage"));
 elements.modeHistory?.addEventListener("click", () => setAppMode("history"));
+updateTitlebar(document.querySelector(".mode-switch-btn.is-active") || elements.modeJobs);
 
 window.StorageView?.setOptions({
   notify: showSnackbar,

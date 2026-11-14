@@ -37,6 +37,9 @@ function createRunTracker() {
       partial = lines.pop();
       lines.forEach(readLine);
     },
+    current() {
+      return { ...summary };
+    },
     finish() {
       if (partial) {
         readLine(partial);

@@ -7,9 +7,20 @@ const BACKGROUND_DELAY_MS = 8000;
 const BACKGROUND_MAX_AGE_MS = 30 * 60 * 1000;
 const BACKGROUND_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FULL_RATIO = 0.9;
-const SERIES_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
-const OTHER_COLOR = "#5b6678";
+const SERIES_COLORS = Array.from({ length: 8 }, (_, index) => `var(--storage-series-${index + 1})`);
+const OTHER_COLOR = "var(--storage-series-other)";
 const SVG_NS = "http://www.w3.org/2000/svg";
+const COUNT_DURATION_MS = 900;
+const GAUGE_ARC = "M13.62 50.38 A26 26 0 1 1 50.38 50.38";
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+const ICONS = {
+  browse: ["M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"],
+  trash: ["M4 7h16", "M10 11v6", "M14 11v6", "M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12", "M9 7V4h6v3"],
+  alert: ["M12 3l9.5 16.5h-19z", "M12 10v4", "M12 17.5v.01"],
+  retry: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 5v6h-6"],
+  slash: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M5.6 5.6l12.8 12.8"],
+};
 
 const storageView = {
   view: document.getElementById("storage-view"),
@@ -34,6 +45,7 @@ let backgroundStarted = false;
 let renderQueued = false;
 let overviewRefs = null;
 let overviewSignature = "";
+let gradientSeed = 0;
 const cards = new Map();
 const armedTrash = new Map();
 const cleaning = new Set();
@@ -78,11 +90,97 @@ function createElement(tag, className, text) {
   return element;
 }
 
+function svgNode(tag, attributes = {}) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attributes)) {
+    node.setAttribute(name, String(value));
+  }
+  return node;
+}
+
+function icon(name, className = "storage-icon") {
+  const svg = svgNode("svg", {
+    viewBox: "0 0 24 24",
+    width: 16,
+    height: 16,
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": 1.9,
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    "aria-hidden": "true",
+    class: className,
+  });
+  for (const d of ICONS[name]) {
+    svg.appendChild(svgNode("path", { d }));
+  }
+  return svg;
+}
+
+function actionButton(label, className, iconName) {
+  const button = createElement("button", className);
+  button.type = "button";
+  if (iconName) {
+    button.appendChild(icon(iconName));
+  }
+  button.appendChild(createElement("span", null, label));
+  return button;
+}
+
 function skeleton(width) {
   const bone = createElement("span", "storage-skel");
   bone.style.width = width;
   bone.setAttribute("aria-hidden", "true");
   return bone;
+}
+
+function splitNumber(text) {
+  const match = /^-?[\d.,]+/.exec(text);
+  if (!match) {
+    return null;
+  }
+  const [digits] = match;
+  const value = Number(digits.replace(/,/g, ""));
+  if (Number.isNaN(value)) {
+    return null;
+  }
+  const decimals = (digits.split(".")[1] || "").length;
+  return { value, decimals, unit: text.slice(digits.length).trimStart() };
+}
+
+function paintNumber(target, value, decimals, unit) {
+  const number = createElement("span", "storage-num", value.toFixed(decimals));
+  target.replaceChildren(number);
+  if (unit) {
+    target.appendChild(createElement("span", "storage-unit", unit));
+  }
+}
+
+function countTo(target, text) {
+  const next = splitNumber(text);
+  const previous = target.countState || null;
+  cancelAnimationFrame(target.countFrame);
+  if (!next) {
+    target.countState = null;
+    target.replaceChildren(document.createTextNode(text));
+    return;
+  }
+  target.countState = next;
+  const from = previous && previous.unit === next.unit ? previous.value : previous ? next.value : 0;
+  if (reducedMotion.matches || from === next.value || !target.isConnected) {
+    paintNumber(target, next.value, next.decimals, next.unit);
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / COUNT_DURATION_MS);
+    const eased = 1 - (1 - progress) ** 4;
+    paintNumber(target, from + (next.value - from) * eased, next.decimals, next.unit);
+    if (progress < 1) {
+      target.countFrame = requestAnimationFrame(step);
+    }
+  };
+  target.countFrame = requestAnimationFrame(step);
 }
 
 function colorFor(name) {
@@ -163,46 +261,60 @@ function renderSparkline(points) {
   }
 
   const width = 240;
-  const height = 40;
+  const height = 44;
   const times = points.map((point) => dayTime(point.day));
   const values = points.map((point) => point.used);
   const minTime = Math.min(...times);
   const spanTime = Math.max(1, Math.max(...times) - minTime);
   const minValue = Math.min(...values);
   const spanValue = Math.max(...values) - minValue;
-  const x = (time) => 4 + ((time - minTime) / spanTime) * (width - 8);
-  const y = (value) => (spanValue ? height - 5 - ((value - minValue) / spanValue) * (height - 10) : height / 2);
+  const x = (time) => 3 + ((time - minTime) / spanTime) * (width - 6);
+  const y = (value) => (spanValue ? height - 6 - ((value - minValue) / spanValue) * (height - 12) : height / 2);
   const coords = points.map((point, index) => [x(times[index]), y(values[index])]);
 
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.setAttribute("class", "storage-trend-svg");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `Used space over the last ${TREND_DAYS} days, from ${formatBytes(values[0])} to ${formatBytes(values[values.length - 1])}`);
+  const svg = svgNode("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    preserveAspectRatio: "none",
+    class: "storage-trend-svg",
+    role: "img",
+    "aria-label": `Used space over the last ${TREND_DAYS} days, from ${formatBytes(values[0])} to ${formatBytes(values[values.length - 1])}`,
+  });
 
-  const area = document.createElementNS(SVG_NS, "path");
-  area.setAttribute("class", "storage-trend-area");
-  area.setAttribute("d", `M${coords[0][0]},${height} ${coords.map(([px, py]) => `L${px},${py}`).join(" ")} L${coords[coords.length - 1][0]},${height} Z`);
-  const line = document.createElementNS(SVG_NS, "path");
-  line.setAttribute("class", "storage-trend-line");
-  line.setAttribute("d", coords.map(([px, py], index) => `${index ? "L" : "M"}${px},${py}`).join(" "));
-  line.setAttribute("vector-effect", "non-scaling-stroke");
-  const cursor = document.createElementNS(SVG_NS, "line");
-  cursor.setAttribute("class", "storage-trend-cursor");
-  cursor.setAttribute("y1", "0");
-  cursor.setAttribute("y2", String(height));
-  cursor.setAttribute("vector-effect", "non-scaling-stroke");
+  gradientSeed += 1;
+  const gradientId = `storage-trend-fill-${gradientSeed}`;
+  const defs = svgNode("defs");
+  const gradient = svgNode("linearGradient", { id: gradientId, x1: 0, y1: 0, x2: 0, y2: 1 });
+  gradient.append(
+    svgNode("stop", { offset: "0%", class: "storage-trend-stop-top" }),
+    svgNode("stop", { offset: "100%", class: "storage-trend-stop-bottom" }),
+  );
+  defs.appendChild(gradient);
+
+  const area = svgNode("path", {
+    class: "storage-trend-area",
+    fill: `url(#${gradientId})`,
+    d: `M${coords[0][0]},${height} ${coords.map(([px, py]) => `L${px},${py}`).join(" ")} L${coords[coords.length - 1][0]},${height} Z`,
+  });
+  const line = svgNode("path", {
+    class: "storage-trend-line",
+    d: coords.map(([px, py], index) => `${index ? "L" : "M"}${px},${py}`).join(" "),
+    "vector-effect": "non-scaling-stroke",
+  });
+  const cursor = svgNode("line", { class: "storage-trend-cursor", y1: 0, y2: height, "vector-effect": "non-scaling-stroke" });
   cursor.style.display = "none";
-  const dot = document.createElementNS(SVG_NS, "circle");
-  dot.setAttribute("class", "storage-trend-dot");
-  dot.setAttribute("r", "3");
-  dot.style.display = "none";
-  svg.append(area, line, cursor, dot);
+  svg.append(defs, area, line, cursor);
+
+  const [endX, endY] = coords[coords.length - 1];
+  const end = createElement("span", "storage-trend-end");
+  end.style.left = `${(endX / width) * 100}%`;
+  end.style.top = `${(endY / height) * 100}%`;
+  end.setAttribute("aria-hidden", "true");
+  const dot = createElement("span", "storage-trend-dot hidden");
+  dot.setAttribute("aria-hidden", "true");
 
   const tip = createElement("span", "storage-trend-tip hidden");
   const plot = createElement("div", "storage-trend-plot");
-  plot.append(svg, tip);
+  plot.append(svg, end, dot, tip);
 
   plot.addEventListener("mousemove", (event) => {
     const box = plot.getBoundingClientRect();
@@ -217,22 +329,58 @@ function renderSparkline(points) {
     cursor.setAttribute("x1", String(px));
     cursor.setAttribute("x2", String(px));
     cursor.style.display = "";
-    dot.setAttribute("cx", String(px));
-    dot.setAttribute("cy", String(py));
-    dot.style.display = "";
+    dot.style.left = `${(px / width) * 100}%`;
+    dot.style.top = `${(py / height) * 100}%`;
+    dot.classList.remove("hidden");
     tip.textContent = `${shortDate(times[nearest])}: ${formatBytes(values[nearest])} used`;
     tip.classList.remove("hidden");
     tip.style.left = `${Math.min(Math.max((px / width) * box.width, 70), box.width - 70)}px`;
   });
   plot.addEventListener("mouseleave", () => {
     cursor.style.display = "none";
-    dot.style.display = "none";
+    dot.classList.add("hidden");
     tip.classList.add("hidden");
   });
 
   const axis = createElement("div", "storage-trend-axis");
   axis.append(createElement("span", null, shortDate(times[0])), createElement("span", null, "Today"));
   wrap.append(plot, axis);
+  return wrap;
+}
+
+function gauge(ratio, label) {
+  const wrap = createElement("div", "storage-gauge");
+  wrap.setAttribute("role", "meter");
+  wrap.setAttribute("aria-label", `${label} storage used`);
+
+  const svg = svgNode("svg", { viewBox: "0 0 64 64", class: "storage-gauge-svg", "aria-hidden": "true" });
+  svg.appendChild(svgNode("path", { d: GAUGE_ARC, class: "storage-gauge-track", pathLength: 100 }));
+
+  const center = createElement("span", "storage-gauge-label");
+  if (ratio != null) {
+    const percent = Math.round(ratio * 100);
+    wrap.setAttribute("aria-valuemin", "0");
+    wrap.setAttribute("aria-valuemax", "100");
+    wrap.setAttribute("aria-valuenow", String(percent));
+    gradientSeed += 1;
+    const gradientId = `storage-gauge-fill-${gradientSeed}`;
+    const defs = svgNode("defs");
+    const gradient = svgNode("linearGradient", { id: gradientId, x1: 0, y1: 1, x2: 1, y2: 0 });
+    gradient.append(
+      svgNode("stop", { offset: "0%", class: "storage-gauge-stop-start" }),
+      svgNode("stop", { offset: "100%", class: "storage-gauge-stop-end" }),
+    );
+    defs.appendChild(gradient);
+    const value = svgNode("path", { d: GAUGE_ARC, class: "storage-gauge-value", pathLength: 100, stroke: `url(#${gradientId})` });
+    value.style.setProperty("--value", String(Math.max(percent, 1)));
+    svg.prepend(defs);
+    svg.appendChild(value);
+    center.append(createElement("span", "storage-num", String(percent)), createElement("span", "storage-unit", "%"));
+  } else {
+    wrap.classList.add("is-unknown");
+    center.textContent = "∞";
+  }
+  wrap.append(svg, center);
   return wrap;
 }
 
@@ -249,16 +397,14 @@ function detail(label, value) {
 }
 
 function loadingBody(showTrend) {
-  const figure = createElement("p", "storage-card-figure");
-  const strong = createElement("strong");
-  strong.appendChild(skeleton("8.5em"));
-  figure.append(strong);
-  const track = createElement("div", "storage-bar");
-  track.appendChild(createElement("div", "storage-bar-fill"));
-  const details = createElement("div", "storage-details");
-  details.append(detail("Used", skeleton("2.6em")), detail("Free", skeleton("3.6em")));
+  const main = createElement("div", "storage-card-main");
+  const ring = skeleton("");
+  ring.classList.add("storage-skel-ring");
+  const figure = createElement("div", "storage-card-figure");
+  figure.append(skeleton("5.5em"), skeleton("7em"), skeleton("4em"));
+  main.append(ring, figure);
   if (!showTrend) {
-    return [figure, track, details];
+    return [main];
   }
   const trend = createElement("div", "storage-trend");
   const bone = skeleton("100%");
@@ -266,72 +412,65 @@ function loadingBody(showTrend) {
   trend.appendChild(bone);
   const notes = createElement("div", "storage-trend-notes");
   notes.appendChild(skeleton("9em"));
-  return [figure, track, details, trend, notes];
+  return [main, trend, notes];
+}
+
+function stateBody(iconName, title, message) {
+  const head = createElement("div", "storage-card-state");
+  const badge = createElement("span", "storage-card-state-icon");
+  badge.appendChild(icon(iconName));
+  head.append(badge, createElement("p", "storage-card-figure", title));
+  const note = createElement("p", "storage-card-note", message);
+  note.title = message;
+  return [head, note];
 }
 
 function unsupportedBody() {
-  return [
-    createElement("p", "storage-card-figure", "Not reported"),
-    createElement("p", "storage-card-note", "This storage type doesn't report its usage to rclone."),
-  ];
+  return stateBody("slash", "Not reported", "This storage type doesn't report its usage to rclone.");
 }
 
 function errorBody(target, usage) {
   const message = usage.error.charAt(0).toUpperCase() + usage.error.slice(1);
-  const note = createElement("p", "storage-card-note", message);
-  note.title = message;
-  const retry = createElement("button", "secondary storage-card-retry", "Try again");
-  retry.type = "button";
+  const retry = actionButton("Try again", "secondary storage-card-retry", "retry");
   retry.addEventListener("click", () => void window.StorageUsage.load(target, { force: true }));
-  return [createElement("p", "storage-card-figure", "Couldn't check usage"), note, retry];
+  return [...stateBody("alert", "Couldn't check usage", message), retry];
 }
 
 function usageBody(target, label, usage, showTrend) {
   const used = usedBytes(usage);
   const ratio = usageRatio(usage);
 
-  const figure = createElement("p", "storage-card-figure");
-  figure.append(
-    createElement("strong", null, formatBytes(used)),
-    document.createTextNode(ratio != null ? ` of ${formatBytes(usage.total)} used` : " used"),
-  );
+  const figure = createElement("div", "storage-card-figure");
+  figure.appendChild(createElement("strong", "storage-card-used", formatBytes(used)));
+  figure.appendChild(createElement("span", "storage-card-of", ratio != null ? `used of ${formatBytes(usage.total)}` : "used, no limit reported"));
+  const free = typeof usage.free === "number" ? usage.free : ratio != null ? usage.total - used : null;
+  if (free != null) {
+    figure.appendChild(createElement("span", "storage-card-free", `${formatBytes(free)} free`));
+  }
 
-  const track = createElement("div", "storage-bar");
-  track.setAttribute("role", "meter");
-  track.setAttribute("aria-label", `${label} storage used`);
-  const fill = createElement("div", "storage-bar-fill");
-  if (ratio != null) {
-    track.setAttribute("aria-valuemin", "0");
-    track.setAttribute("aria-valuemax", "100");
-    track.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
-    fill.style.width = `${Math.max(ratio * 100, 1)}%`;
-  } else {
-    track.classList.add("is-unknown");
-  }
-  track.appendChild(fill);
+  const main = createElement("div", "storage-card-main");
+  main.append(gauge(ratio, label), figure);
 
-  const details = createElement("div", "storage-details");
-  if (ratio != null) {
-    details.appendChild(detail("Used", `${Math.round(ratio * 100)}%`));
-  }
-  if (typeof usage.free === "number") {
-    details.appendChild(detail("Free", formatBytes(usage.free)));
-  } else if (ratio == null) {
-    details.appendChild(detail("Limit", "None reported"));
-  }
+  const extras = [];
   if (usage.trashed) {
-    details.appendChild(detail("In trash", formatBytes(usage.trashed)));
+    extras.push(detail("In trash", formatBytes(usage.trashed)));
   }
   if (usage.other) {
-    details.appendChild(detail("Other", formatBytes(usage.other)));
+    extras.push(detail("Other", formatBytes(usage.other)));
   }
   if (typeof usage.objects === "number") {
-    details.appendChild(detail("Files", formatCount(usage.objects)));
+    extras.push(detail("Files", formatCount(usage.objects)));
+  }
+  const nodes = [main];
+  if (extras.length) {
+    const details = createElement("div", "storage-details");
+    details.append(...extras);
+    nodes.push(details);
   }
 
   const level = ratio != null ? levelClass(ratio) : "";
   if (!showTrend) {
-    return { nodes: [figure, track, details], level };
+    return { nodes, level };
   }
 
   const trend = trendFor(target, usage);
@@ -350,12 +489,13 @@ function usageBody(target, label, usage, showTrend) {
       `Full in about ${describeDuration(trend.fullIn)} at this rate`,
     ));
   }
-  return { nodes: [figure, track, details, renderSparkline(trend.points), notes], level };
+  return { nodes: [...nodes, renderSparkline(trend.points), notes], level };
 }
 
-function createCard(spec) {
-  const card = createElement("article", "storage-card is-loading");
+function createCard(spec, index) {
+  const card = createElement("article", `storage-card is-loading${spec.isRemote ? "" : " is-local"}`);
   card.dataset.target = spec.target;
+  card.style.setProperty("--i", String(index));
   card.addEventListener("animationend", (event) => {
     if (event.target === card) {
       card.classList.add("is-settled");
@@ -366,7 +506,7 @@ function createCard(spec) {
   const title = createElement("h3", "storage-card-name");
   const swatch = createElement("span", "storage-card-swatch hidden");
   swatch.setAttribute("aria-hidden", "true");
-  title.append(swatch, document.createTextNode(spec.label));
+  title.append(swatch, createElement("span", "storage-card-label", spec.label));
   const badge = createElement("span", "remote-type-badge is-pending", "type");
   head.append(title, badge);
 
@@ -377,8 +517,7 @@ function createCard(spec) {
   let actions = null;
   if (spec.isRemote) {
     actions = createElement("div", "storage-card-actions");
-    const browse = createElement("button", "secondary storage-card-action", "Browse");
-    browse.type = "button";
+    const browse = actionButton("Browse", "secondary storage-card-action", "browse");
     browse.addEventListener("click", () => options.onBrowse?.(spec.name));
     actions.appendChild(browse);
     card.appendChild(actions);
@@ -390,12 +529,11 @@ function createCard(spec) {
 function trashButton(name, usage) {
   const armed = armedTrash.has(name);
   const busy = cleaning.has(name);
-  const button = createElement(
-    "button",
-    `secondary storage-card-action${armed ? " danger" : ""}`,
+  const button = actionButton(
     busy ? "Emptying…" : armed ? `Delete ${formatBytes(usage.trashed)} for good?` : "Empty trash",
+    `secondary storage-card-action storage-card-trash${armed ? " danger" : ""}`,
+    "trash",
   );
-  button.type = "button";
   button.disabled = busy;
   button.addEventListener("click", () => void emptyTrash(name));
   return button;
@@ -467,10 +605,10 @@ function reconcile(container, specs) {
   }
 
   let previous = null;
-  for (const spec of specs) {
+  specs.forEach((spec, index) => {
     let card = cards.get(spec.target);
     if (!card) {
-      card = createCard(spec);
+      card = createCard(spec, index);
       cards.set(spec.target, card);
     }
     updateCard(card, spec);
@@ -479,7 +617,7 @@ function reconcile(container, specs) {
       container.insertBefore(card.el, expectedNext);
     }
     previous = card.el;
-  }
+  });
 }
 
 async function emptyTrash(name) {
@@ -534,15 +672,19 @@ function buildOverview() {
   const tiles = createElement("div", "storage-tiles");
   const values = {};
   for (const [key, label] of [["used", "Used across remotes"], ["free", "Free space"], ["full", "Nearly full"]]) {
-    const tile = createElement("div", "stat-card storage-tile");
-    const value = createElement("span", "stat-value");
-    tile.append(createElement("span", "stat-label", label), value);
+    const tile = createElement("div", `storage-tile storage-tile-${key}`);
+    const value = createElement("span", "storage-tile-value");
+    const sub = createElement("span", "storage-tile-sub");
+    tile.append(createElement("span", "storage-tile-label", label), value, sub);
     tiles.appendChild(tile);
-    values[key] = { tile, value };
+    values[key] = { tile, value, sub };
   }
 
   const figure = createElement("figure", "storage-split");
-  figure.appendChild(createElement("figcaption", "storage-split-title", "Where your data lives"));
+  const caption = createElement("figcaption", "storage-split-head");
+  const total = createElement("span", "storage-split-total");
+  caption.append(createElement("span", "storage-split-title", "Where your data lives"), total);
+  figure.appendChild(caption);
   const wrap = createElement("div", "storage-split-wrap");
   const bar = createElement("div", "storage-split-bar");
   bar.setAttribute("role", "img");
@@ -552,12 +694,116 @@ function buildOverview() {
   figure.append(wrap, legend);
 
   storageView.overview.replaceChildren(tiles, figure);
-  return { values, figure, bar, tip, legend };
+  return { values, figure, bar, tip, legend, total, parts: new Map(), introduced: false };
 }
 
-function setTileValue(ref, text, tone = "") {
-  ref.value.replaceChildren(text == null ? skeleton("4em") : document.createTextNode(text));
+function setTileValue(ref, text, tone = "", sub = "") {
+  if (text == null) {
+    cancelAnimationFrame(ref.value.countFrame);
+    ref.value.countState = null;
+    ref.value.replaceChildren(skeleton("3.2em"));
+    ref.sub.replaceChildren(skeleton("7em"));
+  } else {
+    countTo(ref.value, text);
+    ref.sub.textContent = sub;
+  }
   ref.tile.classList.toggle("is-bad", tone === "bad");
+  ref.tile.classList.toggle("is-good", tone === "good");
+}
+
+function setHovered(segment, hovered) {
+  segment.part.classList.toggle("is-hovered", hovered);
+  segment.item.classList.toggle("is-hovered", hovered);
+  overviewRefs.figure.classList.toggle("has-hover", hovered);
+  const { bar, tip } = overviewRefs;
+  if (!hovered) {
+    tip.classList.add("hidden");
+    return;
+  }
+  tip.textContent = segment.describe;
+  tip.classList.remove("hidden");
+  const box = bar.getBoundingClientRect();
+  const partBox = segment.part.getBoundingClientRect();
+  tip.style.left = `${Math.min(Math.max(partBox.left - box.left + partBox.width / 2, 80), box.width - 80)}px`;
+}
+
+function splitSegment(name) {
+  const existing = overviewRefs.parts.get(name);
+  if (existing) {
+    return existing;
+  }
+  const part = createElement("span", "storage-split-seg");
+  part.style.flexGrow = "0";
+  const item = createElement("li", "storage-split-item");
+  const swatch = createElement("span", "storage-split-swatch");
+  swatch.setAttribute("aria-hidden", "true");
+  const label = createElement("span", "storage-split-name", name);
+  const value = createElement("span", "storage-split-value");
+  item.append(swatch, label, value);
+  const segment = { part, item, swatch, value, describe: "" };
+  for (const node of [part, item]) {
+    node.addEventListener("mouseenter", () => setHovered(segment, true));
+    node.addEventListener("mouseleave", () => setHovered(segment, false));
+  }
+  overviewRefs.parts.set(name, segment);
+  return segment;
+}
+
+function renderSplit(segments, used) {
+  const { bar, legend, parts } = overviewRefs;
+  const names = new Set(segments.map((segment) => segment.name));
+  for (const [name, segment] of parts) {
+    if (!names.has(name)) {
+      segment.part.remove();
+      segment.item.remove();
+      parts.delete(name);
+    }
+  }
+  bar.querySelector(".storage-skel")?.remove();
+  legend.querySelector(".storage-split-pending")?.remove();
+
+  const intro = !overviewRefs.introduced;
+  overviewRefs.introduced = true;
+  bar.classList.toggle("is-intro", intro);
+
+  const grow = [];
+  segments.forEach((segment, index) => {
+    const ref = splitSegment(segment.name);
+    const share = Math.round((segment.used / used) * 100);
+    ref.describe = `${segment.name}: ${formatBytes(segment.used)} (${share}%)`;
+    ref.part.style.background = segment.color;
+    ref.part.style.setProperty("--i", String(index));
+    ref.swatch.style.background = segment.color;
+    ref.value.textContent = `${formatBytes(segment.used)} · ${share}%`;
+    bar.appendChild(ref.part);
+    legend.appendChild(ref.item);
+    grow.push([ref.part, String(segment.used)]);
+  });
+
+  if (intro) {
+    for (const [part, value] of grow) {
+      part.style.flexGrow = value;
+    }
+    return;
+  }
+  requestAnimationFrame(() => {
+    for (const [part, value] of grow) {
+      part.style.flexGrow = value;
+    }
+  });
+}
+
+function clearSplit(message) {
+  const { bar, legend, parts } = overviewRefs;
+  for (const segment of parts.values()) {
+    segment.part.remove();
+    segment.item.remove();
+  }
+  parts.clear();
+  overviewRefs.introduced = false;
+  const bone = skeleton("100%");
+  bar.replaceChildren(bone);
+  legend.replaceChildren(createElement("li", "storage-split-item storage-split-pending", message));
 }
 
 function renderOverview() {
@@ -573,8 +819,9 @@ function renderOverview() {
   let used = 0;
   let capacity = 0;
   let free = 0;
-  let nearlyFull = 0;
+  let limited = 0;
   let settled = 0;
+  const full = [];
   const shares = [];
   for (const name of remoteNames) {
     const usage = currentUsage(targetOf(name));
@@ -591,32 +838,41 @@ function renderOverview() {
     if (ratio != null) {
       capacity += ready.total;
       free += Math.max(0, ready.total - remoteUsed);
+      limited += 1;
       if (ratio >= FULL_RATIO) {
-        nearlyFull += 1;
+        full.push(name);
       }
     }
   }
   const waiting = settled === 0;
-  const signature = JSON.stringify([waiting, used, capacity, free, nearlyFull, shares, remoteNames]);
+  const signature = JSON.stringify([waiting, used, capacity, free, full, shares, remoteNames]);
   if (signature === overviewSignature) {
     return;
   }
   overviewSignature = signature;
 
-  setTileValue(overviewRefs.values.used, waiting ? null : formatBytes(used));
-  setTileValue(overviewRefs.values.free, waiting ? null : capacity ? formatBytes(free) : "—");
-  setTileValue(overviewRefs.values.full, waiting ? null : String(nearlyFull), nearlyFull ? "bad" : "");
+  const { values, figure, total } = overviewRefs;
+  if (waiting) {
+    setTileValue(values.used, null);
+    setTileValue(values.free, null);
+    setTileValue(values.full, null);
+  } else {
+    const usedPercent = capacity ? Math.round((used / capacity) * 100) : null;
+    setTileValue(values.used, formatBytes(used), "", capacity ? `${usedPercent}% of ${formatBytes(capacity)} total` : "No limits reported");
+    setTileValue(values.free, capacity ? formatBytes(free) : "—", "", capacity ? `Across ${limited} remote${limited === 1 ? "" : "s"} with a limit` : "No limits reported");
+    setTileValue(values.full, String(full.length), full.length ? "bad" : "good", full.length ? full.join(", ") : "Everything has room");
+  }
 
-  const { bar, tip, legend, figure } = overviewRefs;
   const sized = shares.filter((share) => share.used > 0);
   if (waiting || !sized.length) {
     figure.classList.toggle("is-empty", !waiting);
-    bar.replaceChildren(skeleton("100%"));
-    bar.setAttribute("aria-label", waiting ? "Checking where your data lives" : "No usage reported yet");
-    legend.replaceChildren(createElement("li", "storage-split-item storage-split-pending", waiting ? "Checking…" : "No usage reported yet"));
+    overviewRefs.bar.setAttribute("aria-label", waiting ? "Checking where your data lives" : "No usage reported yet");
+    total.textContent = "";
+    clearSplit(waiting ? "Checking…" : "No usage reported yet");
     return;
   }
   figure.classList.remove("is-empty");
+  total.textContent = `${formatBytes(used)} in total`;
 
   const ordered = [...sized].sort((left, right) => right.used - left.used);
   const named = ordered.filter((share) => colorFor(share.name) !== OTHER_COLOR);
@@ -626,38 +882,8 @@ function renderOverview() {
     segments.push({ name: `${others.length} other${others.length === 1 ? "" : "s"}`, used: others.reduce((sum, share) => sum + share.used, 0), color: OTHER_COLOR });
   }
 
-  bar.setAttribute("aria-label", segments.map((segment) => `${segment.name} ${Math.round((segment.used / used) * 100)}%`).join(", "));
-  bar.replaceChildren(...segments.map((segment) => {
-    const part = createElement("span", "storage-split-seg");
-    part.style.flexGrow = String(segment.used);
-    part.style.background = segment.color;
-    const describe = `${segment.name}: ${formatBytes(segment.used)} (${Math.round((segment.used / used) * 100)}%)`;
-    part.addEventListener("mouseenter", () => {
-      tip.textContent = describe;
-      tip.classList.remove("hidden");
-      const box = bar.getBoundingClientRect();
-      const partBox = part.getBoundingClientRect();
-      tip.style.left = `${Math.min(Math.max(partBox.left - box.left + partBox.width / 2, 80), box.width - 80)}px`;
-      part.classList.add("is-hovered");
-    });
-    part.addEventListener("mouseleave", () => {
-      tip.classList.add("hidden");
-      part.classList.remove("is-hovered");
-    });
-    return part;
-  }));
-  legend.replaceChildren(...segments.map((segment) => {
-    const item = createElement("li", "storage-split-item");
-    const swatch = createElement("span", "storage-split-swatch");
-    swatch.style.background = segment.color;
-    swatch.setAttribute("aria-hidden", "true");
-    item.append(
-      swatch,
-      createElement("span", "storage-split-name", segment.name),
-      createElement("span", "storage-split-value", `${formatBytes(segment.used)} · ${Math.round((segment.used / used) * 100)}%`),
-    );
-    return item;
-  }));
+  overviewRefs.bar.setAttribute("aria-label", segments.map((segment) => `${segment.name} ${Math.round((segment.used / used) * 100)}%`).join(", "));
+  renderSplit(segments, used);
 }
 
 function renderSummary() {
@@ -714,7 +940,9 @@ function render() {
     color: null,
     isRemote: false,
   })));
-  storageView.refreshBtn.disabled = isLoading() || allTargets().length === 0;
+  const loading = isLoading();
+  storageView.view.classList.toggle("is-loading", loading);
+  storageView.refreshBtn.disabled = loading || allTargets().length === 0;
   renderOverview();
   renderSummary();
 }

@@ -66,9 +66,20 @@
     return node;
   }
 
-  function svg(tag, className) {
+  function svg(tag, className, attributes = {}) {
     const node = document.createElementNS(SVG_NS, tag);
-    node.setAttribute("class", className);
+    if (className) {
+      node.setAttribute("class", className);
+    }
+    for (const [name, value] of Object.entries(attributes)) {
+      node.setAttribute(name, String(value));
+    }
+    return node;
+  }
+
+  function gradient(id, [x1, y1, x2, y2], stops) {
+    const node = svg("linearGradient", null, { id, x1, y1, x2, y2, gradientUnits: "userSpaceOnUse" });
+    node.append(...stops.map(([offset, className]) => svg("stop", className, { offset })));
     return node;
   }
 
@@ -104,18 +115,25 @@
       this.chart.setAttribute("viewBox", `0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`);
       this.chart.setAttribute("preserveAspectRatio", "none");
       this.chart.setAttribute("role", "img");
+      const defs = svg("defs");
+      defs.append(
+        gradient("speed-area-fill", [0, 0, 0, VIEW_HEIGHT], [[0, "speed-area-stop-top"], [1, "speed-area-stop-bottom"]]),
+        gradient("speed-line-stroke", [0, 0, VIEW_WIDTH, 0], [[0, "speed-line-stop-start"], [1, "speed-line-stop-end"]]),
+      );
       this.grid = svg("g", "speed-grid");
-      this.area = svg("path", "speed-area");
-      this.line = svg("path", "speed-line");
+      this.area = svg("path", "speed-area", { fill: "url(#speed-area-fill)" });
+      this.line = svg("path", "speed-line", { stroke: "url(#speed-line-stroke)" });
       this.line.setAttribute("vector-effect", "non-scaling-stroke");
-      this.chart.append(this.grid, this.area, this.line);
+      this.chart.append(defs, this.grid, this.area, this.line);
       this.yLabels = el("div", "speed-y-labels");
       this.yLabels.setAttribute("aria-hidden", "true");
       this.cursor = el("div", "speed-cursor hidden");
       this.dot = el("div", "speed-dot hidden");
       this.tip = el("div", "speed-tip hidden");
+      this.head = el("div", "speed-head-dot hidden");
+      this.head.setAttribute("aria-hidden", "true");
       this.empty = el("p", "speed-empty", "The speed shows up here once data starts moving.");
-      this.plot.append(this.chart, this.yLabels, this.cursor, this.dot, this.tip, this.empty);
+      this.plot.append(this.chart, this.yLabels, this.head, this.cursor, this.dot, this.tip, this.empty);
 
       this.axis = el("div", "speed-axis");
       this.axisStart = el("span", null, "0:00");
@@ -135,6 +153,8 @@
       this.peak = 0;
       this.sum = 0;
       this.count = 0;
+      this.hadData = false;
+      this.plot.classList.remove("is-drawing");
       this.root.classList.add("is-running");
       this.clearHover();
       this.scheduleRender();
@@ -207,6 +227,13 @@
       this.chart.classList.toggle("hidden", !hasData);
       this.yLabels.classList.toggle("hidden", !hasData);
       this.axis.classList.toggle("is-empty", !hasData);
+      this.head.classList.toggle("hidden", !hasData || !this.running);
+      if (hasData && !this.hadData) {
+        this.plot.classList.remove("is-drawing");
+        void this.plot.offsetWidth;
+        this.plot.classList.add("is-drawing");
+      }
+      this.hadData = hasData;
       if (!hasData) {
         this.chart.setAttribute("aria-label", "Transfer speed, waiting for data");
         this.axisEnd.textContent = "";
@@ -217,6 +244,9 @@
       const coords = this.points.map((point) => [x(point.t), y(point.v)]);
       const path = coords.map(([px, py], index) => `${index ? "L" : "M"}${px.toFixed(1)},${py.toFixed(2)}`).join(" ");
       this.line.setAttribute("d", path);
+      const [headX, headY] = coords[coords.length - 1];
+      this.head.style.left = `${(headX / VIEW_WIDTH) * 100}%`;
+      this.head.style.top = `${(headY / VIEW_HEIGHT) * 100}%`;
       this.area.setAttribute("d", `${path} L${coords[coords.length - 1][0].toFixed(1)},${VIEW_HEIGHT} L${coords[0][0].toFixed(1)},${VIEW_HEIGHT} Z`);
 
       const gridLines = [top, top / 2].map((value) => {

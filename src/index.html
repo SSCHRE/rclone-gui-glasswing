@@ -6,52 +6,115 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; media-src 'self' blob: glasswing-media:; frame-src 'self' blob:; img-src 'self' data: blob:" />
     <title>Glasswing</title>
     <script src="theme.js"></script>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="theme-material.css" />
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/jobs.css" />
+    <link rel="stylesheet" href="styles/browse.css" />
+    <link rel="stylesheet" href="styles/storage.css" />
+    <link rel="stylesheet" href="styles/remotes.css" />
+    <link rel="stylesheet" href="styles/migration.css" />
+    <link rel="stylesheet" href="styles/dialogs.css" />
+    <link rel="stylesheet" href="styles/preview.css" />
+    <link rel="stylesheet" href="theme-bootstrap.css" />
+    <link rel="stylesheet" href="theme-pico.css" />
+    <link rel="stylesheet" href="theme-catppuccin.css" />
   </head>
   <body>
     <div class="ambient-bg" aria-hidden="true"></div>
     <div class="app">
-      <header class="header">
+      <div id="titlebar" class="titlebar" hidden>
+        <span id="titlebar-icon" class="titlebar-icon" aria-hidden="true"></span>
+        <span id="titlebar-title" class="titlebar-title">Jobs</span>
+      </div>
+      <header class="header sidebar">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
-            <img src="assets/icon-header.png" alt="" width="52" height="52" decoding="async" />
+            <img src="assets/icon-header.png" alt="" width="34" height="34" decoding="async" />
           </div>
-          <div>
+          <div class="brand-text">
             <h1>Glasswing</h1>
             <p class="subtitle version-line">
               <span id="app-version" class="app-version"></span>
               <span class="version-separator" aria-hidden="true">·</span>
               <span id="rclone-version">Checking rclone...</span>
-              <button id="check-for-updates" type="button" class="icon-button" aria-label="Check for updates" title="Check for updates">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M23 4v6h-6M1 20v-6h6"/>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                </svg>
-                <span id="update-dot" class="update-dot hidden" aria-hidden="true"></span>
-              </button>
             </p>
           </div>
+          <button id="check-for-updates" type="button" class="icon-button" aria-label="Check for updates" title="Check for updates">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3.5v11"/>
+              <path d="m7.5 10.5 4.5 4.5 4.5-4.5"/>
+              <path d="M5 20h14"/>
+            </svg>
+            <span id="update-dot" class="update-dot hidden" aria-hidden="true"></span>
+          </button>
         </div>
-        <nav class="mode-switch" role="tablist" aria-label="App mode">
-          <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">Jobs</button>
-          <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">Browse</button>
-          <button id="mode-storage" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="storage">Storage</button>
-          <button id="mode-history" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="history">History</button>
+        <p class="sidebar-section-label" aria-hidden="true">Workspace</p>
+        <nav class="mode-switch" role="tablist" aria-label="App mode" aria-orientation="vertical">
+          <span class="nav-indicator" aria-hidden="true"></span>
+          <button id="mode-jobs" type="button" class="mode-switch-btn is-active" role="tab" aria-selected="true" data-mode="jobs">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 8h14"/>
+              <path d="m14.5 4.5 3.5 3.5-3.5 3.5"/>
+              <path d="M20 16H6"/>
+              <path d="M9.5 12.5 6 16l3.5 3.5"/>
+            </svg>
+            <span class="nav-label">Jobs</span>
+          </button>
+          <button id="mode-browse" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="browse">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
+              <path d="M3.5 10.5h17"/>
+            </svg>
+            <span class="nav-label">Browse</span>
+          </button>
+          <button id="mode-storage" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="storage">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <ellipse cx="12" cy="6" rx="7.5" ry="2.5"/>
+              <path d="M4.5 6v12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5V6"/>
+              <path d="M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5"/>
+            </svg>
+            <span class="nav-label">Storage</span>
+          </button>
+          <button id="mode-history" type="button" class="mode-switch-btn" role="tab" aria-selected="false" data-mode="history">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/>
+              <path d="M3.5 3.5V8H8"/>
+              <path d="M12 7.5V12l3 2"/>
+            </svg>
+            <span class="nav-label">History</span>
+          </button>
         </nav>
         <div class="header-actions">
-          <button id="bwlimit-button" type="button" class="secondary bwlimit-button" title="Bandwidth limit for all transfers">
-            <span class="bwlimit-button-icon" aria-hidden="true">⇅</span>
-            <span id="bwlimit-button-label">Full speed</span>
+          <button id="bwlimit-button" type="button" class="sidebar-item bwlimit-button" title="Bandwidth limit for all transfers">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/>
+              <path d="m12 14 3.5-4"/>
+              <circle cx="12" cy="14.5" r="1.2"/>
+            </svg>
+            <span id="bwlimit-button-label" class="nav-label">Full speed</span>
           </button>
-          <button id="manage-remotes" type="button" class="secondary">Manage remotes</button>
-          <button id="refresh-remotes" type="button" class="secondary">Refresh remotes</button>
+          <button id="manage-remotes" type="button" class="sidebar-item">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.5 1.46A3.75 3.75 0 0 1 17.25 18.5z"/>
+            </svg>
+            <span class="nav-label">Manage remotes</span>
+          </button>
+          <button id="refresh-remotes" type="button" class="sidebar-item">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19.5 11A7.5 7.5 0 0 0 6.2 7.2L4.5 9"/>
+              <path d="M4.5 4.5V9H9"/>
+              <path d="M4.5 13a7.5 7.5 0 0 0 13.3 3.8l1.7-1.8"/>
+              <path d="M19.5 19.5V15H15"/>
+            </svg>
+            <span class="nav-label">Refresh remotes</span>
+          </button>
           <div class="theme-picker">
-            <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-label="Theme" aria-haspopup="menu" aria-expanded="false">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/>
+            <button id="theme-toggle" type="button" class="sidebar-item theme-toggle" aria-label="Theme" aria-haspopup="menu" aria-expanded="false">
+              <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"/>
+                <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>
               </svg>
+              <span class="nav-label">Appearance</span>
             </button>
             <div id="theme-menu" class="theme-menu hidden">
               <div class="context-menu-card theme-menu-card" role="menu" aria-label="Theme">
@@ -60,15 +123,49 @@
                   <span class="context-menu-label">Glass</span>
                   <span class="theme-menu-check" aria-hidden="true">✓</span>
                 </button>
-                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="material">
-                  <span class="theme-swatch theme-swatch-material" aria-hidden="true"></span>
-                  <span class="context-menu-label">Material</span>
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="bootstrap">
+                  <span class="theme-swatch theme-swatch-bootstrap" aria-hidden="true"></span>
+                  <span class="context-menu-label">Bootstrap 5</span>
                   <span class="theme-menu-check" aria-hidden="true">✓</span>
                 </button>
-                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="material-dark">
-                  <span class="theme-swatch theme-swatch-material-dark" aria-hidden="true"></span>
-                  <span class="context-menu-label">Material Dark</span>
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="pico">
+                  <span class="theme-swatch theme-swatch-pico" aria-hidden="true"></span>
+                  <span class="context-menu-label">Pico CSS</span>
                   <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+                <button type="button" class="context-menu-item theme-menu-item" role="menuitemradio" data-theme-option="catppuccin">
+                  <span class="theme-swatch theme-swatch-catppuccin" aria-hidden="true"></span>
+                  <span class="context-menu-label">Catppuccin</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+                <div class="theme-menu-divider" role="separator"></div>
+                <div class="theme-menu-scale" role="group" aria-labelledby="ui-scale-label">
+                  <span id="ui-scale-label" class="theme-menu-scale-label">Text size</span>
+                  <div class="theme-menu-stepper">
+                    <button type="button" class="theme-menu-step" data-ui-scale-step="-1" aria-label="Smaller text" title="Smaller (Ctrl+-)">
+                      <span class="theme-menu-step-glyph is-small" aria-hidden="true">A</span>
+                    </button>
+                    <button type="button" id="ui-scale-value" class="theme-menu-step theme-menu-scale-value" data-ui-scale-reset title="Reset to 100% (Ctrl+0)">100%</button>
+                    <button type="button" class="theme-menu-step" data-ui-scale-step="1" aria-label="Larger text" title="Larger (Ctrl+=)">
+                      <span class="theme-menu-step-glyph is-large" aria-hidden="true">A</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="titlebar-menu-divider" class="theme-menu-divider hidden" role="separator"></div>
+                <button id="titlebar-menu-toggle" type="button" class="context-menu-item theme-menu-item hidden" role="menuitemcheckbox" aria-checked="false">
+                  <svg class="theme-menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+                    <path d="M3 9h18" />
+                  </svg>
+                  <span class="context-menu-label">Custom title bar</span>
+                  <span class="theme-menu-check" aria-hidden="true">✓</span>
+                </button>
+                <button id="titlebar-restart" type="button" class="context-menu-item theme-menu-item theme-menu-restart hidden" data-menu-toggle>
+                  <svg class="theme-menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
+                    <path d="M4.5 4v4h4" />
+                  </svg>
+                  <span class="context-menu-label">Restart to apply</span>
                 </button>
                 <div id="explorer-menu-divider" class="theme-menu-divider hidden" role="separator"></div>
                 <button id="explorer-menu-toggle" type="button" class="context-menu-item theme-menu-item hidden" role="menuitemcheckbox" aria-checked="false" data-menu-toggle>
@@ -86,13 +183,17 @@
       </header>
 
       <div class="app-body">
-      <main id="jobs-view" class="layout" data-app-view="jobs">
+      <main id="jobs-view" class="layout jobs-layout" data-app-view="jobs">
         <section class="panel panel-form">
           <div class="form-body">
             <div class="panel-title-row">
-              <h2>Job</h2>
+              <div class="composer-heading">
+                <h2>New job</h2>
+                <p class="composer-sub">Pick what to move and where it goes.</p>
+              </div>
               <button id="migration-open" type="button" class="secondary migration-open-btn" title="Move everything from one cloud to another">
-                Cloud migration
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4" /><path d="M20 7H4" /><path d="m8 21-4-4 4-4" /><path d="M4 17h16" /></svg>
+                Migrate
                 <span id="migration-badge" class="migration-badge hidden"></span>
               </button>
             </div>
@@ -121,47 +222,54 @@
               </div>
             </details>
 
-            <div class="form-section">
-              <label class="field">
-                <span>Operation</span>
-                <select id="operation">
-                  <option value="copy">Copy</option>
-                  <option value="sync">Sync</option>
-                  <option value="move">Move</option>
-                  <option value="bisync">Bisync (two-way)</option>
-                </select>
-              </label>
+            <div class="form-section op-section">
+              <span class="section-label" id="operation-label">Operation</span>
+              <select id="operation" class="op-select" aria-labelledby="operation-label" tabindex="-1">
+                <option value="copy">Copy</option>
+                <option value="sync">Sync</option>
+                <option value="move">Move</option>
+                <option value="bisync">Bisync (two-way)</option>
+              </select>
+              <div id="operation-segment" class="op-segment" role="radiogroup" aria-labelledby="operation-label">
+                <span class="op-segment-pill" aria-hidden="true"></span>
+                <button type="button" role="radio" class="op-segment-option" data-operation-choice="copy" aria-checked="true">Copy</button>
+                <button type="button" role="radio" class="op-segment-option" data-operation-choice="sync" aria-checked="false" tabindex="-1">Sync</button>
+                <button type="button" role="radio" class="op-segment-option" data-operation-choice="move" aria-checked="false" tabindex="-1">Move</button>
+                <button type="button" role="radio" class="op-segment-option" data-operation-choice="bisync" aria-checked="false" tabindex="-1" title="Two-way sync">Bisync</button>
+              </div>
 
               <div class="hint" id="operation-hint">
                 Copy adds or updates files in the destination.
               </div>
             </div>
 
-            <details class="form-section collapsible" id="paths-collapsible" open>
-              <summary class="collapsible-summary">
-                <span class="collapsible-title">Source &amp; destination</span>
-                <span class="collapsible-chevron" aria-hidden="true"></span>
-              </summary>
-              <div class="collapsible-body">
-                <label class="field">
-                  <span>Source</span>
-                  <div class="input-row">
-                    <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" />
-                    <button type="button" class="secondary" data-target="source">Browse</button>
-                  </div>
-                  <div id="source-storage" class="field-storage"></div>
-                </label>
+            <div class="form-section route" id="paths-collapsible">
+              <label class="field route-field route-field-source">
+                <span class="route-caption"><span class="route-node" aria-hidden="true"></span>From</span>
+                <div class="input-row">
+                  <input id="source" type="text" placeholder="remote:folder or C:\path\to\folder" aria-label="Source" />
+                  <button type="button" class="secondary route-browse" data-target="source">Browse</button>
+                </div>
+                <div id="source-storage" class="field-storage"></div>
+              </label>
 
-                <label class="field">
-                  <span>Destination</span>
-                  <div class="input-row">
-                    <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" />
-                    <button type="button" class="secondary" data-target="destination">Browse</button>
-                  </div>
-                  <div id="destination-storage" class="field-storage"></div>
-                </label>
+              <div class="route-link">
+                <span class="route-link-line" aria-hidden="true"></span>
+                <button id="swap-paths" type="button" class="route-swap" aria-label="Swap source and destination" title="Swap source and destination">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 16-4 4-4-4" /><path d="M17 20V4" /><path d="m3 8 4-4 4 4" /><path d="M7 4v16" /></svg>
+                </button>
+                <span class="route-link-line" aria-hidden="true"></span>
               </div>
-            </details>
+
+              <label class="field route-field route-field-dest">
+                <span class="route-caption"><span class="route-node" aria-hidden="true"></span>To</span>
+                <div class="input-row">
+                  <input id="destination" type="text" placeholder="remote:folder or C:\path\to\folder" aria-label="Destination" />
+                  <button type="button" class="secondary route-browse" data-target="destination">Browse</button>
+                </div>
+                <div id="destination-storage" class="field-storage"></div>
+              </label>
+            </div>
 
             <details class="form-section collapsible" id="remote-insert-collapsible" open>
               <summary class="collapsible-summary">
@@ -205,19 +313,19 @@
               </div>
             </details>
 
-            <div class="form-section">
+            <div class="form-section options-section">
               <div class="options">
-                <label class="checkbox">
+                <label class="checkbox switch">
                   <input id="dry-run" type="checkbox" />
-                  Dry run (no changes)
+                  <span class="switch-text">Dry run <span class="switch-note">no changes are made</span></span>
                 </label>
-                <label class="checkbox">
+                <label class="checkbox switch">
                   <input id="delete-excluded" type="checkbox" />
-                  Delete excluded files (sync only)
+                  <span class="switch-text">Delete excluded files <span class="switch-note">sync only</span></span>
                 </label>
-                <label id="resync-option" class="checkbox hidden">
+                <label id="resync-option" class="checkbox switch hidden">
                   <input id="resync" type="checkbox" />
-                  Resync (needed on the first run)
+                  <span class="switch-text">Resync <span class="switch-note">needed on the first run</span></span>
                 </label>
               </div>
             </div>
@@ -225,8 +333,14 @@
 
           <div class="form-footer">
             <div class="actions">
-              <button id="run-job" type="button" class="primary">Run job</button>
-              <button id="stop-job" type="button" class="danger" disabled>Stop</button>
+              <button id="run-job" type="button" class="primary run-button">
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4a1 1 0 0 0 1.52.85l11.5-7.2a1 1 0 0 0 0-1.7L8.52 3.95A1 1 0 0 0 7 4.8Z" /></svg>
+                Run job
+              </button>
+              <button id="stop-job" type="button" class="danger stop-button" disabled>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" /></svg>
+                Stop
+              </button>
             </div>
 
             <p id="status" class="status"></p>
@@ -235,82 +349,112 @@
 
         <section class="panel output-panel">
           <div class="output-header">
-            <h2>Progress</h2>
+            <div class="output-heading">
+              <h2>Live progress</h2>
+            </div>
             <div class="output-actions">
-              <button id="toggle-raw-log" type="button" class="secondary">Show raw log</button>
+              <button id="toggle-raw-log" type="button" class="secondary raw-log-toggle">Show raw log</button>
             </div>
           </div>
 
-          <div id="job-idle" class="idle-state">
-            <div class="idle-icon" aria-hidden="true">☁</div>
-            <p class="idle-title">No job running</p>
-            <p class="idle-text">Start a copy, sync, or move to see live progress, speed, and activity here.</p>
-          </div>
+          <div class="output-scroll">
+            <div id="job-idle" class="idle-state">
+              <svg class="idle-art" viewBox="0 0 240 112" aria-hidden="true">
+                <defs>
+                  <linearGradient id="idle-arc-gradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0" class="idle-stop-start" />
+                    <stop offset="1" class="idle-stop-end" />
+                  </linearGradient>
+                  <radialGradient id="idle-halo-gradient" cx="0.5" cy="0.5" r="0.5">
+                    <stop offset="0" class="idle-halo-start" />
+                    <stop offset="1" class="idle-halo-end" />
+                  </radialGradient>
+                </defs>
+                <ellipse class="idle-halo" cx="120" cy="66" rx="118" ry="46" fill="url(#idle-halo-gradient)" />
+                <path class="idle-arc" d="M44 54 C 72 6, 168 6, 196 54" stroke="url(#idle-arc-gradient)" />
+                <circle class="idle-packet" cx="120" cy="18" r="4" />
+                <g class="idle-node idle-node-source">
+                  <rect x="22" y="58" width="44" height="44" rx="13" />
+                  <path transform="translate(32 68)" d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+                </g>
+                <g class="idle-node idle-node-dest">
+                  <rect x="174" y="58" width="44" height="44" rx="13" />
+                  <path transform="translate(184 68)" d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+                </g>
+              </svg>
+              <p class="idle-title">Nothing running yet</p>
+              <p class="idle-text">Pick a source and a destination, then hit Run job. Progress, speed and activity show up here live.</p>
+            </div>
 
-          <div id="job-dashboard" class="job-dashboard hidden">
-            <div class="job-banner" id="job-banner">
-              <div class="job-banner-main">
-                <span class="job-badge" id="job-badge">Running</span>
-                <div>
-                  <p class="job-title" id="job-title">Copy job</p>
-                  <p class="job-paths" id="job-paths"></p>
+            <div id="job-dashboard" class="job-dashboard hidden">
+              <div class="job-hero">
+                <div class="job-banner" id="job-banner">
+                  <div class="job-banner-main">
+                    <div class="job-banner-text">
+                      <p class="job-title" id="job-title">Copy job</p>
+                      <p class="job-paths" id="job-paths"></p>
+                    </div>
+                    <span class="job-badge" id="job-badge">Running</span>
+                  </div>
+                </div>
+
+                <div class="progress-section" id="progress-section">
+                  <div class="progress-meta">
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                    <div class="progress-side">
+                      <span class="progress-eta" id="progress-eta">ETA —</span>
+                      <span class="progress-detail" id="progress-detail">Waiting for stats…</span>
+                    </div>
+                  </div>
+                  <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Job progress">
+                    <div class="progress-fill" id="progress-fill"></div>
+                    <div class="progress-shimmer" aria-hidden="true">
+                      <div class="progress-shimmer-beam"></div>
+                    </div>
+                  </div>
+                  <p class="job-message" id="job-message"></p>
                 </div>
               </div>
-              <p class="job-message" id="job-message"></p>
-            </div>
 
-            <div class="progress-section" id="progress-section">
-              <div class="progress-meta">
-                <span class="progress-percent" id="progress-percent">0%</span>
-                <span class="progress-eta" id="progress-eta">ETA —</span>
-              </div>
-              <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div class="progress-fill" id="progress-fill"></div>
-                <div class="progress-shimmer" aria-hidden="true">
-                  <div class="progress-shimmer-beam"></div>
+              <div class="stat-grid">
+                <div class="stat-card stat-card-speed">
+                  <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 14 4-4" /><path d="M3.34 19a10 10 0 1 1 17.32 0" /></svg></span>
+                  <span class="stat-label">Speed</span>
+                  <span class="stat-value" id="stat-speed">—</span>
+                </div>
+                <div class="stat-card stat-card-transferred">
+                  <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></svg></span>
+                  <span class="stat-label">Transferred</span>
+                  <span class="stat-value" id="stat-transferred">—</span>
+                </div>
+                <div class="stat-card stat-card-checks">
+                  <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 6 7 17l-5-5" /><path d="m22 10-7.5 7.5L13 16" /></svg></span>
+                  <span class="stat-label">Checks</span>
+                  <span class="stat-value" id="stat-checks">—</span>
+                </div>
+                <div class="stat-card stat-card-errors">
+                  <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg></span>
+                  <span class="stat-label">Errors</span>
+                  <span class="stat-value stat-value-danger" id="stat-errors">0</span>
                 </div>
               </div>
-              <p class="progress-detail" id="progress-detail">Waiting for stats…</p>
+
+              <section class="speed-section" id="speed-section" aria-label="Transfer speed"></section>
+
+              <details class="activity-section collapsible" id="activity-collapsible" open>
+                <summary class="collapsible-summary">
+                  <span class="collapsible-title">Activity</span>
+                  <span id="activity-count" class="activity-count collapsible-badge">0 events</span>
+                  <span class="collapsible-chevron" aria-hidden="true"></span>
+                </summary>
+                <div class="collapsible-body activity-collapsible-body">
+                  <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
+                </div>
+              </details>
             </div>
 
-            <section class="speed-section" id="speed-section" aria-label="Transfer speed"></section>
-
-            <div class="stat-grid">
-              <div class="stat-card stat-card-speed">
-                <span class="stat-icon" aria-hidden="true">⚡</span>
-                <span class="stat-label">Speed</span>
-                <span class="stat-value" id="stat-speed">—</span>
-              </div>
-              <div class="stat-card stat-card-transferred">
-                <span class="stat-icon" aria-hidden="true">↗</span>
-                <span class="stat-label">Transferred</span>
-                <span class="stat-value" id="stat-transferred">—</span>
-              </div>
-              <div class="stat-card stat-card-checks">
-                <span class="stat-icon" aria-hidden="true">✓</span>
-                <span class="stat-label">Checks</span>
-                <span class="stat-value" id="stat-checks">—</span>
-              </div>
-              <div class="stat-card stat-card-errors">
-                <span class="stat-icon" aria-hidden="true">!</span>
-                <span class="stat-label">Errors</span>
-                <span class="stat-value stat-value-danger" id="stat-errors">0</span>
-              </div>
-            </div>
-
-            <details class="activity-section collapsible" id="activity-collapsible" open>
-              <summary class="collapsible-summary">
-                <span class="collapsible-title">Activity</span>
-                <span id="activity-count" class="activity-count collapsible-badge">0 events</span>
-                <span class="collapsible-chevron" aria-hidden="true"></span>
-              </summary>
-              <div class="collapsible-body activity-collapsible-body">
-                <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
-              </div>
-            </details>
+            <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
           </div>
-
-          <pre id="raw-log" class="raw-log hidden" aria-hidden="true"></pre>
         </section>
       </main>
 
@@ -318,32 +462,50 @@
         <section class="panel browse-panel">
           <div class="browse-toolbar">
             <label class="field browse-remote-field">
-              <span>Remote</span>
+              <span class="browse-sr-only">Remote</span>
+              <svg class="browse-remote-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+              </svg>
               <select id="browse-remote-picker">
                 <option value="">Select a configured remote...</option>
               </select>
             </label>
+            <div class="browse-toolbar-actions" role="group" aria-label="Folder navigation">
+              <button id="browse-up" type="button" class="browse-tool-btn" aria-label="Up one folder" data-tip="Up one folder" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 9 9 4 4 9" />
+                  <path d="M20 20h-7a4 4 0 0 1-4-4V4" />
+                </svg>
+              </button>
+              <button id="browse-refresh" type="button" class="browse-tool-btn" aria-label="Reload" data-tip="Reload" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+              </button>
+            </div>
+            <div class="browse-location-row">
+              <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+              <div id="browse-storage" class="browse-storage"></div>
+            </div>
             <div class="field browse-search-field">
-              <label class="field-label" for="browse-search">Search</label>
+              <label class="field-label browse-sr-only" for="browse-search">Search</label>
               <div class="browse-search-box">
-                <input id="browse-search" type="search" placeholder="Name, *.pdf, or several words" autocomplete="off" spellcheck="false" disabled />
-                <button id="browse-search-go" type="button" class="browse-search-go" aria-label="Search" title="Search" disabled>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <span class="browse-search-icon" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-4.2-4.2" />
+                    <path d="m20.5 20.5-4.3-4.3" />
+                  </svg>
+                </span>
+                <input id="browse-search" type="search" placeholder="Search this folder" autocomplete="off" spellcheck="false" title="Name, *.pdf, or several words" disabled />
+                <button id="browse-search-go" type="button" class="browse-search-go" aria-label="Search" title="Search (Enter)" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+                    <path d="m9 10-5 5 5 5" />
                   </svg>
                 </button>
               </div>
             </div>
-            <div class="browse-toolbar-actions">
-              <button id="browse-up" type="button" class="secondary" disabled>Up</button>
-              <button id="browse-refresh" type="button" class="secondary" disabled>Reload</button>
-            </div>
-          </div>
-
-          <div class="browse-location-row">
-            <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
-            <div id="browse-storage" class="browse-storage"></div>
           </div>
 
           <div id="browse-pending-upload" class="browse-pending-upload hidden" aria-live="polite">
@@ -383,24 +545,94 @@
               <p id="browse-empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
             </div>
             <div id="browse-loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
-              <span class="browse-loading-spinner" aria-hidden="true"></span>
-              <span class="browse-loading-text">Loading…</span>
-              <button id="browse-cancel" type="button" class="secondary">Cancel</button>
+              <div class="browse-loading-pill">
+                <span class="browse-loading-spinner" aria-hidden="true"></span>
+                <span class="browse-loading-text">Loading…</span>
+                <button id="browse-cancel" type="button" class="browse-loading-cancel">Cancel</button>
+              </div>
+            </div>
+            <div class="browse-drop-hint" aria-hidden="true">
+              <span class="browse-drop-hint-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 13v8" />
+                  <path d="M4 14.9A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.24" />
+                  <path d="m8 17 4-4 4 4" />
+                </svg>
+              </span>
+              <strong>Drop to upload</strong>
+              <span>Files land in the folder you're looking at</span>
             </div>
           </div>
 
-          <p id="browse-status" class="browse-status hidden" aria-live="polite"></p>
-
           <div class="browse-footer">
-            <p id="browse-selection" class="browse-selection">Nothing selected</p>
+            <div class="browse-footer-info">
+              <p id="browse-selection" class="browse-selection">Nothing selected</p>
+              <p id="browse-status" class="browse-status hidden" aria-live="polite"></p>
+            </div>
             <div class="browse-actions">
-              <button id="browse-preview" type="button" class="primary" disabled>Preview</button>
-              <button id="browse-download" type="button" class="secondary" disabled>Download</button>
-              <button id="browse-new-folder" type="button" class="secondary" disabled>New folder</button>
-              <button id="browse-upload" type="button" class="secondary" title="Upload files to this folder, or drag them onto the list" disabled>Upload</button>
-              <button id="browse-use-source" type="button" class="secondary" disabled>Use as source</button>
-              <button id="browse-use-dest" type="button" class="secondary" disabled>Use as destination</button>
-              <button id="browse-delete" type="button" class="danger" disabled>Delete</button>
+              <div class="browse-action-group browse-action-group-folder">
+                <button id="browse-upload" type="button" class="secondary browse-action" aria-label="Upload" data-tip="Upload files here, or drag them onto the list" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3v12" />
+                    <path d="m17 8-5-5-5 5" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  </svg>
+                  <span class="browse-action-label">Upload</span>
+                </button>
+                <button id="browse-new-folder" type="button" class="secondary browse-action" aria-label="New folder" data-tip="New folder" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 10v6" />
+                    <path d="M9 13h6" />
+                    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+                  </svg>
+                  <span class="browse-action-label">New folder</span>
+                </button>
+              </div>
+              <div class="browse-action-group browse-action-group-jobs">
+                <button id="browse-use-source" type="button" class="secondary browse-action" aria-label="Use as source" data-tip="Use as job source" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 5v14" />
+                    <path d="M21 12H7" />
+                    <path d="m15 18 6-6-6-6" />
+                  </svg>
+                  <span class="browse-action-label">Use as source</span>
+                </button>
+                <button id="browse-use-dest" type="button" class="secondary browse-action" aria-label="Use as destination" data-tip="Use as job destination" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17 12H3" />
+                    <path d="m11 18 6-6-6-6" />
+                    <path d="M21 5v14" />
+                  </svg>
+                  <span class="browse-action-label">Use as destination</span>
+                </button>
+              </div>
+              <div class="browse-action-group browse-action-group-selection">
+                <button id="browse-delete" type="button" class="danger browse-action" aria-label="Delete" data-tip="Delete" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                  </svg>
+                  <span class="browse-action-label">Delete</span>
+                </button>
+                <button id="browse-download" type="button" class="secondary browse-action" aria-label="Download" data-tip="Download" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 15V3" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  </svg>
+                  <span class="browse-action-label">Download</span>
+                </button>
+                <button id="browse-preview" type="button" class="primary browse-action" aria-label="Preview" data-tip="Preview" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span class="browse-action-label">Preview</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -421,34 +653,42 @@
                   <option value="free">Most free space</option>
                 </select>
               </label>
-              <button id="storage-refresh" type="button" class="secondary">Refresh</button>
+              <button id="storage-refresh" type="button" class="secondary storage-refresh">
+                <svg class="storage-refresh-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 5v6h-6" /></svg>
+                <span>Refresh</span>
+              </button>
             </div>
           </div>
           <div id="storage-overview" class="storage-overview hidden"></div>
-          <h3 class="storage-section-title">Remotes</h3>
-          <div id="storage-grid" class="storage-grid"></div>
-          <p id="storage-empty" class="storage-empty hidden">No remotes configured yet. Add one with Manage remotes.</p>
-          <div id="storage-local" class="storage-local hidden">
-            <h3 class="storage-section-title">This PC</h3>
-            <div id="storage-local-grid" class="storage-grid"></div>
-          </div>
+          <section class="storage-section" aria-labelledby="storage-remotes-title">
+            <h3 id="storage-remotes-title" class="storage-section-title">Remotes</h3>
+            <div id="storage-grid" class="storage-grid"></div>
+            <div id="storage-empty" class="storage-empty hidden">
+              <svg class="storage-empty-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z" /></svg>
+              <p>No remotes configured yet. Add one with Manage remotes.</p>
+            </div>
+          </section>
+          <section id="storage-local" class="storage-section storage-local hidden" aria-labelledby="storage-local-title">
+            <h3 id="storage-local-title" class="storage-section-title">This PC</h3>
+            <div id="storage-local-grid" class="storage-grid storage-grid-local"></div>
+          </section>
         </section>
       </main>
       <main id="history-view" class="layout history-layout hidden" data-app-view="history" hidden>
         <section class="panel history-panel">
-          <div class="storage-header">
-            <div>
+          <div class="history-header">
+            <div class="history-heading">
               <h2>History</h2>
-              <p id="run-history-summary" class="storage-summary"></p>
+              <p id="run-history-summary" class="history-summary"></p>
             </div>
-            <div class="storage-header-actions">
-              <label class="storage-sort">
+            <div class="history-header-actions">
+              <label class="history-filter">
                 <span>Job</span>
                 <select id="run-history-job">
                   <option value="">All jobs</option>
                 </select>
               </label>
-              <label class="storage-sort">
+              <label class="history-filter">
                 <span>Show</span>
                 <select id="run-history-filter">
                   <option value="all">All runs</option>
@@ -456,29 +696,42 @@
                   <option value="scheduled">Scheduled only</option>
                 </select>
               </label>
-              <button id="run-history-clear" type="button" class="secondary">Clear history</button>
+              <button id="run-history-clear" type="button" class="secondary history-clear">Clear history</button>
             </div>
           </div>
-          <ul id="run-history-list" class="run-history-list"></ul>
-          <p id="run-history-empty" class="run-history-empty hidden">Nothing here yet. Finished jobs show up here.</p>
+          <div class="history-scroll">
+            <ul id="run-history-list" class="run-history-list"></ul>
+            <p id="run-history-empty" class="run-history-empty hidden">Nothing here yet. Finished jobs show up here.</p>
+          </div>
         </section>
       </main>
       </div>
       <div id="transfer-stack" class="transfer-stack"></div>
     </div>
 
-    <div id="preview-dialog" class="popup-root hidden" aria-hidden="true">
-      <div class="popup-backdrop" data-preview-close></div>
+    <div id="preview-dialog" class="popup-root preview-root hidden" aria-hidden="true">
+      <div class="popup-backdrop preview-backdrop" data-preview-close></div>
+      <button id="preview-previous" type="button" class="icon-button secondary preview-nav preview-nav-prev" aria-label="Previous file" aria-keyshortcuts="ArrowLeft" disabled>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        <kbd class="preview-nav-key" aria-hidden="true">&larr;</kbd>
+      </button>
+      <button id="preview-next" type="button" class="icon-button secondary preview-nav preview-nav-next" aria-label="Next file" aria-keyshortcuts="ArrowRight" disabled>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        <kbd class="preview-nav-key" aria-hidden="true">&rarr;</kbd>
+      </button>
       <div class="popup-card popup-card-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title">
         <div class="preview-header">
-          <div>
+          <span class="preview-kind" aria-hidden="true"></span>
+          <div class="preview-heading">
             <h2 id="preview-title" class="popup-title preview-title">Preview</h2>
             <p id="preview-subtitle" class="preview-subtitle"></p>
           </div>
           <div class="preview-header-actions">
-            <button id="preview-previous" type="button" class="icon-button secondary" aria-label="Previous file" disabled>←</button>
-            <button id="preview-next" type="button" class="icon-button secondary" aria-label="Next file" disabled>→</button>
-            <button id="preview-close" type="button" class="icon-button" aria-label="Close preview">×</button>
+            <div id="preview-meta" class="preview-meta"></div>
+            <span id="preview-position" class="preview-position hidden"></span>
+            <button id="preview-close" type="button" class="icon-button preview-close" aria-label="Close preview" aria-keyshortcuts="Escape">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
           </div>
         </div>
         <div id="preview-body" class="preview-body">
@@ -487,17 +740,35 @@
           <img id="preview-image" class="preview-image hidden" alt="" />
           <video id="preview-video" class="preview-video hidden" controls playsinline preload="none"></video>
           <div id="preview-audio-wrap" class="preview-audio-wrap hidden">
-            <div class="preview-audio-icon" aria-hidden="true"></div>
-            <audio id="preview-audio" class="preview-audio" controls preload="none"></audio>
+            <div class="preview-audio-card">
+              <div class="preview-audio-art" aria-hidden="true">
+                <div class="preview-audio-icon"></div>
+                <div class="preview-audio-bars">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="preview-audio-info">
+                <p class="preview-audio-label">Now playing</p>
+                <p id="preview-audio-title" class="preview-audio-title"></p>
+                <p id="preview-audio-sub" class="preview-audio-sub"></p>
+              </div>
+              <audio id="preview-audio" class="preview-audio" controls preload="none"></audio>
+            </div>
           </div>
           <div id="preview-zip" class="preview-zip hidden">
             <div class="preview-zip-toolbar">
+              <span class="preview-zip-archive-icon" aria-hidden="true"></span>
               <nav id="preview-zip-breadcrumbs" class="preview-zip-breadcrumbs" aria-label="Archive path"></nav>
               <div id="preview-zip-summary" class="preview-zip-summary"></div>
             </div>
             <div id="preview-zip-loading" class="preview-zip-loading hidden" aria-live="polite">
-              <span class="browse-loading-spinner" aria-hidden="true"></span>
-              <span class="preview-zip-loading-text">Reading archive index…</span>
+              <div class="preview-zip-skeleton" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="preview-zip-loading-status">
+                <span class="preview-spinner" aria-hidden="true"></span>
+                <span class="preview-zip-loading-text">Reading archive index…</span>
+              </div>
             </div>
             <div class="preview-zip-scroll">
               <table class="preview-zip-table">
@@ -511,6 +782,10 @@
                 <tbody id="preview-zip-entries"></tbody>
               </table>
             </div>
+          </div>
+          <div class="preview-loader" aria-hidden="true">
+            <span class="preview-spinner"></span>
+            <span id="preview-loader-text" class="preview-loader-text">Loading…</span>
           </div>
         </div>
       </div>
@@ -568,12 +843,19 @@
 
     <div id="save-job-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-save-dialog-close></div>
-      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="save-job-title">
-        <p id="save-job-title" class="popup-title">Save job</p>
-        <p class="popup-message">Give this job a name for quick access later. Leave blank to use the auto-generated label.</p>
+      <div class="popup-card popup-card-form popup-card-save-job" role="dialog" aria-modal="true" aria-labelledby="save-job-title" aria-describedby="save-job-message">
+        <div class="dialog-head">
+          <span class="dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          <div class="dialog-head-text">
+            <p id="save-job-title" class="popup-title">Save job</p>
+            <p id="save-job-message" class="popup-message">Give this job a name for quick access later. Leave blank to use the auto-generated label.</p>
+          </div>
+        </div>
         <label class="field popup-field">
           <span>Job name</span>
-          <input id="save-job-name" type="text" placeholder="e.g. Nightly photo backup" />
+          <input id="save-job-name" type="text" placeholder="e.g. Nightly photo backup" autocomplete="off" spellcheck="false" />
         </label>
         <div class="popup-actions">
           <button id="save-job-cancel" type="button" class="secondary">Cancel</button>
@@ -584,30 +866,51 @@
 
     <div id="bwlimit-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-bwlimit-close></div>
-      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="bwlimit-title">
-        <p id="bwlimit-title" class="popup-title">Bandwidth limit</p>
-        <p class="popup-message">Caps how fast rclone moves data application wide.</p>
-        <label class="field">
-          <span>Maximum speed</span>
-          <div class="input-row">
-            <input id="bwlimit-rate" type="number" min="0" step="any" inputmode="decimal" placeholder="Unlimited" />
+      <div class="popup-card popup-card-form popup-card-bwlimit" role="dialog" aria-modal="true" aria-labelledby="bwlimit-title" aria-describedby="bwlimit-message">
+        <div class="dialog-head">
+          <span class="dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+          </span>
+          <div class="dialog-head-text">
+            <p id="bwlimit-title" class="popup-title">Bandwidth limit</p>
+            <p id="bwlimit-message" class="popup-message">Caps how fast rclone moves data application wide.</p>
+          </div>
+        </div>
+        <div class="field bwlimit-speed">
+          <span id="bwlimit-speed-label">Maximum speed</span>
+          <div id="bwlimit-presets" class="dialog-seg bwlimit-presets" role="radiogroup" aria-labelledby="bwlimit-speed-label">
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="" /><span>Unlimited</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="1M" /><span>1 MB/s</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="5M" /><span>5 MB/s</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="10M" /><span>10 MB/s</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="50M" /><span>50 MB/s</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="bwlimit-preset" value="custom" /><span>Custom</span></label>
+          </div>
+          <div class="input-row bwlimit-rate-group">
+            <input id="bwlimit-rate" type="number" min="0" step="any" inputmode="decimal" placeholder="Unlimited" aria-label="Maximum speed" />
             <select id="bwlimit-unit" class="bwlimit-unit" aria-label="Speed unit">
               <option value="K">KB/s</option>
               <option value="M" selected>MB/s</option>
             </select>
           </div>
-        </label>
-        <label class="checkbox">
+        </div>
+        <label class="checkbox bwlimit-scheduled-toggle">
           <input id="bwlimit-scheduled" type="checkbox" />
           Only during specified hours
         </label>
-        <div id="bwlimit-hours" class="input-row bwlimit-hours hidden">
-          <input id="bwlimit-from" type="time" value="08:00" aria-label="Limit from" />
-          <span>to</span>
-          <input id="bwlimit-to" type="time" value="18:00" aria-label="Limit until" />
+        <div id="bwlimit-hours" class="bwlimit-hours hidden">
+          <div class="bwlimit-hours-inputs">
+            <input id="bwlimit-from" type="time" value="08:00" aria-label="Limit from" />
+            <svg class="bwlimit-hours-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            <input id="bwlimit-to" type="time" value="18:00" aria-label="Limit until" />
+          </div>
+          <div id="bwlimit-timeline" class="bwlimit-timeline" aria-hidden="true">
+            <span class="bwlimit-timeline-track"></span>
+            <span class="bwlimit-timeline-ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></span>
+          </div>
         </div>
-        <p id="bwlimit-hint" class="hint bwlimit-hint"></p>
-        <p id="bwlimit-note" class="hint bwlimit-note"></p>
+        <p id="bwlimit-hint" class="bwlimit-hint" aria-live="polite"></p>
+        <p id="bwlimit-note" class="bwlimit-note"></p>
         <div class="popup-actions bwlimit-actions">
           <button id="bwlimit-clear" type="button" class="secondary bwlimit-clear">Remove limit</button>
           <button id="bwlimit-cancel" type="button" class="secondary">Cancel</button>
@@ -619,14 +922,25 @@
     <div id="run-confirm-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-run-confirm-close></div>
       <div class="popup-card popup-card-command" role="dialog" aria-modal="true" aria-labelledby="run-confirm-title" aria-describedby="run-confirm-message">
-        <p id="run-confirm-title" class="popup-title">Run this command?</p>
-        <p id="run-confirm-message" class="popup-message"></p>
-        <pre id="run-confirm-command" class="command-preview"></pre>
-        <label class="checkbox command-preview-remember">
-          <input id="run-confirm-remember" type="checkbox" />
-          Don't ask again for this exact job
-        </label>
-        <p class="command-preview-remember-hint">You'll be asked again if anything changes: paths, operation, options or flags.</p>
+        <div class="dialog-head">
+          <span class="dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m5 17 5-5-5-5"/><path d="M12 19h7"/></svg>
+          </span>
+          <div class="dialog-head-text">
+            <p id="run-confirm-title" class="popup-title">Run this command?</p>
+            <p id="run-confirm-message" class="popup-message"></p>
+          </div>
+        </div>
+        <div class="command-preview-well">
+          <pre id="run-confirm-command" class="command-preview"></pre>
+        </div>
+        <div class="command-preview-remember-row">
+          <label class="checkbox command-preview-remember">
+            <input id="run-confirm-remember" type="checkbox" aria-describedby="run-confirm-remember-hint" />
+            Don't ask again for this exact job
+          </label>
+          <p id="run-confirm-remember-hint" class="command-preview-remember-hint">You'll be asked again if anything changes: paths, operation, options or flags.</p>
+        </div>
         <div class="popup-actions command-preview-actions">
           <button id="run-confirm-copy" type="button" class="secondary">Copy command</button>
           <button id="run-confirm-cancel" type="button" class="secondary">Cancel</button>
@@ -639,36 +953,59 @@
       <div class="popup-backdrop" data-migration-close></div>
       <div class="popup-card popup-card-migration" role="dialog" aria-modal="true" aria-labelledby="migration-title">
         <div class="migration-head">
-          <p id="migration-title" class="popup-title">Cloud migration</p>
-          <button id="migration-close" type="button" class="secondary migration-close" aria-label="Close">✕</button>
+          <span class="migration-head-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /><path d="M8.5 14.5h6" /><path d="m12.5 12 2.5 2.5-2.5 2.5" /></svg>
+          </span>
+          <div class="migration-head-text">
+            <p id="migration-title" class="popup-title">Cloud migration</p>
+            <p class="migration-head-sub">Move a whole cloud, checked file by file</p>
+          </div>
+          <button id="migration-close" type="button" class="secondary migration-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+          </button>
         </div>
         <div id="migration-body" class="migration-body"></div>
+        <div id="migration-foot" class="migration-foot"></div>
       </div>
     </div>
     <div id="schedule-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-schedule-close></div>
       <div class="popup-card popup-card-form popup-card-schedule" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
-        <p id="schedule-title" class="popup-title">Schedule job</p>
-        <p id="schedule-job-name" class="popup-message schedule-job-name"></p>
-        <label class="field">
-          <span>Repeat</span>
-          <select id="schedule-type">
-            <option value="off">Don't run automatically</option>
-            <option value="interval">Every few hours</option>
-            <option value="daily">Every day</option>
-            <option value="weekly">On certain days</option>
-          </select>
-        </label>
-        <label id="schedule-interval-row" class="field">
-          <span>Every</span>
-          <div class="input-row">
-            <input id="schedule-hours" type="number" min="1" max="168" step="1" value="6" />
-            <span class="schedule-unit">hours</span>
+        <div class="dialog-head">
+          <span class="dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="16" cy="16" r="6"/><path d="M16 13.5V16l1.6 1"/></svg>
+          </span>
+          <div class="dialog-head-text">
+            <p id="schedule-title" class="popup-title">Schedule job</p>
+            <p id="schedule-job-name" class="popup-message schedule-job-name"></p>
           </div>
-        </label>
-        <div id="schedule-days-row" class="field">
-          <span>Days</span>
-          <div class="schedule-days" role="group" aria-label="Days">
+        </div>
+        <div class="field schedule-type-field">
+          <span id="schedule-type-label">Repeat</span>
+          <div id="schedule-type" class="dialog-seg schedule-type" role="radiogroup" aria-labelledby="schedule-type-label">
+            <label class="dialog-seg-option"><input type="radio" name="schedule-type" value="off" /><span>Off</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="schedule-type" value="interval" /><span>Every few hours</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="schedule-type" value="daily" /><span>Daily</span></label>
+            <label class="dialog-seg-option"><input type="radio" name="schedule-type" value="weekly" /><span>Weekly</span></label>
+          </div>
+        </div>
+        <div class="schedule-when">
+          <label id="schedule-interval-row" class="field schedule-when-row">
+            <span>Every</span>
+            <div class="input-row schedule-hours-group">
+              <input id="schedule-hours" type="number" min="1" max="168" step="1" value="6" />
+              <span class="schedule-unit">hours</span>
+            </div>
+          </label>
+          <div id="schedule-days-row" class="field schedule-when-row">
+            <div class="schedule-days-head">
+              <span id="schedule-days-label">Days</span>
+              <div class="schedule-days-quick">
+                <button type="button" class="schedule-days-preset" data-schedule-days="1,2,3,4,5">Weekdays</button>
+                <button type="button" class="schedule-days-preset" data-schedule-days="0,6">Weekends</button>
+              </div>
+            </div>
+            <div class="schedule-days" role="group" aria-labelledby="schedule-days-label">
               <label class="schedule-day"><input type="checkbox" value="1" /><span>Mon</span></label>
               <label class="schedule-day"><input type="checkbox" value="2" /><span>Tue</span></label>
               <label class="schedule-day"><input type="checkbox" value="3" /><span>Wed</span></label>
@@ -676,17 +1013,18 @@
               <label class="schedule-day"><input type="checkbox" value="5" /><span>Fri</span></label>
               <label class="schedule-day"><input type="checkbox" value="6" /><span>Sat</span></label>
               <label class="schedule-day"><input type="checkbox" value="0" /><span>Sun</span></label>
+            </div>
           </div>
+          <label id="schedule-time-row" class="field schedule-when-row">
+            <span>At</span>
+            <input id="schedule-time" type="time" value="02:00" />
+          </label>
         </div>
-        <label id="schedule-time-row" class="field">
-          <span>At</span>
-          <input id="schedule-time" type="time" value="02:00" />
-        </label>
         <label id="schedule-catchup-row" class="checkbox schedule-catchup">
           <input id="schedule-catchup" type="checkbox" checked />
           If a run is missed, run it as soon as Glasswing is back
         </label>
-        <p id="schedule-next" class="hint schedule-next"></p>
+        <div id="schedule-next" class="schedule-next" aria-live="polite"></div>
         <div id="schedule-command-wrap" class="schedule-command-wrap">
           <p class="schedule-section-label">Runs without asking</p>
           <pre id="schedule-command" class="command-preview schedule-command"></pre>
@@ -714,45 +1052,75 @@
       <div class="popup-backdrop" data-remote-manager-close></div>
       <div class="popup-card popup-card-remote-manager" role="dialog" aria-modal="true" aria-labelledby="remote-manager-title">
         <div class="remote-manager-header">
-          <div>
-            <h2 id="remote-manager-title" class="popup-title remote-manager-title">Remote manager</h2>
-            <p id="remote-manager-config-path" class="remote-manager-config-path"></p>
+          <div class="remote-manager-heading">
+            <span class="remote-manager-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z" /></svg>
+            </span>
+            <div class="remote-manager-heading-text">
+              <h2 id="remote-manager-title" class="popup-title remote-manager-title">Remotes</h2>
+              <p id="remote-manager-config-path" class="remote-manager-config-path"></p>
+            </div>
           </div>
-          <button id="remote-manager-close" type="button" class="icon-button" aria-label="Close remote manager">×</button>
+          <button id="remote-manager-close" type="button" class="icon-button remote-manager-close" aria-label="Close remote manager">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></svg>
+          </button>
         </div>
 
         <div class="remote-manager-body">
           <aside class="remote-list-panel">
             <div class="remote-list-toolbar">
-              <button id="remote-add-btn" type="button" class="primary">Add remote</button>
-              <button id="remote-refresh-btn" type="button" class="secondary">Refresh</button>
-              <button id="remote-vault-btn" type="button" class="secondary remote-vault-btn">New private vault</button>
+              <button id="remote-add-btn" type="button" class="primary remote-add-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+                <span>Add remote</span>
+              </button>
+              <button id="remote-refresh-btn" type="button" class="secondary remote-refresh-btn" aria-label="Refresh remotes" title="Refresh">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 5v6h-6" /></svg>
+              </button>
+              <button id="remote-vault-btn" type="button" class="secondary remote-vault-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+                <span>New private vault</span>
+              </button>
             </div>
+            <p class="remote-list-label">Configured</p>
             <ul id="remote-list" class="remote-list"></ul>
             <p id="remote-list-empty" class="remote-list-empty hidden">No remotes configured yet.</p>
           </aside>
 
           <section class="remote-detail-panel">
             <div id="remote-panel-empty" class="remote-panel-empty">
-              <div class="remote-panel-empty-icon" aria-hidden="true">☁</div>
+              <div class="remote-panel-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z" /><path d="M12 11v5" /><path d="M9.5 13.5 12 11l2.5 2.5" /></svg>
+              </div>
               <p class="remote-panel-empty-title">Select a remote</p>
               <p class="remote-panel-empty-text">Pick a remote from the list to view its settings, or add a new one.</p>
             </div>
 
             <div id="remote-panel-detail" class="remote-panel-detail hidden">
               <div class="remote-detail-header">
-                <div>
-                  <h3 id="remote-detail-name" class="remote-detail-name">Remote</h3>
-                  <span id="remote-detail-type" class="remote-type-badge"></span>
+                <div class="remote-detail-identity">
+                  <span id="remote-detail-avatar" class="remote-avatar remote-avatar-lg" aria-hidden="true"></span>
+                  <div class="remote-detail-titles">
+                    <h3 id="remote-detail-name" class="remote-detail-name">Remote</h3>
+                    <span id="remote-detail-type" class="remote-type-badge"></span>
+                  </div>
                 </div>
                 <div class="remote-detail-actions">
-                  <button id="remote-reconnect-btn" type="button" class="secondary">Reconnect</button>
-                  <button id="remote-delete-btn" type="button" class="danger">Delete</button>
+                  <button id="remote-reconnect-btn" type="button" class="secondary">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M8 12h8" /></svg>
+                    <span>Reconnect</span>
+                  </button>
+                  <button id="remote-delete-btn" type="button" class="danger">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V4h6v3" /></svg>
+                    <span>Delete</span>
+                  </button>
                 </div>
               </div>
               <section id="remote-mount" class="remote-mount hidden" aria-labelledby="remote-mount-title">
                 <div class="remote-mount-heading">
-                  <h4 id="remote-mount-title" class="remote-mount-title">Mount as drive</h4>
+                  <h4 id="remote-mount-title" class="remote-mount-title">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M6 16h.01" /><path d="M10 16h.01" /></svg>
+                    <span>Mount as drive</span>
+                  </h4>
                   <span id="remote-mount-status" class="remote-mount-status"></span>
                 </div>
                 <div id="remote-mount-form" class="remote-mount-controls">
@@ -782,7 +1150,10 @@
               </section>
               <section id="remote-serve" class="remote-mount remote-serve hidden" aria-labelledby="remote-serve-title">
                 <div class="remote-mount-heading">
-                  <h4 id="remote-serve-title" class="remote-mount-title">Share over the network</h4>
+                  <h4 id="remote-serve-title" class="remote-mount-title">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 10.5a11 11 0 0 1 15 0" /><path d="M7.5 13.5a6.5 6.5 0 0 1 9 0" /><path d="M10.5 16.5a2.2 2.2 0 0 1 3 0" /><path d="M12 19.5h.01" /></svg>
+                    <span>Share over the network</span>
+                  </h4>
                   <span id="remote-serve-status" class="remote-mount-status"></span>
                 </div>
                 <div class="remote-mount-controls remote-serve-controls">
@@ -832,21 +1203,29 @@
                 <p id="remote-serve-hint" class="remote-mount-hint"></p>
                 <ul id="remote-serve-list" class="remote-serve-list hidden"></ul>
               </section>
-              <pre id="remote-detail-config" class="remote-config-block"></pre>
+              <section class="remote-config" aria-labelledby="remote-config-title">
+                <h4 id="remote-config-title" class="remote-config-title">Configuration</h4>
+                <pre id="remote-detail-config" class="remote-config-block"></pre>
+              </section>
             </div>
 
             <div id="remote-panel-vault" class="remote-panel-add remote-panel-vault hidden"></div>
 
             <div id="remote-panel-add" class="remote-panel-add hidden">
-              <h3 class="remote-add-title">Add remote</h3>
+              <div class="remote-add-head">
+                <h3 class="remote-add-title">Add remote</h3>
+                <p class="remote-add-sub">Give it a name, pick a provider and fill in what it asks for.</p>
+              </div>
               <label class="field">
                 <span>Remote name</span>
                 <input id="remote-create-name" type="text" placeholder="e.g. mydrive" autocomplete="off" />
               </label>
               <label class="field">
                 <span>Provider</span>
-                <input id="remote-provider-search" type="search" placeholder="Search providers…" autocomplete="off" />
-                <select id="remote-provider-select" size="8"></select>
+                <div class="remote-provider-picker">
+                  <input id="remote-provider-search" type="search" placeholder="Search providers…" autocomplete="off" />
+                  <select id="remote-provider-select" size="8"></select>
+                </div>
               </label>
               <p id="remote-provider-description" class="remote-provider-description"></p>
               <div id="remote-provider-form" class="remote-provider-form"></div>
@@ -865,7 +1244,10 @@
         </div>
 
         <div class="remote-manager-footer">
-          <button id="remote-open-wizard-btn" type="button" class="secondary">Open rclone config wizard</button>
+          <button id="remote-open-wizard-btn" type="button" class="secondary remote-wizard-btn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7l5 5-5 5" /><path d="M12 18h7" /></svg>
+            <span>Open rclone config wizard</span>
+          </button>
           <button type="button" class="secondary" data-remote-manager-close>Close</button>
         </div>
       </div>
@@ -874,28 +1256,77 @@
     <div id="browse-context-menu" class="context-menu hidden" aria-hidden="true">
       <div class="context-menu-backdrop" data-context-close></div>
       <div class="context-menu-card" role="menu" aria-label="File actions">
-        <button id="context-preview" type="button" class="context-menu-item" data-action="preview">
-          <span class="context-menu-icon" aria-hidden="true">👁</span>
-          <span class="context-menu-label">Preview</span>
+        <button id="context-new-folder" type="button" class="context-menu-item hidden" data-action="new-folder" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M12 10.5v5M9.5 13h5" />
+            </svg>
+          </span>
+          <span class="context-menu-label">New folder</span>
         </button>
-        <button id="context-download" type="button" class="context-menu-item" data-action="download">
-          <span class="context-menu-icon" aria-hidden="true">↓</span>
+        <button id="context-upload" type="button" class="context-menu-item hidden" data-action="upload" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Upload files…</span>
+        </button>
+        <button id="context-preview" type="button" class="context-menu-item" data-action="preview" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Preview</span>
+          <kbd class="context-menu-hint">Enter</kbd>
+        </button>
+        <button id="context-download" type="button" class="context-menu-item" data-action="download" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 15V3" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            </svg>
+          </span>
           <span class="context-menu-label">Download</span>
         </button>
-        <button id="context-delete" type="button" class="context-menu-item context-menu-item-danger" data-action="delete">
-          <span class="context-menu-icon" aria-hidden="true">🗑</span>
+        <button id="context-delete" type="button" class="context-menu-item context-menu-item-danger" data-action="delete" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </span>
           <span class="context-menu-label">Delete</span>
         </button>
       </div>
     </div>
     <div id="delete-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-delete-close></div>
-      <div class="popup-card popup-card-form" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="popup-card popup-card-form delete-card" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" aria-describedby="delete-message">
+        <div class="delete-card-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18" />
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+          </svg>
+        </div>
         <p id="delete-title" class="popup-title">Delete file</p>
         <p id="delete-message" class="popup-message"></p>
+        <p class="delete-card-note">This can't be undone.</p>
         <div class="popup-actions">
           <button id="delete-cancel" type="button" class="secondary">Cancel</button>
-          <button id="delete-confirm" type="button" class="danger">Delete</button>
+          <button id="delete-confirm" type="button" class="danger delete-confirm">Delete</button>
         </div>
       </div>
     </div>

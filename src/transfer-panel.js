@@ -2,6 +2,8 @@ const TRANSFER_TICK_MS = 250;
 const TRANSFER_RATE_WINDOW_MS = 10000;
 const TRANSFER_SUCCESS_HIDE_MS = 4000;
 
+let transferMinimizedPreference = false;
+
 function transferItemsLabel(count) {
   return `${count} item${count === 1 ? "" : "s"}`;
 }
@@ -37,8 +39,16 @@ class TransferPanel {
   render(container) {
     this.panel = document.createElement("div");
     this.panel.className = "transfer-panel hidden";
+    this.panel.dataset.direction = this.labels.direction || "down";
     this.panel.setAttribute("role", "status");
     this.panel.setAttribute("aria-live", "polite");
+
+    const icon = document.createElement("span");
+    icon.className = "transfer-panel-icon";
+    icon.setAttribute("aria-hidden", "true");
+    const arrow = this.labels.direction === "up" ? "M12 19V5M6 11l6-6 6 6" : "M12 5v14M6 13l6 6 6-6";
+    icon.innerHTML =
+      `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="transfer-icon-arrow" d="${arrow}" /><path class="transfer-icon-check" pathLength="1" d="M5 12.5l4.5 4.5L19 7.5" /><path class="transfer-icon-cross" d="M12 7v6M12 17h.01" /></svg>`;
 
     const info = document.createElement("div");
     info.className = "transfer-panel-info";
@@ -47,6 +57,9 @@ class TransferPanel {
     this.file = document.createElement("span");
     this.file.className = "transfer-panel-file";
     info.append(this.title, this.file);
+
+    this.summary = document.createElement("span");
+    this.summary.className = "transfer-panel-summary";
 
     const track = document.createElement("div");
     track.className = "transfer-progress";
@@ -61,10 +74,30 @@ class TransferPanel {
     this.meta.className = "transfer-panel-meta";
     this.action = document.createElement("button");
     this.action.type = "button";
-    this.action.className = "secondary transfer-panel-action";
+    this.action.className = "transfer-panel-action";
+    this.action.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>';
     this.action.addEventListener("click", () => this.handleAction());
 
-    this.panel.append(info, track, this.percent, this.meta, this.action);
+    this.minimizeButton = document.createElement("button");
+    this.minimizeButton.type = "button";
+    this.minimizeButton.className = "transfer-panel-minimize";
+    this.minimizeButton.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
+    this.minimizeButton.addEventListener("click", () => this.setMinimized(!this.minimized, true));
+
+    const controls = document.createElement("div");
+    controls.className = "transfer-panel-controls";
+    controls.append(this.minimizeButton, this.action);
+
+    this.panel.addEventListener("click", (event) => {
+      if (this.minimized && !event.target.closest("button")) {
+        this.setMinimized(false, true);
+      }
+    });
+
+    this.panel.append(icon, info, this.summary, track, this.percent, this.meta, controls);
+    this.setMinimized(transferMinimizedPreference);
     container.appendChild(this.panel);
   }
 
@@ -100,6 +133,7 @@ class TransferPanel {
 
     if (!this.running) {
       this.resetState();
+      this.setMinimized(transferMinimizedPreference);
     }
     this.queue.push({ ...batch, offsets, totalBytes: batchBytes });
     this.totalItems += batch.items.length;
@@ -272,6 +306,18 @@ class TransferPanel {
     return this.totalItems ? this.processedItems / this.totalItems : 0;
   }
 
+  setMinimized(minimized, remember = false) {
+    this.minimized = minimized;
+    if (remember) {
+      transferMinimizedPreference = minimized;
+    }
+    this.panel.classList.toggle("is-minimized", minimized);
+    const label = minimized ? "Expand" : "Minimize";
+    this.minimizeButton.setAttribute("aria-label", label);
+    this.minimizeButton.setAttribute("aria-expanded", String(!minimized));
+    this.minimizeButton.title = label;
+  }
+
   show(variant) {
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
@@ -303,6 +349,11 @@ class TransferPanel {
         ? `${this.labels.active} ${position} of ${this.totalItems}`
         : this.labels.active;
     this.percent.textContent = `${Math.floor(done * 100)}%`;
+    this.summary.textContent = this.cancelling
+      ? "Cancelling…"
+      : this.totalItems > 1
+        ? `${position} of ${this.totalItems} · ${this.percent.textContent}`
+        : this.percent.textContent;
 
     const fileLabel = item
       ? item.isDir && this.currentFile
@@ -326,7 +377,7 @@ class TransferPanel {
       }
     }
     this.meta.textContent = meta;
-    this.action.textContent = "Cancel";
+    this.setActionLabel("Cancel");
     this.action.disabled = this.cancelling;
   }
 
@@ -344,6 +395,7 @@ class TransferPanel {
       this.title.textContent = `${noun} complete`;
     }
     this.percent.textContent = "";
+    this.summary.textContent = cancelled ? "Cancelled" : failedCount ? "Failed" : "Done";
 
     const summary = this.completed === 1 && this.lastDetail
       ? this.lastDetail
@@ -356,12 +408,17 @@ class TransferPanel {
     this.meta.textContent = cancelled || failedCount
       ? `${this.completed} of ${this.totalItems} ${past}${failedCount ? ` · ${failedCount} failed` : ""}`
       : this.formatBytes(this.totalBytes);
-    this.action.textContent = "Dismiss";
+    this.setActionLabel("Dismiss");
     this.action.disabled = false;
 
     if (variant === "is-success") {
       this.hideTimer = setTimeout(() => this.hide(), TRANSFER_SUCCESS_HIDE_MS);
     }
+  }
+
+  setActionLabel(label) {
+    this.action.setAttribute("aria-label", label);
+    this.action.title = label;
   }
 
   static cleanError(error) {

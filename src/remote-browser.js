@@ -66,6 +66,8 @@ let entries = [];
 let selectedPath = null;
 let selectedIsDir = false;
 let selectedSize = null;
+const selection = new Map();
+let selectionAnchor = null;
 let loading = false;
 let loadToken = 0;
 let loadingContext = "";
@@ -390,6 +392,34 @@ function formatModTime(value) {
   });
 }
 
+const ENTRY_KINDS = {
+  image: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "tif", "tiff", "ico", "raw", "cr2", "nef", "dng", "psd"],
+  video: ["mp4", "mkv", "mov", "avi", "webm", "m4v", "wmv", "flv", "mpg", "mpeg", "3gp", "ts"],
+  audio: ["mp3", "wav", "flac", "aac", "ogg", "m4a", "opus", "wma", "aiff", "mid", "midi"],
+  archive: ["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso", "dmg", "cab"],
+  pdf: ["pdf"],
+  doc: ["doc", "docx", "odt", "rtf", "pages", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "key", "numbers", "epub"],
+  text: ["txt", "md", "markdown", "log", "nfo", "ini", "cfg", "conf"],
+  code: ["js", "mjs", "cjs", "ts", "tsx", "jsx", "json", "html", "htm", "css", "scss", "py", "rb", "go", "rs", "java", "kt", "c", "h", "cpp", "hpp", "cs", "php", "sh", "bash", "ps1", "bat", "cmd", "lua", "sql", "xml", "yml", "yaml", "toml", "swift", "dart", "vue"],
+  app: ["exe", "msi", "deb", "rpm", "appimage", "apk", "app", "pkg", "dll", "bin", "jar"],
+};
+
+const ENTRY_KIND_BY_EXTENSION = new Map(
+  Object.entries(ENTRY_KINDS).flatMap(([kind, extensions]) => extensions.map((extension) => [extension, kind])),
+);
+
+function entryKind(name, isDir) {
+  if (isDir) {
+    return "folder";
+  }
+  const base = String(name || "").split("/").pop();
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) {
+    return "file";
+  }
+  return ENTRY_KIND_BY_EXTENSION.get(base.slice(dot + 1).toLowerCase()) || "file";
+}
+
 function currentPath() {
   if (!currentRemote) {
     return "";
@@ -488,15 +518,38 @@ function canPreviewSelection() {
   return Boolean(selectedPath) && !selectedIsDir && !loading && PREVIEW_EXTENSIONS.has(selectedExtension());
 }
 
+function countedLabel(button, base, count) {
+  const label = button?.querySelector(".browse-action-label");
+  if (label) {
+    label.textContent = count > 1 ? `${base} ${count}` : base;
+  }
+}
+
+function contextMenuLabel(button, base, count, noun) {
+  const label = button?.querySelector(".context-menu-label");
+  if (label) {
+    label.textContent = count > 1 ? `${base} ${count} ${noun}s` : base;
+  }
+}
+
+function canDownloadSelection() {
+  return !loading && downloadableItems().length > 0;
+}
+
+function canDeleteSelection() {
+  return !loading && selection.size > 0;
+}
+
 function updateActionState() {
   const path = activePath();
-  const hasPath = Boolean(path);
-  const canDownload = Boolean(selectedPath) && !selectedIsDir && !loading;
+  const multiple = selection.size > 1;
+  const hasPath = Boolean(path) && !multiple;
   if (remoteBrowser.previewBtn) {
     remoteBrowser.previewBtn.disabled = !canPreviewSelection();
   }
   if (remoteBrowser.downloadBtn) {
-    remoteBrowser.downloadBtn.disabled = !canDownload;
+    remoteBrowser.downloadBtn.disabled = !canDownloadSelection();
+    countedLabel(remoteBrowser.downloadBtn, "Download", downloadableItems().length);
   }
   if (remoteBrowser.newFolderBtn) {
     remoteBrowser.newFolderBtn.disabled = !currentRemote || loading || !window.rcloneGui?.createRemoteFolder;
@@ -507,7 +560,8 @@ function updateActionState() {
   remoteBrowser.useSourceBtn.disabled = !hasPath || loading;
   remoteBrowser.useDestBtn.disabled = !hasPath || loading;
   if (remoteBrowser.deleteBtn) {
-    remoteBrowser.deleteBtn.disabled = !selectedPath || loading;
+    remoteBrowser.deleteBtn.disabled = !canDeleteSelection();
+    countedLabel(remoteBrowser.deleteBtn, "Delete", selection.size);
   }
   remoteBrowser.upBtn.disabled = !currentRemote || !currentSubPath || loading;
   remoteBrowser.refreshBtn.disabled = !currentRemote || loading;
@@ -518,20 +572,69 @@ function updateActionState() {
     updateSearchButton();
   }
 
-  if (!currentRemote) {
-    remoteBrowser.selectionLabel.textContent = "Nothing selected";
+  renderSelectionSummary();
+}
+
+function selectionBreakdown(items) {
+  const files = items.filter((item) => !item.isDir);
+  const folders = items.length - files.length;
+  const bytes = files.reduce((sum, item) => sum + (item.size || 0), 0);
+  const parts = [];
+  if (files.length) {
+    parts.push(`${files.length} file${files.length === 1 ? "" : "s"}`, formatBytes(bytes));
+  }
+  if (folders) {
+    parts.push(`${folders} folder${folders === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderMultiSelectionSummary(label) {
+  const items = selectedItems();
+  const icon = document.createElement("span");
+  icon.className = "browse-entry-icon browse-selection-icon";
+  icon.dataset.kind = "multi";
+  icon.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.className = "browse-selection-name";
+  name.textContent = `${items.length} selected`;
+  const meta = document.createElement("span");
+  meta.className = "browse-selection-meta";
+  meta.textContent = selectionBreakdown(items);
+  const names = items.slice(0, 12).map((item) => item.name);
+  label.title = items.length > names.length ? `${names.join("\n")}\n…and ${items.length - names.length} more` : names.join("\n");
+  label.replaceChildren(icon, name, meta);
+}
+
+function renderSelectionSummary() {
+  const label = remoteBrowser.selectionLabel;
+  label.classList.toggle("has-selection", Boolean(currentRemote && selection.size));
+
+  if (currentRemote && selection.size > 1) {
+    renderMultiSelectionSummary(label);
     return;
   }
 
-  if (selectedPath) {
-    const displayPath = selectedPath.includes(":") ? selectedPath.split(":").slice(1).join(":") : selectedPath;
-    remoteBrowser.selectionLabel.textContent = selectedIsDir
-      ? `Folder: ${displayPath || "/"}`
-      : `File: ${displayPath || "root"}`;
+  if (!currentRemote || !selectedPath) {
+    label.removeAttribute("title");
+    label.textContent = "Nothing selected";
     return;
   }
 
-  remoteBrowser.selectionLabel.textContent = "Nothing selected";
+  const displayPath = selectedPath.includes(":") ? selectedPath.split(":").slice(1).join(":") : selectedPath;
+  const displayName = displayPath.split("/").filter(Boolean).pop() || displayPath || "/";
+  const icon = document.createElement("span");
+  icon.className = "browse-entry-icon browse-selection-icon";
+  icon.dataset.kind = entryKind(displayName, selectedIsDir);
+  icon.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.className = "browse-selection-name";
+  name.textContent = displayName;
+  const meta = document.createElement("span");
+  meta.className = "browse-selection-meta";
+  meta.textContent = selectedIsDir ? "Folder" : formatBytes(selectedSize);
+  label.title = selectedPath;
+  label.replaceChildren(icon, name, meta);
 }
 
 const browseStorageSlot = document.getElementById("browse-storage");
@@ -547,8 +650,9 @@ function renderBreadcrumbs() {
 
   const root = document.createElement("button");
   root.type = "button";
-  root.className = "browse-crumb";
-  root.textContent = `${currentRemote}:`;
+  root.className = "browse-crumb is-root";
+  root.textContent = currentRemote;
+  root.title = `${currentRemote}:`;
   root.addEventListener("click", () => {
     if (currentSubPath) {
       void navigateTo("");
@@ -563,7 +667,6 @@ function renderBreadcrumbs() {
     const crumbPath = built;
     const separator = document.createElement("span");
     separator.className = "browse-crumb-sep";
-    separator.textContent = "/";
     separator.setAttribute("aria-hidden", "true");
     remoteBrowser.breadcrumbs.appendChild(separator);
 
@@ -582,24 +685,379 @@ function renderBreadcrumbs() {
   if (vaultBacking.has(currentRemote)) {
     remoteBrowser.breadcrumbs.appendChild(vaultBadge(currentRemote));
   }
+  remoteBrowser.breadcrumbs.scrollLeft = remoteBrowser.breadcrumbs.scrollWidth;
 }
 
-function selectEntry(entry) {
-  if (!entry) {
-    selectedPath = null;
-    selectedIsDir = false;
-    selectedSize = null;
-  } else {
-    selectedPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
-    selectedIsDir = entry.isDir;
-    selectedSize = typeof entry.size === "number" ? entry.size : null;
-  }
+function entryPath(entry) {
+  return formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
+}
 
-  for (const row of remoteBrowser.entriesBody.querySelectorAll("tr")) {
-    row.classList.toggle("is-selected", row.dataset.path === selectedPath);
+function selectionItem(entry) {
+  return {
+    path: entryPath(entry),
+    name: entry.name,
+    isDir: Boolean(entry.isDir),
+    size: typeof entry.size === "number" ? entry.size : null,
+  };
+}
+
+function syncPrimarySelection() {
+  const only = selection.size === 1 ? selection.values().next().value : null;
+  selectedPath = only ? only.path : null;
+  selectedIsDir = only ? only.isDir : false;
+  selectedSize = only ? only.size : null;
+}
+
+function clearSelectionState() {
+  selection.clear();
+  selectionAnchor = null;
+  syncPrimarySelection();
+}
+
+function pruneSelection(visibleEntries) {
+  const visible = new Set(visibleEntries.map(entryPath));
+  for (const path of [...selection.keys()]) {
+    if (!visible.has(path)) {
+      selection.delete(path);
+    }
+  }
+  if (selectionAnchor && !visible.has(selectionAnchor)) {
+    selectionAnchor = null;
+  }
+  syncPrimarySelection();
+}
+
+function applySelection() {
+  syncPrimarySelection();
+  for (const row of remoteBrowser.entriesBody.querySelectorAll("tr[data-path]")) {
+    row.classList.toggle("is-selected", selection.has(row.dataset.path));
   }
   updateActionState();
   updatePreviewNavigation();
+}
+
+function selectEntry(entry) {
+  selection.clear();
+  selectionAnchor = null;
+  if (entry) {
+    const item = selectionItem(entry);
+    selection.set(item.path, item);
+    selectionAnchor = item.path;
+  }
+  applySelection();
+}
+
+function toggleEntry(entry) {
+  const item = selectionItem(entry);
+  if (selection.has(item.path)) {
+    selection.delete(item.path);
+  } else {
+    selection.set(item.path, item);
+  }
+  selectionAnchor = item.path;
+  applySelection();
+}
+
+function selectRangeTo(entry, { additive = false } = {}) {
+  const sorted = getSortedEntries();
+  const targetIndex = sorted.indexOf(entry);
+  const anchorIndex = selectionAnchor ? sorted.findIndex((item) => entryPath(item) === selectionAnchor) : -1;
+  if (targetIndex < 0 || anchorIndex < 0) {
+    selectEntry(entry);
+    return;
+  }
+  if (!additive) {
+    selection.clear();
+  }
+  const from = Math.min(anchorIndex, targetIndex);
+  const to = Math.max(anchorIndex, targetIndex);
+  for (const item of sorted.slice(from, to + 1)) {
+    const selected = selectionItem(item);
+    selection.set(selected.path, selected);
+  }
+  applySelection();
+}
+
+function selectAllEntries() {
+  selection.clear();
+  for (const entry of getSortedEntries()) {
+    const item = selectionItem(entry);
+    selection.set(item.path, item);
+  }
+  applySelection();
+}
+
+function selectedItems() {
+  return [...selection.values()];
+}
+
+function downloadableItems() {
+  return selectedItems().filter((item) => !item.isDir);
+}
+
+function handleRowClick(event, entry) {
+  if (event.shiftKey) {
+    selectRangeTo(entry, { additive: event.ctrlKey || event.metaKey });
+  } else if (event.ctrlKey || event.metaKey) {
+    toggleEntry(entry);
+  } else {
+    selectEntry(entry);
+  }
+}
+
+const MARQUEE_THRESHOLD = 4;
+const MARQUEE_EDGE = 36;
+const MARQUEE_MAX_SPEED = 22;
+let marqueeDrag = null;
+
+function marqueeScroller() {
+  return remoteBrowser.tableWrap?.querySelector(".browse-table-scroll") || null;
+}
+
+function canStartMarquee(event, scroller) {
+  if (event.button !== 0 || !entries.length || event.target.closest("thead, button, a, input, select, textarea")) {
+    return false;
+  }
+  const rect = scroller.getBoundingClientRect();
+  return (
+    event.clientX < rect.left + scroller.clientLeft + scroller.clientWidth &&
+    event.clientY < rect.top + scroller.clientTop + scroller.clientHeight
+  );
+}
+
+function clientToContent(scroller, clientX, clientY) {
+  const rect = scroller.getBoundingClientRect();
+  const x = clientX - rect.left - scroller.clientLeft + scroller.scrollLeft;
+  const y = clientY - rect.top - scroller.clientTop + scroller.scrollTop;
+  return {
+    x: Math.min(Math.max(x, 0), scroller.scrollWidth),
+    y: Math.min(Math.max(y, 0), scroller.scrollHeight),
+  };
+}
+
+function collectMarqueeRows(scroller) {
+  const entriesByPath = new Map(getSortedEntries().map((entry) => [entryPath(entry), entry]));
+  const bounds = scroller.getBoundingClientRect();
+  const offsetX = bounds.left + scroller.clientLeft - scroller.scrollLeft;
+  const offsetY = bounds.top + scroller.clientTop - scroller.scrollTop;
+  const rows = [];
+  for (const row of remoteBrowser.entriesBody.querySelectorAll("tr[data-path]")) {
+    const entry = entriesByPath.get(row.dataset.path);
+    if (!entry) {
+      continue;
+    }
+    const rect = row.getBoundingClientRect();
+    rows.push({
+      entry,
+      path: row.dataset.path,
+      left: rect.left - offsetX,
+      right: rect.right - offsetX,
+      top: rect.top - offsetY,
+      bottom: rect.bottom - offsetY,
+    });
+  }
+  return rows;
+}
+
+function applyMarqueeHits(drag, hits) {
+  const hitItems = hits.map((hit) => selectionItem(hit.entry));
+  const next = new Map();
+  if (drag.mode === "toggle") {
+    const hitPaths = new Set(hitItems.map((item) => item.path));
+    for (const [path, item] of drag.base) {
+      if (!hitPaths.has(path)) {
+        next.set(path, item);
+      }
+    }
+    for (const item of hitItems) {
+      if (!drag.base.has(item.path)) {
+        next.set(item.path, item);
+      }
+    }
+  } else {
+    if (drag.mode === "add") {
+      for (const [path, item] of drag.base) {
+        next.set(path, item);
+      }
+    }
+    for (const item of hitItems) {
+      next.set(item.path, item);
+    }
+  }
+  selection.clear();
+  for (const [path, item] of next) {
+    selection.set(path, item);
+  }
+  if (hits.length) {
+    const draggedDown = drag.pointerY >= drag.startY;
+    selectionAnchor = hits[draggedDown ? hits.length - 1 : 0].path;
+  } else if (drag.mode === "replace") {
+    selectionAnchor = null;
+  }
+  applySelection();
+}
+
+function restoreMarqueeBase(drag) {
+  selection.clear();
+  for (const [path, item] of drag.base) {
+    selection.set(path, item);
+  }
+  selectionAnchor = drag.baseAnchor;
+  applySelection();
+}
+
+function stepMarquee() {
+  const drag = marqueeDrag;
+  if (!drag) {
+    return;
+  }
+  drag.frame = requestAnimationFrame(stepMarquee);
+  const { scroller } = drag;
+  const bounds = scroller.getBoundingClientRect();
+  const headerHeight = scroller.querySelector("thead")?.offsetHeight || 0;
+  const topEdge = bounds.top + scroller.clientTop + headerHeight + MARQUEE_EDGE;
+  const bottomEdge = bounds.top + scroller.clientTop + scroller.clientHeight - MARQUEE_EDGE;
+  let speed = 0;
+  if (drag.clientY < topEdge) {
+    speed = -Math.min((topEdge - drag.clientY) / MARQUEE_EDGE, 1.5) * MARQUEE_MAX_SPEED;
+  } else if (drag.clientY > bottomEdge) {
+    speed = Math.min((drag.clientY - bottomEdge) / MARQUEE_EDGE, 1.5) * MARQUEE_MAX_SPEED;
+  }
+  if (speed) {
+    scroller.scrollTop += speed;
+  }
+
+  const point = clientToContent(scroller, drag.clientX, drag.clientY);
+  drag.pointerY = point.y;
+  const box = {
+    left: Math.min(drag.startX, point.x),
+    right: Math.max(drag.startX, point.x),
+    top: Math.min(drag.startY, point.y),
+    bottom: Math.max(drag.startY, point.y),
+  };
+  const style = drag.element.style;
+  style.left = `${box.left}px`;
+  style.top = `${box.top}px`;
+  style.width = `${box.right - box.left}px`;
+  style.height = `${box.bottom - box.top}px`;
+
+  const hits = drag.rows.filter(
+    (row) => row.right > box.left && row.left < box.right && row.bottom > box.top && row.top < box.bottom,
+  );
+  const key = hits.map((hit) => hit.path).join("\n");
+  if (key !== drag.hitKey) {
+    drag.hitKey = key;
+    applyMarqueeHits(drag, hits);
+  }
+}
+
+function beginMarquee(drag) {
+  drag.started = true;
+  drag.rows = collectMarqueeRows(drag.scroller);
+  drag.element = document.createElement("div");
+  drag.element.className = "browse-marquee";
+  drag.scroller.append(drag.element);
+  remoteBrowser.tableWrap.classList.add("is-marquee-selecting");
+  drag.frame = requestAnimationFrame(stepMarquee);
+}
+
+function endMarquee({ cancel = false, buttonStillDown = false } = {}) {
+  const drag = marqueeDrag;
+  if (!drag) {
+    return;
+  }
+  marqueeDrag = null;
+  window.removeEventListener("mousemove", handleMarqueeMove, true);
+  window.removeEventListener("mouseup", handleMarqueeUp, true);
+  window.removeEventListener("keydown", handleMarqueeKey, true);
+  window.removeEventListener("blur", handleMarqueeBlur);
+  if (!drag.started) {
+    return;
+  }
+  cancelAnimationFrame(drag.frame);
+  drag.element.remove();
+  remoteBrowser.tableWrap.classList.remove("is-marquee-selecting");
+  if (cancel) {
+    restoreMarqueeBase(drag);
+  }
+  swallowNextClick(buttonStillDown);
+}
+
+function swallowNextClick(buttonStillDown) {
+  const swallowClick = (event) => event.stopPropagation();
+  const stopSwallowing = () => setTimeout(() => window.removeEventListener("click", swallowClick, true), 0);
+  window.addEventListener("click", swallowClick, { capture: true, once: true });
+  if (buttonStillDown) {
+    window.addEventListener("mouseup", stopSwallowing, { capture: true, once: true });
+  } else {
+    stopSwallowing();
+  }
+}
+
+function handleMarqueeMove(event) {
+  const drag = marqueeDrag;
+  if (!drag) {
+    return;
+  }
+  if (!(event.buttons & 1)) {
+    endMarquee();
+    return;
+  }
+  drag.clientX = event.clientX;
+  drag.clientY = event.clientY;
+  if (!drag.started) {
+    if (Math.hypot(event.clientX - drag.originX, event.clientY - drag.originY) < MARQUEE_THRESHOLD) {
+      return;
+    }
+    beginMarquee(drag);
+  }
+  event.preventDefault();
+}
+
+function handleMarqueeUp() {
+  endMarquee();
+}
+
+function handleMarqueeBlur() {
+  endMarquee({ cancel: true });
+}
+
+function handleMarqueeKey(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    endMarquee({ cancel: true, buttonStillDown: true });
+  }
+}
+
+function handleMarqueeDown(event) {
+  const scroller = marqueeScroller();
+  if (marqueeDrag || !scroller || !canStartMarquee(event, scroller)) {
+    return;
+  }
+  const start = clientToContent(scroller, event.clientX, event.clientY);
+  marqueeDrag = {
+    scroller,
+    started: false,
+    mode: event.ctrlKey || event.metaKey ? "toggle" : event.shiftKey ? "add" : "replace",
+    base: new Map(selection),
+    baseAnchor: selectionAnchor,
+    originX: event.clientX,
+    originY: event.clientY,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    startX: start.x,
+    startY: start.y,
+    pointerY: start.y,
+    hitKey: null,
+    rows: [],
+    element: null,
+    frame: 0,
+  };
+  window.addEventListener("mousemove", handleMarqueeMove, true);
+  window.addEventListener("mouseup", handleMarqueeUp, true);
+  window.addEventListener("keydown", handleMarqueeKey, true);
+  window.addEventListener("blur", handleMarqueeBlur);
 }
 
 function renderEntries({ animate = true } = {}) {
@@ -625,12 +1083,12 @@ function renderEntries({ animate = true } = {}) {
 
   for (const [index, entry] of sortedEntries.entries()) {
     const row = document.createElement("tr");
-    const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
-    row.dataset.path = entryPath;
+    const rowPath = entryPath(entry);
+    row.dataset.path = rowPath;
     row.dataset.index = index;
-    row.style.setProperty("--row-index", Math.min(index, 20));
+    row.style.setProperty("--row-index", Math.min(index, 30));
     row.dataset.isdir = entry.isDir ? "1" : "0";
-    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}${animate ? "" : " is-static"}${entryPath === selectedPath ? " is-selected" : ""}`;
+    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}${animate ? "" : " is-static"}${selection.has(rowPath) ? " is-selected" : ""}`;
     row.tabIndex = 0;
 
     const nameCell = document.createElement("td");
@@ -639,6 +1097,7 @@ function renderEntries({ animate = true } = {}) {
     nameWrap.className = "browse-name-wrap";
     const icon = document.createElement("span");
     icon.className = `browse-entry-icon${entry.isDir ? " is-dir" : " is-file"}`;
+    icon.dataset.kind = entryKind(entry.name, entry.isDir);
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = "browse-entry-name";
@@ -671,7 +1130,12 @@ function renderEntries({ animate = true } = {}) {
 
     row.append(nameCell, sizeCell, modCell);
 
-    row.addEventListener("click", () => selectEntry(entry));
+    row.addEventListener("mousedown", (event) => {
+      if (event.shiftKey) {
+        event.preventDefault();
+      }
+    });
+    row.addEventListener("click", (event) => handleRowClick(event, entry));
     row.addEventListener("dblclick", () => {
       if (entry.isDir) {
         void navigateTo(joinSubPath(currentSubPath, entry.name));
@@ -715,9 +1179,7 @@ function renderEntries({ animate = true } = {}) {
 }
 
 async function loadListingForPath(subPath, token) {
-  selectedPath = null;
-  selectedIsDir = false;
-  selectedSize = null;
+  clearSelectionState();
   
   const path = formatRemotePath(currentRemote, subPath);
   
@@ -772,11 +1234,7 @@ async function revalidateListing(path, token) {
 
     if (!sameListing(entries, fresh)) {
       entries = fresh;
-      if (selectedPath && !fresh.some((entry) => formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name)) === selectedPath)) {
-        selectedPath = null;
-        selectedIsDir = false;
-        selectedSize = null;
-      }
+      pruneSelection(fresh);
       currentPreviewIndex = -1;
       renderEntries({ animate: false });
       updatePreviewNavigation();
@@ -803,9 +1261,7 @@ async function loadListing(context = "") {
   }
 
   const token = ++loadToken;
-  selectedPath = null;
-  selectedIsDir = false;
-  selectedSize = null;
+  clearSelectionState();
   setStatus("");
 
   const listingPath = currentPath();
@@ -901,9 +1357,7 @@ async function navigateTo(subPath, { recordHistory = true } = {}) {
   const targetPath = formatRemotePath(currentRemote, targetSubPath);
   const cached = getCachedListing(targetPath);
   if (cached) {
-    selectedPath = null;
-    selectedIsDir = false;
-    selectedSize = null;
+    clearSelectionState();
     currentSubPath = targetSubPath;
     if (recordHistory) {
       pushBrowseHistory(currentRemote, currentSubPath);
@@ -987,9 +1441,7 @@ function fillRemotePicker() {
     currentRemote = "";
     currentSubPath = "";
     entries = [];
-    selectedPath = null;
-    selectedIsDir = false;
-    selectedSize = null;
+    clearSelectionState();
     resetBrowseHistory("");
   }
 
@@ -1066,7 +1518,7 @@ async function copyActivePath() {
 
 function useActivePath(target) {
   const path = activePath();
-  if (!path || typeof onUsePath !== "function") {
+  if (!path || selection.size > 1 || typeof onUsePath !== "function") {
     return;
   }
   onUsePath({ path, target, isDir: selectedIsDir || !selectedPath });
@@ -1082,15 +1534,128 @@ function selectedFileName() {
   return name || "download";
 }
 
+const PREVIEW_KINDS = new Set(["text", "pdf", "image", "audio", "video", "zip"]);
+const PREVIEW_KIND_LABELS = {
+  text: "Text",
+  pdf: "PDF document",
+  image: "Image",
+  audio: "Audio",
+  video: "Video",
+  zip: "Archive",
+};
+const PREVIEW_EXIT_MS = 340;
+const previewExtras = {
+  meta: document.getElementById("preview-meta"),
+  position: document.getElementById("preview-position"),
+  loaderText: document.getElementById("preview-loader-text"),
+  audioTitle: document.getElementById("preview-audio-title"),
+  audioSub: document.getElementById("preview-audio-sub"),
+};
+let previewCleanupTimer = 0;
+let previewSwap = null;
+
 function previewCard() {
   return previewUi.dialog?.querySelector(".popup-card-preview") || null;
 }
 
+function isPreviewDialogOpen() {
+  return Boolean(previewUi.dialog && !previewUi.dialog.classList.contains("hidden"));
+}
+
+function setPreviewPending(pending, label) {
+  const card = previewCard();
+  if (!card) {
+    return;
+  }
+  if (pending && previewExtras.loaderText) {
+    previewExtras.loaderText.textContent = label || "Loading…";
+  }
+  card.classList.toggle("is-pending", Boolean(pending));
+}
+
+function stopPreviewMedia() {
+  if (previewUi.video) {
+    previewUi.video.pause();
+    previewUi.video.removeAttribute("src");
+    previewUi.video.replaceChildren();
+    previewUi.video.load();
+  }
+  if (previewUi.audio) {
+    previewUi.audio.pause();
+    previewUi.audio.removeAttribute("src");
+    previewUi.audio.load();
+  }
+  previewUi.audioWrap?.classList.remove("is-playing");
+}
+
+function previewFileExtension(name) {
+  const dot = String(name || "").lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toUpperCase() : "";
+}
+
+function renderPreviewMeta(payload) {
+  const ext = previewFileExtension(payload.name);
+  const kindLabel = PREVIEW_KIND_LABELS[payload.kind] || "File";
+  const bytes = payload.kind === "zip" && typeof payload.archiveBytes === "number" ? payload.archiveBytes : selectedSize;
+  const chips = [ext || kindLabel];
+  if (typeof bytes === "number" && bytes >= 0) {
+    chips.push(formatBytes(bytes));
+  }
+
+  if (previewExtras.meta) {
+    previewExtras.meta.replaceChildren(
+      ...chips.map((text) => {
+        const chip = document.createElement("span");
+        chip.className = "preview-chip";
+        chip.textContent = text;
+        return chip;
+      }),
+    );
+  }
+
+  if (previewExtras.position) {
+    const total = previewableFiles.length;
+    const showPosition = currentPreviewIndex >= 0 && total > 1;
+    previewExtras.position.textContent = showPosition ? `${currentPreviewIndex + 1} / ${total}` : "";
+    previewExtras.position.classList.toggle("hidden", !showPosition);
+  }
+
+  if (payload.kind === "audio") {
+    if (previewExtras.audioTitle) {
+      previewExtras.audioTitle.textContent = payload.name || "Audio";
+    }
+    if (previewExtras.audioSub) {
+      previewExtras.audioSub.textContent = [ext ? `${ext} audio` : kindLabel, chips[1]].filter(Boolean).join(" · ");
+    }
+  }
+}
+
+function wirePreviewMediaState() {
+  const settle = () => setPreviewPending(false);
+  for (const media of [previewUi.video, previewUi.audio]) {
+    media?.addEventListener("loadeddata", settle);
+    media?.addEventListener("error", settle);
+  }
+  previewUi.audio?.addEventListener("play", () => previewUi.audioWrap?.classList.add("is-playing"));
+  previewUi.audio?.addEventListener("pause", () => previewUi.audioWrap?.classList.remove("is-playing"));
+  previewUi.audio?.addEventListener("ended", () => previewUi.audioWrap?.classList.remove("is-playing"));
+  previewUi.image?.addEventListener("load", () => previewUi.image.classList.add("is-loaded"));
+  previewUi.image?.addEventListener("error", () => previewUi.image.classList.add("is-loaded"));
+}
+
+wirePreviewMediaState();
+
 function clearPreviewContent() {
+  clearTimeout(previewCleanupTimer);
   if (previewBlobUrl) {
     URL.revokeObjectURL(previewBlobUrl);
     previewBlobUrl = null;
   }
+
+  stopPreviewMedia();
+  previewUi.video?.classList.add("hidden");
+  previewUi.image?.classList.remove("is-loaded");
+  setPreviewPending(false);
 
   if (previewUi.text) {
     previewUi.text.textContent = "";
@@ -1103,18 +1668,6 @@ function clearPreviewContent() {
   if (previewUi.image) {
     previewUi.image.removeAttribute("src");
     previewUi.image.classList.add("hidden");
-  }
-  if (previewUi.video) {
-    previewUi.video.pause();
-    previewUi.video.removeAttribute("src");
-    previewUi.video.replaceChildren();
-    previewUi.video.load();
-    previewUi.video.classList.add("hidden");
-  }
-  if (previewUi.audio) {
-    previewUi.audio.pause();
-    previewUi.audio.removeAttribute("src");
-    previewUi.audio.load();
   }
   if (previewUi.audioWrap) {
     previewUi.audioWrap.classList.add("hidden");
@@ -1141,21 +1694,69 @@ function clearPreviewContent() {
 
 function closePreview() {
   activePreviewToken = 0;
-  clearPreviewContent();
+  stopPreviewMedia();
   void window.rcloneGui?.closeRemotePreview?.();
   if (!previewUi.dialog) {
+    clearPreviewContent();
     return;
   }
   previewUi.dialog.classList.add("hidden");
   previewUi.dialog.setAttribute("aria-hidden", "true");
+  clearTimeout(previewCleanupTimer);
+  previewCleanupTimer = setTimeout(() => {
+    if (!isPreviewDialogOpen()) {
+      clearPreviewContent();
+    }
+  }, PREVIEW_EXIT_MS);
+}
+
+function shouldAnimatePreviewSwap() {
+  return (
+    isPreviewDialogOpen() &&
+    typeof document.startViewTransition === "function" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 function openPreviewDialog(payload) {
+  if (!PREVIEW_KINDS.has(payload?.kind)) {
+    throw new Error("Unsupported preview type.");
+  }
+  clearTimeout(previewCleanupTimer);
+
+  if (!shouldAnimatePreviewSwap()) {
+    renderPreviewPayload(payload);
+    return;
+  }
+
+  const swap = document.startViewTransition(() => renderPreviewPayload(payload));
+  previewSwap = swap;
+  swap.ready.catch(() => {});
+  swap.finished.catch(() => {});
+  swap.updateCallbackDone
+    .catch(() => {})
+    .finally(() => {
+      if (previewSwap === swap) {
+        previewSwap = null;
+      }
+    });
+}
+
+function renderPreviewPayload(payload) {
   clearPreviewContent();
 
   previewUi.title.textContent = payload.name || "Preview";
+  previewUi.title.title = payload.name || "";
   previewUi.subtitle.textContent = payload.statusText || selectedPath || "";
-  previewCard()?.classList.toggle("is-video", payload.kind === "video");
+  const card = previewCard();
+  card?.classList.toggle("is-video", payload.kind === "video");
+  if (card) {
+    card.dataset.kind = payload.kind;
+  }
+  renderPreviewMeta(payload);
+  if ((payload.kind === "audio" || payload.kind === "video") && !payload.streamUrl && !payload.data) {
+    setPreviewPending(true, payload.statusText || "Connecting stream…");
+  }
 
   if (payload.kind === "text") {
     previewUi.text.textContent = payload.text ?? "";
@@ -1433,11 +2034,9 @@ function renderZipFolderView() {
 
   const listing = buildZipFolderListing(zipPreviewState.entries, zipPreviewState.currentPath);
   const total = zipPreviewState.totalEntries;
-  const archiveLabel = formatBytes(zipPreviewState.archiveBytes);
   const parts = [
     `${listing.length.toLocaleString()} item${listing.length === 1 ? "" : "s"} here`,
     `${total.toLocaleString()} in archive`,
-    archiveLabel,
   ];
   if (zipPreviewState.truncated) {
     parts.push("index truncated");
@@ -1453,16 +2052,17 @@ function renderZipFolderView() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 3;
+    cell.className = "preview-zip-empty";
     cell.textContent = zipPreviewState.currentPath ? "This folder is empty." : "This archive is empty.";
-    cell.style.color = "var(--muted)";
     row.appendChild(cell);
     previewUi.zipEntries.appendChild(row);
     return;
   }
 
-  for (const entry of listing) {
+  for (const [index, entry] of listing.entries()) {
     const row = document.createElement("tr");
     row.className = `preview-zip-row${entry.isDir ? " is-dir" : " is-file"}`;
+    row.style.setProperty("--i", String(Math.min(index, 14)));
     if (entry.isDir) {
       row.tabIndex = 0;
       const openFolder = () => {
@@ -1482,7 +2082,8 @@ function renderZipFolderView() {
     const nameWrap = document.createElement("div");
     nameWrap.className = "preview-zip-name";
     const icon = document.createElement("span");
-    icon.className = `browse-entry-icon${entry.isDir ? " is-dir" : " is-file"}`;
+    icon.className = `browse-entry-icon preview-zip-icon${entry.isDir ? " is-dir" : " is-file"}`;
+    icon.dataset.kind = entryKind(entry.name, entry.isDir);
     icon.setAttribute("aria-hidden", "true");
     const nameText = document.createElement("span");
     nameText.className = "preview-zip-name-text";
@@ -1498,6 +2099,15 @@ function renderZipFolderView() {
     const packedCell = document.createElement("td");
     packedCell.className = "preview-zip-col-packed";
     packedCell.textContent = entry.isDir ? "—" : formatBytes(entry.compressedSize);
+    const ratio = entry.isDir || !(entry.size > 0) || !(entry.compressedSize >= 0) ? null : entry.compressedSize / entry.size;
+    if (ratio !== null) {
+      const meter = document.createElement("span");
+      meter.className = "preview-zip-ratio";
+      meter.style.setProperty("--ratio", String(Math.min(ratio, 1)));
+      meter.setAttribute("aria-hidden", "true");
+      packedCell.title = `${Math.round(Math.min(ratio, 1) * 100)}% of original size`;
+      packedCell.prepend(meter);
+    }
 
     row.append(nameCell, sizeCell, packedCell);
     previewUi.zipEntries.appendChild(row);
@@ -1519,6 +2129,18 @@ function renderZipPreview(payload) {
 }
 
 function bindStreamMedia(kind, streamUrl, mime) {
+  if (previewSwap) {
+    const token = activePreviewToken;
+    previewSwap.updateCallbackDone
+      .catch(() => {})
+      .then(() => {
+        if (activePreviewToken === token) {
+          bindStreamMedia(kind, streamUrl, mime);
+        }
+      });
+    return;
+  }
+
   const media = kind === "video" ? previewUi.video : previewUi.audio;
   if (!media || !streamUrl) {
     return;
@@ -1550,8 +2172,7 @@ function bindStreamMedia(kind, streamUrl, mime) {
     media.src = streamUrl;
   }
 
-  // Starts the ranged fetch; if autoplay is blocked, native controls still work.
-  void media.play().catch(() => {});
+  void media.play().catch(() => setPreviewPending(false));
 }
 
 async function previewSelectedFile() {
@@ -1645,6 +2266,9 @@ async function previewSelectedFile() {
 
   const token = beginPreview();
   setLoading(true, "Preparing preview…", "preview");
+  if (isPreviewDialogOpen()) {
+    setPreviewPending(true, "Loading preview…");
+  }
   updateActionState();
 
   try {
@@ -1665,14 +2289,83 @@ async function previewSelectedFile() {
       type: "error",
     });
   } finally {
-    if (loadingContext === "preview" && (isPreviewCurrent(token) || activePreviewToken === 0)) {
-      setLoading(false);
+    if (isPreviewCurrent(token) || activePreviewToken === 0) {
+      if (!previewSwap) {
+        setPreviewPending(false);
+      }
+      if (loadingContext === "preview") {
+        setLoading(false);
+      }
     }
     updateActionState();
   }
 }
 
+function localJoin(folder, name) {
+  const separator = window.rcloneGui?.platform === "win32" ? "\\" : "/";
+  return /[\\/]$/.test(folder) ? folder + name : folder + separator + name;
+}
+
+function uniqueLocalNames(items) {
+  const used = new Map();
+  return items.map((item) => {
+    const base = item.name.split("/").pop() || "download";
+    const key = base.toLowerCase();
+    const seen = used.get(key) || 0;
+    used.set(key, seen + 1);
+    if (!seen) {
+      return base;
+    }
+    const dot = base.lastIndexOf(".");
+    return dot > 0 ? `${base.slice(0, dot)} (${seen + 1})${base.slice(dot)}` : `${base} (${seen + 1})`;
+  });
+}
+
+async function downloadSelection() {
+  const files = downloadableItems();
+  if (!files.length || loading) {
+    return;
+  }
+  if (!window.rcloneGui?.pickFolder || !window.rcloneGui?.downloadRemoteFile) {
+    notify({ title: "Download unavailable", message: "App bridge does not support downloads.", type: "error" });
+    return;
+  }
+
+  let folder;
+  try {
+    folder = await window.rcloneGui.pickFolder();
+  } catch (error) {
+    notify({ title: "Download failed", message: error.message || "Could not open the folder picker.", type: "error" });
+    return;
+  }
+  if (!folder || downloadPanel.cancelling) {
+    return;
+  }
+
+  const names = uniqueLocalNames(files);
+  files.forEach((item, index) => {
+    downloadPanel.enqueue({
+      remotePath: item.path,
+      localPath: localJoin(folder, names[index]),
+      items: [{ name: names[index], size: item.size || 0, isDir: false }],
+    });
+  });
+
+  const skippedFolders = selection.size - files.length;
+  if (skippedFolders) {
+    notify({
+      title: `Downloading ${files.length} file${files.length === 1 ? "" : "s"}`,
+      message: `${skippedFolders} folder${skippedFolders === 1 ? " was" : "s were"} left out. Folders can be copied with a job instead.`,
+      type: "success",
+    });
+  }
+}
+
 async function downloadSelectedFile() {
+  if (selection.size > 1) {
+    await downloadSelection();
+    return;
+  }
   if (!selectedPath || selectedIsDir || loading) {
     return;
   }
@@ -1712,6 +2405,22 @@ function canUpload() {
   return Boolean(currentRemote) && !loading && Boolean(window.rcloneGui?.uploadToRemote);
 }
 
+function canPickUpload() {
+  return canUpload() && Boolean(window.rcloneGui?.pickUploadFiles);
+}
+
+function canCreateFolder() {
+  return Boolean(currentRemote) && !loading && Boolean(window.rcloneGui?.createRemoteFolder);
+}
+
+async function pickAndUpload() {
+  if (!canPickUpload()) {
+    return;
+  }
+  const paths = await window.rcloneGui.pickUploadFiles();
+  await uploadToCurrentFolder(paths);
+}
+
 function localBaseName(localPath) {
   return String(localPath).split(/[\\/]/).filter(Boolean).pop() || String(localPath);
 }
@@ -1719,7 +2428,7 @@ function localBaseName(localPath) {
 const transferStack = document.getElementById("transfer-stack");
 
 const uploadPanel = new TransferPanel(transferStack, {
-  labels: { active: "Uploading", noun: "Upload", past: "uploaded" },
+  labels: { active: "Uploading", noun: "Upload", past: "uploaded", direction: "up" },
   formatBytes,
   subscribe: (onProgress) => window.rcloneGui.onUploadProgress?.(onProgress),
   runBatch: async (batch) => {
@@ -1737,7 +2446,7 @@ const uploadPanel = new TransferPanel(transferStack, {
 });
 
 const downloadPanel = new TransferPanel(transferStack, {
-  labels: { active: "Downloading", noun: "Download", past: "downloaded" },
+  labels: { active: "Downloading", noun: "Download", past: "downloaded", direction: "down" },
   formatBytes,
   subscribe: (onProgress) => window.rcloneGui.onDownloadProgress?.(onProgress),
   runBatch: async (batch) => {
@@ -1964,11 +2673,125 @@ function bindUploadDrop() {
   });
 }
 
-async function deleteSelectedFile() {
-  if (!selectedPath || loading) {
+function remoteSidePath(path) {
+  return path.includes(":") ? path.split(":").slice(1).join(":") : path;
+}
+
+function describeDeleteTargets(items) {
+  if (items.length === 1) {
+    const [item] = items;
+    const pathLabel = document.createElement("strong");
+    pathLabel.className = "delete-card-path";
+    pathLabel.textContent = remoteSidePath(item.path);
+    return {
+      title: item.isDir ? "Delete this folder?" : "Delete this file?",
+      message: [
+        pathLabel,
+        item.isDir ? `Everything inside it will be removed from ${currentRemote}.` : `It will be removed from ${currentRemote}.`,
+      ],
+    };
+  }
+
+  const shown = items.slice(0, 3).map((item) => item.name.split("/").pop());
+  const more = items.length - shown.length;
+  const pathLabel = document.createElement("strong");
+  pathLabel.className = "delete-card-path";
+  pathLabel.textContent = more ? `${shown.join(", ")} and ${more} more` : shown.join(", ");
+  const hasFolders = items.some((item) => item.isDir);
+  return {
+    title: `Delete ${items.length} items?`,
+    message: [
+      pathLabel,
+      hasFolders
+        ? `They'll be removed from ${currentRemote}, folders with everything inside them.`
+        : `They'll be removed from ${currentRemote}.`,
+    ],
+  };
+}
+
+function confirmDelete(items) {
+  const deleteDialog = document.getElementById("delete-dialog");
+  const deleteTitle = document.getElementById("delete-title");
+  const deleteMessage = document.getElementById("delete-message");
+  const deleteConfirmBtn = document.getElementById("delete-confirm");
+  const deleteCancelBtn = document.getElementById("delete-cancel");
+
+  if (!deleteDialog || !deleteTitle || !deleteMessage || !deleteConfirmBtn || !deleteCancelBtn) {
+    notify({
+      title: "Delete unavailable",
+      message: "Delete dialog not available.",
+      type: "error",
+    });
+    return Promise.resolve(false);
+  }
+
+  const { title, message } = describeDeleteTargets(items);
+  deleteTitle.textContent = title;
+  deleteMessage.replaceChildren(...message);
+  deleteConfirmBtn.textContent = items.length > 1 ? `Delete ${items.length} items` : "Delete";
+  deleteDialog.classList.remove("hidden");
+  deleteDialog.setAttribute("aria-hidden", "false");
+  deleteConfirmBtn.focus();
+
+  return new Promise((resolve) => {
+    const backdrop = deleteDialog.querySelector("[data-delete-close]");
+    const finish = (confirmed) => {
+      deleteDialog.classList.add("hidden");
+      deleteDialog.setAttribute("aria-hidden", "true");
+      deleteConfirmBtn.removeEventListener("click", handleConfirm);
+      deleteCancelBtn.removeEventListener("click", handleCancel);
+      backdrop?.removeEventListener("click", handleCancel);
+      document.removeEventListener("keydown", handleKeydown);
+      resolve(confirmed);
+    };
+    const handleConfirm = () => finish(true);
+    const handleCancel = () => finish(false);
+    const handleKeydown = (event) => {
+      if (event.key === "Escape") {
+        finish(false);
+      }
+    };
+
+    deleteConfirmBtn.addEventListener("click", handleConfirm);
+    deleteCancelBtn.addEventListener("click", handleCancel);
+    backdrop?.addEventListener("click", handleCancel);
+    document.addEventListener("keydown", handleKeydown);
+  });
+}
+
+function notifyDeleteResult(deleted, failed, total) {
+  if (!failed.length) {
+    if (total === 1) {
+      const deletedPath = remoteSidePath(deleted[0].path);
+      notify({
+        title: "Delete complete",
+        message: [`${currentRemote}: `, { strong: deletedPath }],
+        type: "success",
+      });
+    } else {
+      notify({
+        title: "Delete complete",
+        message: [{ strong: `${total} items` }, ` removed from ${currentRemote}.`],
+        type: "success",
+      });
+    }
     return;
   }
-  
+
+  const firstError = failed[0].error?.message || "Could not delete the file.";
+  notify({
+    title: deleted.length ? `Deleted ${deleted.length} of ${total}` : "Delete failed",
+    message: total === 1 ? firstError : `${failed.length} couldn't be deleted. First error: ${firstError}`,
+    type: "error",
+  });
+}
+
+async function deleteSelectedFile() {
+  const items = selectedItems();
+  if (!items.length || loading) {
+    return;
+  }
+
   if (!window.rcloneGui?.deleteRemoteFile) {
     notify({
       title: "Delete unavailable",
@@ -1978,123 +2801,49 @@ async function deleteSelectedFile() {
     return;
   }
 
-  // Show built-in confirmation dialog
-  const deleteDialog = document.getElementById("delete-dialog");
-  const deleteTitle = document.getElementById("delete-title");
-  const deleteMessage = document.getElementById("delete-message");
-  const deleteConfirmBtn = document.getElementById("delete-confirm");
-  const deleteCancelBtn = document.getElementById("delete-cancel");
-  
-  if (!deleteDialog || !deleteTitle || !deleteMessage || !deleteConfirmBtn || !deleteCancelBtn) {
-    notify({
-      title: "Delete unavailable",
-      message: "Delete dialog not available.",
-      type: "error",
-    });
+  const confirmed = await confirmDelete(items);
+  if (!confirmed) {
     return;
   }
 
-  // Set up the dialog
-  deleteTitle.textContent = "Delete file";
-  // Extract just the path part without the remote name
-  const pathOnly = selectedPath.includes(':') ? selectedPath.split(':').slice(1).join(':') : selectedPath;
-  const pathLabel = document.createElement("strong");
-  pathLabel.textContent = pathOnly;
-  deleteMessage.replaceChildren("Are you sure you want to delete ", pathLabel, "? This cannot be undone.");
-  deleteDialog.classList.remove("hidden");
-  deleteDialog.setAttribute("aria-hidden", "false");
-  
-  // Focus the confirm button for accessibility
-  deleteConfirmBtn.focus();
+  const rows = [...remoteBrowser.entriesBody.querySelectorAll("tr.is-selected")];
+  if (rows.length) {
+    rows.forEach((row) => row.classList.add("is-deleting"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 
-  // Return a promise that resolves when the user makes a choice
-  return new Promise((resolve) => {
-    const cleanup = () => {
-      deleteDialog.classList.add("hidden");
-      deleteDialog.setAttribute("aria-hidden", "true");
-      deleteConfirmBtn.removeEventListener("click", handleConfirm);
-      deleteCancelBtn.removeEventListener("click", handleCancel);
-      // Remove backdrop click handler
-      const backdrop = deleteDialog.querySelector("[data-delete-close]");
-      if (backdrop) {
-        backdrop.removeEventListener("click", handleCancel);
+  const deleted = [];
+  const failed = [];
+  updateActionState();
+
+  try {
+    for (const [index, item] of items.entries()) {
+      setLoading(true, items.length > 1 ? `Deleting ${index + 1} of ${items.length}…` : "Deleting…", "delete");
+      try {
+        await window.rcloneGui.deleteRemoteFile({ remotePath: item.path, isDir: item.isDir });
+        dropCachedListings(item.path);
+        deleted.push(item);
+        if (searchState) {
+          removeSearchResult(item.path);
+        }
+      } catch (error) {
+        failed.push({ item, error });
       }
-    };
-
-    const handleConfirm = () => {
-      cleanup();
-      resolve(true);
-    };
-
-    const handleCancel = () => {
-      cleanup();
-      resolve(false);
-    };
-
-    deleteConfirmBtn.addEventListener("click", handleConfirm, { once: true });
-    deleteCancelBtn.addEventListener("click", handleCancel, { once: true });
-    
-    const backdrop = deleteDialog.querySelector("[data-delete-close]");
-    if (backdrop) {
-      backdrop.addEventListener("click", handleCancel, { once: true });
-    }
-    
-    // Also handle Escape key
-    const handleKeydown = (event) => {
-      if (event.key === "Escape") {
-        cleanup();
-        resolve(false);
-      }
-    };
-    document.addEventListener("keydown", handleKeydown, { once: true });
-  }).then(async (confirmed) => {
-    if (!confirmed) {
-      return;
     }
 
-    const selectedRow = remoteBrowser.entriesBody.querySelector("tr.is-selected");
-    
-    if (selectedRow) {
-      selectedRow.classList.add("is-deleting");
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
-
-    setLoading(true, "Deleting…", "delete");
-    updateActionState();
-
-    try {
-      const deletedRemotePath = selectedPath;
-      const result = await window.rcloneGui.deleteRemoteFile({
-        remotePath: selectedPath,
-        isDir: selectedIsDir,
-      });
-      dropCachedListings(deletedRemotePath);
-      // Format the deleted path with folder in bold
-      const deletedParts = result.source.split(':');
-      const deletedRemote = deletedParts[0];
-      const deletedPath = deletedParts.length > 1 ? deletedParts.slice(1).join(':') : '';
-      notify({
-        title: "Delete complete",
-        message: [`${deletedRemote}: `, { strong: deletedPath }],
-        type: "success",
-      });
+    notifyDeleteResult(deleted, failed, items.length);
+    if (deleted.length) {
       browseMeter?.refresh();
-      if (searchState) {
-        removeSearchResult(deletedRemotePath);
-      } else {
-        await loadListing("delete");
-      }
-    } catch (error) {
-      notify({
-        title: "Delete failed",
-        message: error.message || "Could not delete the file.",
-        type: "error",
-      });
-    } finally {
-      setLoading(false);
-      updateActionState();
     }
-  });
+    if (!searchState) {
+      setLoading(false);
+      await loadListing("delete");
+    }
+  } finally {
+    setLoading(false);
+    rows.forEach((row) => row.classList.remove("is-deleting"));
+    updateActionState();
+  }
 }
 
 function matchCount(count) {
@@ -2207,9 +2956,7 @@ async function startSearch() {
   setLoading(false);
   searchState = { query, token, running: true, scanned: 0, limited: false, stopped: false, warning: "", error: "" };
   entries = [];
-  selectedPath = null;
-  selectedIsDir = false;
-  selectedSize = null;
+  clearSelectionState();
   setStatus("");
   renderEntries();
   renderSearchBar();
@@ -2265,12 +3012,10 @@ async function goToContainingFolder(entry) {
 
 function removeSearchResult(remotePath) {
   entries = entries.filter((entry) => {
-    const entryPath = formatRemotePath(currentRemote, joinSubPath(currentSubPath, entry.name));
-    return entryPath !== remotePath && !entryPath.startsWith(`${remotePath}/`);
+    const path = entryPath(entry);
+    return path !== remotePath && !path.startsWith(`${remotePath}/`);
   });
-  selectedPath = null;
-  selectedIsDir = false;
-  selectedSize = null;
+  pruneSelection(entries);
   renderEntries({ animate: false });
   renderSearchBar();
 }
@@ -2443,9 +3188,7 @@ function bindEvents() {
   remoteBrowser.remotePicker.addEventListener("change", () => {
     currentRemote = remoteBrowser.remotePicker.value;
     currentSubPath = "";
-    selectedPath = null;
-    selectedIsDir = false;
-    selectedSize = null;
+    clearSelectionState();
     resetBrowseHistory(currentRemote, "");
     void loadListing("navigate");
   });
@@ -2478,13 +3221,7 @@ function bindEvents() {
     });
   }
 
-  remoteBrowser.uploadBtn?.addEventListener("click", async () => {
-    if (!canUpload() || !window.rcloneGui?.pickUploadFiles) {
-      return;
-    }
-    const paths = await window.rcloneGui.pickUploadFiles();
-    await uploadToCurrentFolder(paths);
-  });
+  remoteBrowser.uploadBtn?.addEventListener("click", () => void pickAndUpload());
 
   bindUploadDrop();
   bindPendingUpload();
@@ -2499,6 +3236,31 @@ function bindEvents() {
 
   remoteBrowser.deleteBtn?.addEventListener("click", () => {
     void deleteSelectedFile();
+  });
+
+  marqueeScroller()?.addEventListener("mousedown", handleMarqueeDown);
+
+  remoteBrowser.tableWrap?.addEventListener("click", (event) => {
+    if (selection.size && !event.target.closest("tr[data-path], thead, button, a, input")) {
+      selectEntry(null);
+    }
+  });
+
+  remoteBrowser.tableWrap?.addEventListener("keydown", (event) => {
+    if (event.target.closest("input, textarea, select") || document.querySelector(".popup-root:not(.hidden)")) {
+      return;
+    }
+    const contextMenuOpen = !document.getElementById("browse-context-menu")?.classList.contains("hidden");
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a" && entries.length) {
+      event.preventDefault();
+      selectAllEntries();
+    } else if (event.key === "Escape" && selection.size && !contextMenuOpen) {
+      event.preventDefault();
+      selectEntry(null);
+    } else if (event.key === "Delete" && canDeleteSelection()) {
+      event.preventDefault();
+      void deleteSelectedFile();
+    }
   });
 
   remoteBrowser.useSourceBtn.addEventListener("click", () => useActivePath("source"));
@@ -2567,6 +3329,8 @@ function bindEvents() {
   const contextDownloadBtn = document.getElementById("context-download");
   const contextDeleteBtn = document.getElementById("context-delete");
   const contextPreviewBtn = document.getElementById("context-preview");
+  const contextNewFolderBtn = document.getElementById("context-new-folder");
+  const contextUploadBtn = document.getElementById("context-upload");
 
   if (contextMenu && contextDownloadBtn && contextPreviewBtn && contextDeleteBtn) {
     let contextTargetPath = null;
@@ -2601,13 +3365,16 @@ function bindEvents() {
       event.preventDefault();
       closeContextMenu();
       // Dispatch a new contextmenu event to entriesBody so a new menu can open
-      const entriesBodyEvent = new MouseEvent("contextmenu", {
+      const underneath = document.elementFromPoint(event.clientX, event.clientY);
+      if (!underneath || !remoteBrowser.tableWrap?.contains(underneath)) {
+        return;
+      }
+      underneath.dispatchEvent(new MouseEvent("contextmenu", {
         clientX: event.clientX,
         clientY: event.clientY,
         bubbles: true,
         cancelable: true,
-      });
-      remoteBrowser.entriesBody.dispatchEvent(entriesBodyEvent);
+      }));
     });
 
     // Close on escape key
@@ -2630,39 +3397,39 @@ function bindEvents() {
 
 
     // Show context menu on right-click
-    remoteBrowser.entriesBody.addEventListener("contextmenu", (event) => {
+    remoteBrowser.tableWrap?.addEventListener("contextmenu", (event) => {
       event.preventDefault();
-      
+
       // Find the row that was clicked
-      const row = event.target.closest("tr");
+      const row = event.target.closest("tr[data-path]");
 
       // Close any existing menu before showing new one
       closeContextMenu();
+
+      const onBlankSpace = !row;
+      if (onBlankSpace && !canCreateFolder() && !canPickUpload()) {
+        return;
+      }
 
       if (row) {
         // Get the path from the row
         const path = row.dataset.path;
         const isDir = row.dataset.isdir === "1";
-        
-        if (!path) return;
 
         // Store the target for the menu actions
         contextTargetPath = path;
         contextTargetIsDir = isDir;
 
         // Select the row
-        const entryIndex = entries.findIndex(e => formatRemotePath(currentRemote, joinSubPath(currentSubPath, e.name)) === path);
-        if (entryIndex >= 0) {
-          selectEntry(entries[entryIndex]);
+        const entry = entries.find((item) => entryPath(item) === path);
+        if (entry && !selection.has(path)) {
+          selectEntry(entry);
         }
       } else {
         // Clicked on blank space - clear selection but allow new folder creation
         contextTargetPath = null;
         contextTargetIsDir = false;
-        selectedPath = null;
-        selectedIsDir = false;
-        selectedSize = null;
-        updateActionState();
+        selectEntry(null);
       }
 
       // Position the menu near the mouse
@@ -2699,14 +3466,40 @@ function bindEvents() {
       contextPreviewBtn.disabled = !canPreview || loading;
       
       // Download: hide for directories, blank space, or if not supported
-      const canDownload = selectedPath && !selectedIsDir && window.rcloneGui?.downloadRemoteFile && !loading;
+      const canDownload = canDownloadSelection() && Boolean(window.rcloneGui?.downloadRemoteFile);
       contextDownloadBtn.classList.toggle("hidden", !canDownload);
       contextDownloadBtn.disabled = !canDownload;
-      
+      contextMenuLabel(contextDownloadBtn, "Download", downloadableItems().length, "file");
+
       // Delete: hide if nothing selected or on blank space
-      const canDelete = selectedPath && !loading;
+      const canDelete = canDeleteSelection();
       contextDeleteBtn.classList.toggle("hidden", !canDelete);
       contextDeleteBtn.disabled = !canDelete;
+      contextMenuLabel(contextDeleteBtn, "Delete", selection.size, "item");
+
+      const canNewFolderHere = onBlankSpace && canCreateFolder();
+      contextNewFolderBtn?.classList.toggle("hidden", !canNewFolderHere);
+      if (contextNewFolderBtn) {
+        contextNewFolderBtn.disabled = !canNewFolderHere;
+      }
+
+      const canUploadHere = onBlankSpace && canPickUpload();
+      contextUploadBtn?.classList.toggle("hidden", !canUploadHere);
+      if (contextUploadBtn) {
+        contextUploadBtn.disabled = !canUploadHere;
+      }
+    });
+
+    contextNewFolderBtn?.addEventListener("click", () => {
+      closeContextMenu();
+      if (canCreateFolder()) {
+        void showNewFolderDialog();
+      }
+    });
+
+    contextUploadBtn?.addEventListener("click", () => {
+      closeContextMenu();
+      void pickAndUpload();
     });
 
     // Preview action
@@ -2720,16 +3513,15 @@ function bindEvents() {
 
     // Context menu actions
     contextDownloadBtn.addEventListener("click", () => {
-      if (selectedPath && !selectedIsDir && !loading && window.rcloneGui?.downloadRemoteFile) {
+      if (canDownloadSelection() && window.rcloneGui?.downloadRemoteFile) {
         closeContextMenu();
         void downloadSelectedFile();
       }
     });
 
     contextDeleteBtn.addEventListener("click", () => {
-      if (selectedPath && !loading) {
+      if (canDeleteSelection()) {
         closeContextMenu();
-        // Entry is already selected from the contextmenu handler
         void deleteSelectedFile();
       }
     });
@@ -2761,9 +3553,10 @@ function show() {
   const wasHidden = remoteBrowser.view.classList.contains("hidden") || remoteBrowser.view.hidden;
   remoteBrowser.view.classList.remove("hidden");
   remoteBrowser.view.hidden = false;
-  if (wasHidden) {
-    restartEnterAnimations();
+  if (!wasHidden) {
+    return;
   }
+  restartEnterAnimations();
   if (currentRemote) {
     if (browseHistoryIndex < 0) {
       resetBrowseHistory(currentRemote, currentSubPath);
