@@ -135,16 +135,17 @@ function skeleton(width) {
 }
 
 function splitNumber(text) {
-  const match = /^(-?[\d.,]+)(\s*)(.*)$/.exec(text);
+  const match = /^-?[\d.,]+/.exec(text);
   if (!match) {
     return null;
   }
-  const value = Number(match[1].replace(/,/g, ""));
+  const [digits] = match;
+  const value = Number(digits.replace(/,/g, ""));
   if (Number.isNaN(value)) {
     return null;
   }
-  const decimals = (match[1].split(".")[1] || "").length;
-  return { value, decimals, unit: match[3] };
+  const decimals = (digits.split(".")[1] || "").length;
+  return { value, decimals, unit: text.slice(digits.length).trimStart() };
 }
 
 function paintNumber(target, value, decimals, unit) {

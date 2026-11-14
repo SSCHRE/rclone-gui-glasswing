@@ -186,13 +186,13 @@ const collapseAnimations = new WeakMap();
 
 function cssDuration(name, fallback) {
   const value = getComputedStyle(root).getPropertyValue(name).trim();
-  const ms = value.endsWith("ms") ? parseFloat(value) : parseFloat(value) * 1000;
+  const ms = value.endsWith("ms") ? Number.parseFloat(value) : Number.parseFloat(value) * 1000;
   return Number.isFinite(ms) ? ms : fallback;
 }
 
 function openContentHeight(details, summary) {
   const style = getComputedStyle(details);
-  const bottom = details.getBoundingClientRect().bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
+  const bottom = details.getBoundingClientRect().bottom - Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.borderBottomWidth);
   return Math.max(0, bottom - summary.getBoundingClientRect().bottom);
 }
 

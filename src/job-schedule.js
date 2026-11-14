@@ -226,10 +226,14 @@ function presetDays(button) {
   return button.dataset.scheduleDays.split(",").map(Number);
 }
 
+function dayKey(days) {
+  return [...days].sort((a, b) => a - b).join(",");
+}
+
 function updateDayPresets() {
-  const chosen = selectedDays().sort().join(",");
+  const chosen = dayKey(selectedDays());
   for (const button of ui.dayPresets) {
-    button.classList.toggle("is-active", presetDays(button).sort().join(",") === chosen);
+    button.classList.toggle("is-active", dayKey(presetDays(button)) === chosen);
   }
 }
 
