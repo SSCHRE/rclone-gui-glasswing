@@ -1,11 +1,25 @@
-const { contextBridge, ipcRenderer, webUtils } = require("electron");
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require("electron");
 
 const themeArg = process.argv.find((arg) => arg.startsWith("--glasswing-theme="));
+const uiScaleArg = process.argv.find((arg) => arg.startsWith("--glasswing-ui-scale="));
+const initialUiScale = Number(uiScaleArg?.slice("--glasswing-ui-scale=".length)) || 1;
+const titlebarArg = process.argv.find((arg) => arg.startsWith("--glasswing-titlebar="));
+const titlebarMode = titlebarArg ? titlebarArg.slice("--glasswing-titlebar=".length) : "unsupported";
+
+webFrame.setZoomFactor(initialUiScale);
 
 contextBridge.exposeInMainWorld("rcloneGui", {
   platform: process.platform,
   initialTheme: themeArg ? themeArg.slice("--glasswing-theme=".length) : "glass",
   setTheme: (theme) => ipcRenderer.invoke("set-theme", theme),
+  initialUiScale,
+  setUiScale: (scale) => {
+    webFrame.setZoomFactor(scale);
+    return ipcRenderer.invoke("set-ui-scale", scale);
+  },
+  titlebarMode,
+  setCustomTitlebar: (enabled) => ipcRenderer.invoke("set-custom-titlebar", enabled),
+  restartApp: () => ipcRenderer.invoke("restart-app"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   skipUpdateVersion: (version) => ipcRenderer.invoke("skip-update-version", version),

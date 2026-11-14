@@ -9,6 +9,8 @@
   let container = null;
   let inspectTimer = null;
   let inspectToken = 0;
+  let shownStep = null;
+  const SVG_NS = "http://www.w3.org/2000/svg";
 
   function trimSlashes(value) {
     let start = 0;
@@ -191,7 +193,41 @@
     body.push(...[locationStep, passwordStep, reviewStep, doneStep][state.step]());
     container.replaceChildren(...body);
     container.scrollTop = 0;
+    playStepTransition();
     updateNav();
+  }
+
+  function playStepTransition() {
+    const direction = shownStep == null || shownStep === state.step ? "" : state.step > shownStep ? "is-forward" : "is-back";
+    shownStep = state.step;
+    container.classList.remove("is-forward", "is-back");
+    if (direction) {
+      void container.offsetWidth;
+      container.classList.add(direction);
+    }
+  }
+
+  function doneGlyph() {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.9");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    const shapes = [
+      ["rect", { x: "4.5", y: "10.5", width: "15", height: "10.5", rx: "2.5" }],
+      ["path", { d: "M8 10.5V7.5a4 4 0 0 1 8 0v3" }],
+      ["path", { d: "M9.2 15.6l2 2 3.6-3.8", class: "vault-done-check", pathLength: "20" }],
+    ];
+    for (const [tag, attributes] of shapes) {
+      const node = document.createElementNS(SVG_NS, tag);
+      for (const [name, value] of Object.entries(attributes)) {
+        node.setAttribute(name, value);
+      }
+      svg.appendChild(node);
+    }
+    return svg;
   }
 
   function locationStep() {
@@ -481,7 +517,8 @@
   }
 
   function doneStep() {
-    const icon = el("div", "vault-done-icon", "🔒");
+    const icon = el("div", "vault-done-icon");
+    icon.appendChild(doneGlyph());
     icon.setAttribute("aria-hidden", "true");
     const text = el(
       "p",
@@ -565,6 +602,7 @@
   function begin(options) {
     hooks = options || {};
     container = hooks.container;
+    shownStep = null;
     clearTimeout(inspectTimer);
     const first = storageRemotes()[0];
     state = {
@@ -591,6 +629,7 @@
 
   function reset() {
     clearTimeout(inspectTimer);
+    shownStep = null;
     inspectToken += 1;
     if (state) {
       state.password = "";

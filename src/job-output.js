@@ -1,5 +1,11 @@
 const MAX_ACTIVITY_ITEMS = 80;
 
+const PERCENT_TICK_MS = 420;
+
+const RAW_LOG_STICK_PX = 24;
+
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
 const STATS_TIMESTAMP = /(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) - /;
 
 const STATS_PERCENT = /^(?:[\d.]+%|-)$/;
@@ -66,6 +72,17 @@ function truncatePath(value, maxLength = 72) {
   return `…${value.slice(-(maxLength - 1))}`;
 }
 
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours) {
+    return `${hours}h ${minutes}m`;
+  }
+  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
 function pulseElement(element) {
   if (!element) {
     return;
@@ -109,12 +126,21 @@ class JobOutputPanel {
     this.errorCount = 0;
     this.showRawLog = false;
     this.currentPercent = 0;
+    this.displayedPercent = 0;
+    this.percentLabel = "0%";
+    this.percentFrame = 0;
+    this.errorCard = this.statErrors.closest(".stat-card");
 
     this.toggleRawLogButton.addEventListener("click", () => {
       this.showRawLog = !this.showRawLog;
       this.rawLog.classList.toggle("hidden", !this.showRawLog);
       this.rawLog.setAttribute("aria-hidden", String(!this.showRawLog));
       this.toggleRawLogButton.textContent = this.showRawLog ? "Hide raw log" : "Show raw log";
+      this.toggleRawLogButton.classList.toggle("is-active", this.showRawLog);
+      if (this.showRawLog) {
+        this.rawLog.scrollTop = this.rawLog.scrollHeight;
+        this.rawLog.scrollIntoView({ block: "nearest", behavior: reducedMotion.matches ? "auto" : "smooth" });
+      }
     });
   }
 
@@ -129,6 +155,7 @@ class JobOutputPanel {
     this.activityItems = 0;
     this.errorCount = 0;
     this.currentPercent = 0;
+    this.statsSeen = false;
     this.rawLog.textContent = "";
     this.activityFeed.innerHTML = "";
     this.activityCount.textContent = "0 events";
@@ -136,7 +163,10 @@ class JobOutputPanel {
     this.statTransferred.textContent = "—";
     this.statChecks.textContent = "—";
     this.statErrors.textContent = "0";
-    this.progressPercent.textContent = "0%";
+    this.errorCard?.classList.remove("has-errors");
+    cancelAnimationFrame(this.percentFrame);
+    this.percentLabel = "0%";
+    this.renderPercent(0);
     this.progressEta.textContent = "ETA —";
     this.progressDetail.textContent = "Waiting for stats…";
     this.setProgress(0);
@@ -166,15 +196,17 @@ class JobOutputPanel {
     this.jobPaths.textContent = `${truncatePath(source)} → ${truncatePath(destination)}`;
     this.jobMessage.textContent = "Job started. Waiting for rclone stats…";
     this.progressSection?.classList.add("is-active");
-    this.dashboard.style.animation = "none";
+    this.startedAt = Date.now();
+    this.dashboard.classList.remove("is-entering");
     void this.dashboard.offsetWidth;
-    this.dashboard.style.animation = "";
+    this.dashboard.classList.add("is-entering");
     this.addActivity("info", "Job started", `${operation} from ${source} to ${destination}`);
   }
 
   finishJob({ success, message, cancelled }) {
     this.speedGraph?.finish();
     this.progressSection?.classList.remove("is-active");
+    this.progressEta.textContent = this.startedAt ? `Took ${formatElapsed(Date.now() - this.startedAt)}` : "";
     this.jobBanner.classList.remove("is-running");
     this.jobBadge.classList.remove("running");
 
@@ -187,6 +219,12 @@ class JobOutputPanel {
       this.jobBadge.classList.add("success");
       this.jobBadge.textContent = "Completed";
       this.progressFill.classList.add("complete");
+      this.percentLabel = "100%";
+      this.tickPercent(100);
+      this.setProgress(100);
+      if (!this.statsSeen) {
+        this.progressDetail.textContent = "No transfer stats reported";
+      }
     } else {
       this.jobBanner.classList.add("is-error");
       this.jobBadge.classList.add("error");
@@ -198,8 +236,13 @@ class JobOutputPanel {
   }
 
   appendOutput(text) {
+    const log = this.rawLog;
+    const stickToBottom = log.scrollHeight - log.scrollTop - log.clientHeight < RAW_LOG_STICK_PX;
     this.rawText += text;
-    this.rawLog.textContent = this.rawText;
+    log.textContent = this.rawText;
+    if (stickToBottom) {
+      log.scrollTop = log.scrollHeight;
+    }
 
     this.lineBuffer += text;
     const lines = this.lineBuffer.split(/\r\n|\n|\r/);
@@ -257,6 +300,8 @@ class JobOutputPanel {
       if (level === "error") {
         this.errorCount += 1;
         this.statErrors.textContent = String(this.errorCount);
+        this.errorCard?.classList.add("has-errors");
+        pulseElement(this.statErrors);
       }
     }
   }
@@ -269,18 +314,25 @@ class JobOutputPanel {
   }
 
   updateTransferStats({ timestamp, transferred, total, percent, speed, eta }) {
+    this.statsSeen = true;
     const numericPercent = parsePercent(percent);
     const percentLabel = numericPercent === null ? "—" : `${Math.round(numericPercent)}%`;
     const etaLabel = cleanEta(eta);
     const fileTransfer = eta.match(FILE_TRANSFER_COUNT);
 
-    if (this.progressPercent.textContent !== percentLabel) {
-      this.progressPercent.textContent = percentLabel;
+    if (this.percentLabel !== percentLabel) {
+      this.percentLabel = percentLabel;
+      if (numericPercent === null) {
+        cancelAnimationFrame(this.percentFrame);
+        this.progressPercent.textContent = percentLabel;
+      } else {
+        this.tickPercent(numericPercent);
+      }
       pulseElement(this.progressPercent);
     }
 
     this.progressEta.textContent = !etaLabel || etaLabel === "-" ? "ETA —" : `ETA ${etaLabel}`;
-    this.progressDetail.textContent = `${transferred} / ${total}`;
+    this.progressDetail.textContent = `${transferred} of ${total}`;
     this.statSpeed.textContent = speed;
     this.speedGraph?.push(speed);
     this.statTransferred.textContent = transferred;
@@ -295,6 +347,32 @@ class JobOutputPanel {
     if (numericPercent !== null) {
       this.setProgress(numericPercent);
     }
+  }
+
+  renderPercent(value) {
+    this.displayedPercent = value;
+    const unit = document.createElement("span");
+    unit.className = "progress-percent-unit";
+    unit.textContent = "%";
+    this.progressPercent.replaceChildren(String(Math.round(value)), unit);
+  }
+
+  tickPercent(target) {
+    cancelAnimationFrame(this.percentFrame);
+    const from = this.displayedPercent;
+    if (reducedMotion.matches || Math.round(from) === Math.round(target)) {
+      this.renderPercent(target);
+      return;
+    }
+    const startedAt = performance.now();
+    const step = (now) => {
+      const progress = Math.min(1, (now - startedAt) / PERCENT_TICK_MS);
+      this.renderPercent(from + (target - from) * (1 - (1 - progress) ** 3));
+      if (progress < 1) {
+        this.percentFrame = requestAnimationFrame(step);
+      }
+    };
+    this.percentFrame = requestAnimationFrame(step);
   }
 
   addActivity(level, title, detail = "") {

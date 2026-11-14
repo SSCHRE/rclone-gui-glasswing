@@ -1,0 +1,1440 @@
+.remote-type-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  max-width: 12em;
+  height: 20px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.remote-type-badge.is-pending {
+  visibility: hidden;
+}
+
+.remote-type-badge:empty {
+  display: none;
+}
+
+.remote-avatar {
+  --avatar-hue: 250;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: oklch(0.34 0.07 var(--avatar-hue));
+  box-shadow: inset 0 0 0 1px oklch(0.6 0.1 var(--avatar-hue) / 0.25);
+  color: oklch(0.9 0.07 var(--avatar-hue));
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.remote-avatar-lg {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xl);
+}
+
+.remote-avatar:empty {
+  visibility: hidden;
+}
+
+.popup-card.popup-card-remote-manager {
+  display: flex;
+  flex-direction: column;
+  width: min(1060px, calc(100vw - 48px));
+  height: min(740px, calc(100vh - 48px));
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.popup-card-remote-manager button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: auto;
+}
+
+.popup-card-remote-manager button svg {
+  flex-shrink: 0;
+}
+
+.popup-card-remote-manager .popup-title {
+  margin: 0;
+}
+
+.remote-manager-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.remote-manager-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.remote-manager-mark {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+.remote-manager-heading-text {
+  min-width: 0;
+}
+
+.remote-manager-title {
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.remote-manager-config-path {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-manager-config-path:empty {
+  display: none;
+}
+
+.popup-card-remote-manager .remote-manager-close {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  padding: 0;
+}
+
+.remote-manager-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 288px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.remote-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-4);
+  overflow: hidden;
+  border-right: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+}
+
+.remote-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.popup-card-remote-manager .remote-list-toolbar button {
+  min-width: 0;
+  height: var(--control-h);
+}
+
+.popup-card-remote-manager .remote-add-btn {
+  width: 100%;
+}
+
+.popup-card-remote-manager .remote-refresh-btn {
+  width: var(--control-h);
+  padding: 0;
+}
+
+.popup-card-remote-manager .remote-list-toolbar .remote-vault-btn {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.remote-list-label {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-1);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.remote-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 0 var(--space-2) var(--space-2);
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.remote-list.is-entering > li {
+  animation: remote-row-in var(--dur-3) var(--ease-emph) both;
+  animation-delay: calc(min(var(--i, 0), 12) * 28ms + 60ms);
+}
+
+.popup-card-remote-manager .remote-list-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+.popup-card-remote-manager .remote-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.popup-card-remote-manager .remote-list-item:active {
+  transform: scale(0.985);
+}
+
+.popup-card-remote-manager .remote-list-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.popup-card-remote-manager .remote-list-item.is-selected {
+  border-color: color-mix(in oklab, var(--accent) 22%, transparent);
+  background: var(--accent-soft);
+}
+
+.remote-list-item::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -9px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-gradient);
+  opacity: 0;
+  transform: scaleY(0.2);
+  transition: opacity var(--dur-1) var(--ease-out), transform var(--dur-3) var(--ease-spring);
+}
+
+.remote-list-item.is-selected::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+@starting-style {
+  .remote-list-item.is-selected::before {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+}
+
+.remote-list-item-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-list-item.is-selected .remote-list-item-name {
+  color: var(--text-strong);
+}
+
+.remote-list-item-badges {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.remote-list-item .remote-type-badge {
+  max-width: 7.5em;
+}
+
+.remote-list-empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.remote-mount-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.remote-mount-badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.remote-detail-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.remote-panel-empty,
+.remote-panel-detail,
+.remote-panel-add {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  transition:
+    opacity var(--dur-3) var(--ease-out),
+    translate var(--dur-3) var(--ease-emph);
+}
+
+@starting-style {
+  .remote-panel-empty,
+  .remote-panel-detail,
+  .remote-panel-add {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.remote-panel-detail.is-swapping > * {
+  animation: remote-swap var(--dur-3) var(--ease-emph) both;
+}
+
+.remote-panel-detail.is-swapping > :nth-child(2) {
+  animation-delay: 30ms;
+}
+
+.remote-panel-detail.is-swapping > :nth-child(3) {
+  animation-delay: 60ms;
+}
+
+.remote-panel-detail.is-swapping > :nth-child(n + 4) {
+  animation-delay: 90ms;
+}
+
+.remote-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  text-align: center;
+}
+
+.remote-panel-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in oklab, var(--accent) 28%, transparent), transparent 70%),
+    var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong), 0 12px 32px -12px var(--accent-glow);
+  color: var(--accent-strong);
+}
+
+.remote-panel-empty-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.remote-panel-empty-text {
+  max-width: 320px;
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+}
+
+.remote-panel-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.remote-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2);
+}
+
+.remote-detail-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.remote-detail-titles {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.remote-detail-name {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.popup-card-remote-manager .remote-detail-actions button {
+  min-width: 0;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.remote-mount {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.remote-mount-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 24px;
+}
+
+.remote-mount-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.remote-mount-title svg {
+  color: var(--accent);
+}
+
+.remote-mount-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.remote-mount-status:empty {
+  display: none;
+}
+
+.remote-mount-status.is-mounted {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+  font-weight: 600;
+}
+
+.remote-mount-status.is-mounted::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 var(--success-glow);
+  animation: remote-live 2.4s var(--ease-out) infinite;
+}
+
+.remote-mount-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.remote-mount-controls .field {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.remote-mount-field:first-child {
+  flex: 0 0 120px;
+}
+
+.remote-mount-field:nth-child(2) {
+  flex: 1 1 200px;
+}
+
+.remote-mount-controls .checkbox {
+  min-height: var(--control-h);
+  margin: 0;
+}
+
+.remote-mount-readonly {
+  align-self: flex-end;
+}
+
+.popup-card-remote-manager .remote-mount-controls button {
+  min-width: 112px;
+  height: var(--control-h);
+}
+
+.remote-mount-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.remote-mount-hint:empty {
+  display: none;
+}
+
+.remote-mount-hint.is-error {
+  color: var(--danger);
+}
+
+.remote-serve-controls + .remote-serve-controls {
+  margin-top: 0;
+}
+
+.remote-serve-protocol {
+  flex: 0 0 140px;
+}
+
+.remote-serve-port {
+  flex: 0 0 96px;
+}
+
+.remote-serve-folder,
+.remote-serve-user,
+.remote-serve-pass,
+.remote-serve-cache {
+  flex: 1 1 160px;
+}
+
+.remote-serve-controls .remote-serve-check:last-of-type {
+  margin-right: auto;
+}
+
+.remote-serve-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remote-serve-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--success) 22%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--success) 6%, transparent);
+  animation: remote-row-in var(--dur-3) var(--ease-emph) both;
+}
+
+.remote-serve-item-info {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.remote-serve-item-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.remote-serve-item-target {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-serve-item-url {
+  color: var(--accent-strong);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  word-break: break-all;
+  user-select: text;
+}
+
+.remote-serve-item-meta {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+
+.remote-serve-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.popup-card-remote-manager .remote-serve-item-actions button {
+  min-width: 0;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.remote-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.remote-config-title {
+  margin: 0;
+  padding-left: 2px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.remote-config-block {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.remote-panel-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: 0;
+}
+
+.remote-panel-add > .field {
+  margin: 0;
+}
+
+.remote-add-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.remote-add-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.remote-add-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.remote-provider-picker {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--input-border, var(--hairline-strong));
+  border-radius: var(--radius-sm);
+  background: var(--input-bg, var(--surface-sunken));
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
+}
+
+.remote-provider-picker:focus-within {
+  border-color: var(--input-focus-border, var(--accent));
+  box-shadow: var(--input-focus-ring, 0 0 0 3px var(--accent-soft));
+}
+
+.remote-provider-picker #remote-provider-search,
+.remote-provider-picker #remote-provider-select {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.remote-provider-picker #remote-provider-search {
+  height: var(--control-h);
+  padding-left: 36px;
+  border-bottom: 1px solid var(--hairline);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+  background-position: 12px 50%;
+  background-repeat: no-repeat;
+  background-size: 16px;
+}
+
+#remote-provider-select {
+  height: 216px;
+  min-height: 0;
+  padding: var(--space-1);
+  background-image: none;
+  font-size: var(--fs-md);
+  scrollbar-width: thin;
+}
+
+#remote-provider-select option {
+  padding: 7px 10px;
+  border-radius: var(--radius-xs);
+  color: var(--text);
+}
+
+#remote-provider-select option:hover {
+  background: var(--surface-hover);
+}
+
+#remote-provider-select option:checked {
+  background: var(--accent-soft) linear-gradient(0deg, var(--accent-soft), var(--accent-soft));
+  color: var(--text-strong);
+}
+
+.remote-provider-description {
+  display: -webkit-box;
+  margin: calc(var(--space-2) * -1) 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.remote-provider-description:empty {
+  display: none;
+}
+
+.remote-provider-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.remote-provider-form:empty {
+  display: none;
+}
+
+.remote-provider-form .field {
+  margin: 0;
+}
+
+.remote-option-field > .remote-option-help {
+  color: var(--faint);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.remote-advanced-toggle {
+  align-self: flex-start;
+  margin: 0;
+}
+
+.remote-create-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--danger) 28%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: color-mix(in oklab, var(--danger) 80%, var(--text));
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  animation: remote-shake 0.36s var(--ease-out);
+}
+
+.remote-create-error::before {
+  content: "";
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--danger);
+  mask: var(--icon-alert) center / 12px no-repeat, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.remote-add-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin: auto calc(var(--space-6) * -1) 0;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--hairline);
+  background: color-mix(in oklab, var(--ink-2) 86%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.popup-card-remote-manager .remote-add-actions button {
+  min-width: 104px;
+  height: var(--control-h);
+}
+
+.remote-manager-footer {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--hairline);
+}
+
+.popup-card-remote-manager .remote-manager-footer button {
+  min-width: 96px;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.remote-panel-vault {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.remote-panel-vault > .field,
+.remote-panel-vault .vault-field {
+  margin: 0;
+}
+
+.remote-panel-vault.is-forward > *,
+.remote-panel-vault.is-back > * {
+  animation: remote-step-forward var(--dur-3) var(--ease-emph) both;
+}
+
+.remote-panel-vault.is-back > * {
+  animation-name: remote-step-back;
+}
+
+.remote-panel-vault > :nth-child(2) {
+  animation-delay: 25ms;
+}
+
+.remote-panel-vault > :nth-child(3) {
+  animation-delay: 50ms;
+}
+
+.remote-panel-vault > :nth-child(4) {
+  animation-delay: 75ms;
+}
+
+.remote-panel-vault > :nth-child(n + 5) {
+  animation-delay: 100ms;
+}
+
+.remote-panel-vault > .vault-steps,
+.remote-panel-vault > .vault-title,
+.remote-panel-vault > .vault-nav {
+  animation: none;
+}
+
+.vault-title {
+  margin: 0;
+}
+
+.vault-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.vault-step {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vault-step:last-child {
+  flex: 0 0 auto;
+}
+
+.vault-step:not(:last-child)::after {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 12px;
+  height: 2px;
+  margin-left: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+  transition: background var(--dur-3) var(--ease-out);
+}
+
+.vault-step.is-done::after {
+  background: color-mix(in oklab, var(--success) 55%, transparent);
+}
+
+.vault-step-number {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+
+.vault-step.is-active {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.vault-step.is-active .vault-step-number {
+  background: var(--accent-gradient);
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 4px 14px -4px var(--accent-glow);
+  color: var(--on-accent);
+  animation: remote-pop var(--dur-3) var(--ease-spring) both;
+}
+
+.vault-step.is-done {
+  color: var(--text);
+}
+
+.vault-step.is-done .vault-step-number {
+  background: var(--success-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 35%, transparent);
+  color: var(--success);
+}
+
+.vault-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.vault-field {
+  margin: 0;
+}
+
+.vault-hint {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.vault-hint:empty {
+  display: none;
+}
+
+.vault-hint.is-bad {
+  color: var(--danger);
+}
+
+.vault-input-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.vault-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.popup-card-remote-manager .vault-input-row button {
+  flex-shrink: 0;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+}
+
+.vault-input-row input[readonly] {
+  cursor: pointer;
+}
+
+.vault-strength {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.vault-strength-bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  width: 152px;
+}
+
+.vault-strength-bar {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+  transition: background var(--dur-3) var(--ease-out);
+}
+
+.vault-strength[data-score="1"] .vault-strength-bar:nth-child(-n + 1) {
+  background: var(--danger);
+}
+
+.vault-strength[data-score="2"] .vault-strength-bar:nth-child(-n + 2) {
+  background: var(--warning);
+}
+
+.vault-strength[data-score="3"] .vault-strength-bar:nth-child(-n + 3),
+.vault-strength[data-score="4"] .vault-strength-bar {
+  background: var(--success);
+}
+
+.vault-strength-label {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+
+.vault-more {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  interpolate-size: allow-keywords;
+}
+
+.vault-more summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.vault-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.vault-more summary::after {
+  content: "";
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  background: currentColor;
+  color: var(--muted);
+  mask: var(--select-chevron, none) center / 16px no-repeat;
+  transition: transform var(--dur-3) var(--ease-spring-soft);
+}
+
+.vault-more[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.vault-more::details-content {
+  height: 0;
+  overflow: clip;
+  transition:
+    height var(--dur-3) var(--ease-emph),
+    content-visibility var(--dur-3) allow-discrete;
+}
+
+.vault-more[open]::details-content {
+  height: auto;
+}
+
+.vault-more > :not(summary) {
+  margin: 0 var(--space-4);
+}
+
+.vault-more > :last-child {
+  margin-bottom: var(--space-4);
+}
+
+.vault-more .vault-check {
+  margin-top: var(--space-4);
+}
+
+.vault-more > .vault-hint {
+  margin-top: var(--space-1);
+}
+
+.vault-check {
+  margin: 0;
+}
+
+.vault-note {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+
+.vault-note strong {
+  color: var(--text-strong);
+}
+
+.vault-note.is-good {
+  border-color: color-mix(in oklab, var(--success) 26%, transparent);
+  background: color-mix(in oklab, var(--success) 7%, transparent);
+}
+
+.vault-note.is-warn {
+  border-color: color-mix(in oklab, var(--warning) 30%, transparent);
+  background: color-mix(in oklab, var(--warning) 7%, transparent);
+}
+
+.vault-note.is-bad {
+  border-color: color-mix(in oklab, var(--danger) 30%, transparent);
+  background: color-mix(in oklab, var(--danger) 7%, transparent);
+}
+
+.vault-summary {
+  display: grid;
+  margin: 0;
+  padding: var(--space-1) var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.vault-summary-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 34%) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  font-size: var(--fs-sm);
+}
+
+.vault-summary-row + .vault-summary-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.vault-summary-row dt {
+  color: var(--muted);
+}
+
+.vault-summary-row dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.vault-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) 0 var(--space-4);
+  text-align: center;
+}
+
+.vault-done .vault-intro {
+  max-width: 420px;
+}
+
+.vault-done-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  background: var(--success-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 35%, transparent), 0 16px 40px -16px var(--success-glow);
+  color: var(--success);
+  animation: remote-pop var(--dur-4) var(--ease-spring) both;
+}
+
+.vault-done-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.vault-done-check {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  animation: remote-check-draw var(--dur-4) var(--ease-emph) 260ms forwards;
+}
+
+.vault-done-actions {
+  justify-content: center;
+}
+
+@media (max-width: 860px) {
+  .remote-manager-body {
+    grid-template-columns: 236px minmax(0, 1fr);
+  }
+
+  .remote-panel-empty,
+  .remote-panel-detail,
+  .remote-panel-add {
+    padding-inline: var(--space-5);
+  }
+
+  .remote-add-actions {
+    margin-inline: calc(var(--space-5) * -1);
+    padding-inline: var(--space-5);
+  }
+}
+
+@media (max-width: 680px) {
+  .remote-manager-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .remote-list-panel {
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+}
+
+@keyframes remote-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes remote-swap {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes remote-step-forward {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes remote-step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes remote-pop {
+  from {
+    transform: scale(0.6);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes remote-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes remote-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+
+  25% {
+    transform: translateX(-3px);
+  }
+
+  60% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes remote-live {
+  0% {
+    box-shadow: 0 0 0 0 var(--success-glow);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}

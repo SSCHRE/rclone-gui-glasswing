@@ -54,6 +54,7 @@ const remoteManager = {
   mountOpenBtn: document.getElementById("remote-mount-open"),
   unmountBtn: document.getElementById("remote-unmount-btn"),
   mountHint: document.getElementById("remote-mount-hint"),
+  detailAvatar: document.getElementById("remote-detail-avatar"),
 };
 
 let remoteEntries = [];
@@ -118,16 +119,40 @@ function showPanel(mode) {
   }
 }
 
+function paintAvatar(node, name) {
+  if (!node) {
+    return;
+  }
+  let hue = 0;
+  for (const char of name) {
+    hue = (hue * 31 + char.charCodeAt(0)) % 360;
+  }
+  node.textContent = (/[a-z0-9]/i.exec(name)?.[0] || "?").toUpperCase();
+  node.style.setProperty("--avatar-hue", String(hue));
+}
+
+function replayAnimation(node, className) {
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+}
+
 function renderRemoteList() {
   remoteManager.list.innerHTML = "";
   remoteManager.listEmpty.classList.toggle("hidden", remoteEntries.length > 0);
 
-  for (const entry of remoteEntries) {
+  remoteEntries.forEach((entry, index) => {
     const item = document.createElement("li");
+    item.style.setProperty("--i", String(index));
     const button = document.createElement("button");
     button.type = "button";
     button.className = `remote-list-item${entry.name === selectedRemoteName ? " is-selected" : ""}`;
     button.dataset.remoteName = entry.name;
+
+    const avatar = document.createElement("span");
+    avatar.className = "remote-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    paintAvatar(avatar, entry.name);
 
     const name = document.createElement("span");
     name.className = "remote-list-item-name";
@@ -146,9 +171,9 @@ function renderRemoteList() {
       const badges = document.createElement("span");
       badges.className = "remote-list-item-badges";
       badges.append(drive, type);
-      button.append(name, badges);
+      button.append(avatar, name, badges);
     } else {
-      button.append(name, type);
+      button.append(avatar, name, type);
     }
     button.addEventListener("click", () => {
       void selectRemote(entry.name);
@@ -156,7 +181,7 @@ function renderRemoteList() {
 
     item.appendChild(button);
     remoteManager.list.appendChild(item);
-  }
+  });
 }
 
 function getMount(name) {
@@ -308,6 +333,8 @@ async function selectRemote(name) {
   renderMountPanel();
   window.RemoteServe?.show(name);
   remoteManager.detailName.textContent = name;
+  paintAvatar(remoteManager.detailAvatar, name);
+  replayAnimation(remoteManager.panelDetail, "is-swapping");
   remoteManager.detailType.textContent = "…";
   remoteManager.detailConfig.textContent = "Loading remote settings…";
 
@@ -728,6 +755,8 @@ async function openRemoteManager({ onChanged, onBrowse } = {}) {
   remoteManager.showAdvanced.checked = false;
   remoteManager.dialog.classList.remove("hidden");
   remoteManager.dialog.setAttribute("aria-hidden", "false");
+  remoteManager.list.classList.add("is-entering");
+  setTimeout(() => remoteManager.list.classList.remove("is-entering"), 900);
   remoteManager.addBtn.focus();
 
   setBusy(true);
@@ -738,7 +767,9 @@ async function openRemoteManager({ onChanged, onBrowse } = {}) {
       refreshRemotes({ keepSelection: false }),
       refreshMountStatus(),
     ]);
-    remoteManager.configPath.textContent = configPath ? `Config: ${configPath}` : "";
+    const cleanPath = String(configPath || "").replace(/^Configuration file is stored at:\s*/i, "").trim();
+    remoteManager.configPath.textContent = cleanPath;
+    remoteManager.configPath.title = cleanPath;
   } catch (error) {
     remoteManager.configPath.textContent = error.message || "Could not load rclone config.";
   } finally {

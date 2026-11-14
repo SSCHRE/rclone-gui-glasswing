@@ -5,13 +5,18 @@
     badge: document.getElementById("migration-badge"),
     dialog: document.getElementById("migration-dialog"),
     body: document.getElementById("migration-body"),
+    foot: document.getElementById("migration-foot"),
     closeBtn: document.getElementById("migration-close"),
   };
   if (!bridge?.listMigrations || !ui.dialog || !ui.body) {
     return;
   }
 
-  const STEPS = ["Where", "Check", "Plan"];
+  const STEPS = [
+    { label: "Where", hint: "Both sides" },
+    { label: "Check", hint: "Size and space" },
+    { label: "Plan", hint: "When it runs" },
+  ];
   const SPEED_OPTIONS_MBIT = [10, 25, 50, 100, 250, 500, 1000];
   const GIB = 1024 ** 3;
   const STATUS_LABELS = {
@@ -23,10 +28,30 @@
     cleaning: "Deleting originals",
     done: "Done",
   };
+  const STATUS_TONES = {
+    verified: "success",
+    done: "success",
+    "needs-attention": "warning",
+    cleaning: "danger",
+  };
   const OUTCOME_TEXT = {
     "paused-limit": "Paused: the daily upload limit was reached. It carries on at the next run.",
     "paused-window": "Paused: tonight's time window ended. It carries on at the next run.",
     stopped: "The last run was stopped. It carries on at the next run.",
+  };
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ICONS = {
+    arrowRight: ["M5 12h14", "m13 6 6 6-6 6"],
+    back: ["m15 18-6-6 6-6"],
+    check: ["M5 12.5 10 17.5 19 7"],
+    cloud: ["M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"],
+    copy: ["M10 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z", "M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"],
+    move: ["M3 12h11", "m10 8 4 4-4 4", "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"],
+    now: ["M13 3 5 13.5h6L10 21l8-10.5h-6Z"],
+    night: ["M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"],
+    plus: ["M12 5v14", "M5 12h14"],
+    clock: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", "M12 7.5V12l3 2"],
+    alert: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", "M12 7.5v5", "M12 16.3h.01"],
   };
 
   let hooks = {};
@@ -35,9 +60,13 @@
   let view = { name: "list" };
   let draft = null;
   let progress = new Map();
+  const liveCopy = new Map();
   let renderQueued = false;
   let armedRemove = null;
   let previousStatuses = new Map();
+  let rendered = { key: null, rank: 0, step: -1 };
+  let freshChoice = null;
+  let fills = new Map();
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -50,10 +79,31 @@
     return node;
   }
 
-  function button(label, className, onClick, disabled = false) {
-    const node = el("button", className, label);
+  function icon(name, className = "migration-icon") {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", className);
+    for (const d of ICONS[name]) {
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("pathLength", "1");
+      svg.appendChild(path);
+    }
+    return svg;
+  }
+
+  function button(label, className, onClick, disabled = false, options = {}) {
+    const node = el("button", className);
     node.type = "button";
     node.disabled = disabled;
+    if (options.icon && !options.trailing) {
+      node.append(icon(options.icon));
+    }
+    node.append(label);
+    if (options.icon && options.trailing) {
+      node.append(icon(options.icon));
+    }
     node.addEventListener("click", onClick);
     return node;
   }
@@ -110,6 +160,10 @@
     return migration.status !== "done";
   }
 
+  function isLive(migration) {
+    return Boolean(migration.running || migration.task);
+  }
+
   function queueRender() {
     if (renderQueued) {
       return;
@@ -124,6 +178,7 @@
   function renderBadge() {
     const active = migrations.filter(isActive).length;
     ui.badge?.classList.toggle("hidden", active === 0);
+    ui.badge?.classList.toggle("is-live", migrations.some(isLive));
     if (ui.badge) {
       ui.badge.textContent = String(active);
     }
@@ -179,17 +234,25 @@
     };
   }
 
-  function stepper(step) {
-    const list = el("ol", "vault-steps");
-    STEPS.forEach((label, index) => {
-      let state = "";
+  function stepper(step, previousStep) {
+    const list = el("ol", "migration-steps");
+    list.setAttribute("aria-label", "Steps");
+    STEPS.forEach(({ label, hint }, index) => {
+      const item = el("li", "migration-step");
       if (index === step) {
-        state = " is-active";
+        item.classList.add("is-active");
+        item.setAttribute("aria-current", "step");
       } else if (index < step) {
-        state = " is-done";
+        item.classList.add("is-done");
       }
-      const item = el("li", `vault-step${state}`);
-      item.append(el("span", "vault-step-number", index < step ? "✓" : String(index + 1)), el("span", "vault-step-label", label));
+      if ((index < step && index >= previousStep) || (index === step && step !== previousStep)) {
+        item.classList.add("is-fresh");
+      }
+      const marker = el("span", "migration-step-marker");
+      marker.append(el("span", "migration-step-number", String(index + 1)), icon("check", "migration-step-check"));
+      const text = el("span", "migration-step-text");
+      text.append(el("span", "migration-step-label", label), el("span", "migration-step-hint", hint));
+      item.append(marker, text);
       list.appendChild(item);
     });
     return list;
@@ -202,11 +265,41 @@
   }
 
   function errorLine(message) {
-    return el("p", `remote-create-error${message ? "" : " hidden"}`, message || "");
+    return el("p", `migration-error${message ? "" : " hidden"}`, message || "");
   }
 
-  function remoteSelect(value, onChange) {
+  function splitPath(path) {
+    const text = String(path || "");
+    const index = text.indexOf(":");
+    if (index < 0) {
+      return { remote: text, folder: "" };
+    }
+    return { remote: text.slice(0, index), folder: text.slice(index + 1) };
+  }
+
+  function endpoint(path) {
+    const { remote, folder } = splitPath(path);
+    const chip = el("span", "migration-endpoint");
+    chip.title = path;
+    chip.append(
+      icon("cloud"),
+      el("span", "migration-endpoint-remote", remote),
+      el("span", "migration-endpoint-path", folder ? `/${folder.replace(/^\/+/, "")}` : "/"),
+    );
+    return chip;
+  }
+
+  function routeLine(source, destination, flowing = false) {
+    const row = el("div", `migration-route${flowing ? " is-flowing" : ""}`);
+    const arrow = el("span", "migration-arrow");
+    arrow.append(icon("arrowRight"));
+    row.append(endpoint(source), arrow, endpoint(destination));
+    return row;
+  }
+
+  function remoteSelect(value, focusKey, onChange) {
     const select = el("select");
+    select.dataset.focus = focusKey;
     select.append(new Option("Pick a remote…", ""));
     for (const remote of remotes) {
       select.append(new Option(remote.type ? `${remote.name} (${remote.type})` : remote.name, remote.name));
@@ -217,20 +310,23 @@
   }
 
   function locationGroup(title, remoteKey, folderKey) {
-    const group = el("fieldset", "migration-location");
-    group.appendChild(el("legend", null, title));
+    const group = el("fieldset", `migration-location${draft[remoteKey] ? " is-filled" : ""}`);
+    const legend = el("legend");
+    legend.append(icon("cloud"), title);
+    group.appendChild(legend);
     const remoteField = el("label", "field");
-    remoteField.append(el("span", null, "Remote"), remoteSelect(draft[remoteKey], (value) => {
+    remoteField.append(el("span", null, "Remote"), remoteSelect(draft[remoteKey], remoteKey, (value) => {
       draft[remoteKey] = value;
       draft.scan = null;
       render();
     }));
     const folderField = el("label", "field");
-    const folder = el("input");
+    const folder = el("input", "migration-folder-input");
     folder.type = "text";
     folder.placeholder = "Leave empty for everything";
     folder.value = draft[folderKey];
     folder.spellcheck = false;
+    folder.dataset.focus = folderKey;
     folder.addEventListener("input", () => {
       draft[folderKey] = folder.value;
       draft.scan = null;
@@ -240,60 +336,86 @@
     return group;
   }
 
-  function modeChoice(value, title, text) {
-    const label = el("label", `migration-choice${draft.mode === value ? " is-selected" : ""}`);
+  function choiceCard({ group, focusKey, checked, title, text, iconName, onSelect }) {
+    const fresh = freshChoice === focusKey;
+    const label = el("label", `migration-choice${checked ? " is-selected" : ""}${fresh ? " is-fresh" : ""}`);
     const input = el("input");
     input.type = "radio";
-    input.name = "migration-mode";
-    input.checked = draft.mode === value;
-    input.addEventListener("change", () => {
-      draft.mode = value;
-      render();
-    });
+    input.name = group;
+    input.checked = checked;
+    input.dataset.focus = focusKey;
+    input.addEventListener("change", () => onSelect(label));
+    const glyph = el("span", "migration-choice-icon");
+    glyph.append(icon(iconName));
     const copy = el("span", "migration-choice-text");
     copy.append(el("strong", null, title), el("span", null, text));
-    label.append(input, copy);
+    label.append(input, glyph, copy, el("span", "migration-choice-mark"));
     return label;
+  }
+
+  function modeChoice(value, title, text, iconName) {
+    return choiceCard({
+      group: "migration-mode",
+      focusKey: `mode-${value}`,
+      checked: draft.mode === value,
+      title,
+      text,
+      iconName,
+      onSelect: (label) => {
+        draft.mode = value;
+        for (const sibling of label.parentElement.children) {
+          sibling.classList.toggle("is-selected", sibling === label);
+        }
+      },
+    });
   }
 
   function whereStep() {
     const ready = draft.sourceRemote && draft.destRemote;
-    const locations = el("div", "migration-locations");
+    const locations = el("div", `migration-locations${ready ? " is-ready" : ""}`);
+    const arrow = el("span", "migration-arrow");
+    arrow.append(icon("arrowRight"));
     locations.append(
       locationGroup("From", "sourceRemote", "sourceFolder"),
-      el("span", "migration-arrow", "→"),
+      arrow,
       locationGroup("To", "destRemote", "destFolder"),
     );
     const choices = el("div", "migration-choices");
     choices.append(
-      modeChoice("copy", "Copy", "Keep the originals where they are."),
-      modeChoice("move", "Move", "Delete the originals, but only after every file is verified on the new side."),
+      modeChoice("copy", "Copy", "Keep the originals where they are.", "copy"),
+      modeChoice("move", "Move", "Delete the originals, but only after every file is verified on the new side.", "move"),
     );
     return [
-      el("p", "vault-intro", "Move everything from one cloud to another. Glasswing copies it in the background, picks up where it left off if anything stops it, and checks every file at the end."),
+      el("p", "migration-intro", "Move everything from one cloud to another. Glasswing copies it in the background, picks up where it left off if anything stops it, and checks every file at the end."),
       locations,
       choices,
       errorLine(draft.error),
       navRow(
-        button("Back", "secondary", () => openList()),
-        button("Check it", "primary", () => startScan(), !ready),
+        button("Back", "secondary", () => openList(), false, { icon: "back" }),
+        button("Check it", "primary", () => startScan(), !ready, { icon: "arrowRight", trailing: true }),
       ),
     ];
   }
 
   function summaryList(rows) {
-    const summary = el("dl", "vault-summary");
+    const summary = el("dl", "migration-summary");
     for (const [label, value] of rows) {
-      const row = el("div", "vault-summary-row");
+      const row = el("div", "migration-summary-row");
       row.append(el("dt", null, label), el("dd", null, value));
       summary.appendChild(row);
     }
     return summary;
   }
 
+  function note(tone, content) {
+    const box = el("div", `migration-note${tone ? ` is-${tone}` : ""}`);
+    box.append(...[content].flat());
+    return box;
+  }
+
   function tipNode(tip) {
-    const tone = { good: " is-good", warn: " is-warn", bad: " is-bad" }[tip.level] || "";
-    return el("div", `vault-note${tone}`, tip.text);
+    const tone = { good: "good", warn: "warn", bad: "bad" }[tip.level] || "";
+    return note(tone, tip.text);
   }
 
   async function startScan() {
@@ -325,46 +447,100 @@
     }
   }
 
+  function skeletonStats() {
+    const stats = el("div", "migration-stats is-skeleton");
+    for (let index = 0; index < 3; index += 1) {
+      const stat = el("div", "migration-stat");
+      stat.append(el("span", "migration-skeleton is-value"), el("span", "migration-skeleton is-label"));
+      stats.appendChild(stat);
+    }
+    return stats;
+  }
+
+  function scanFailure(message) {
+    const failed = el("div", "migration-failed");
+    const glyph = el("span", "migration-failed-icon");
+    glyph.append(icon("alert"));
+    failed.append(
+      glyph,
+      el("h3", "migration-failed-title", "The check didn't finish"),
+      el("p", "migration-failed-message", message),
+      el("p", "migration-intro", "Make sure both remotes still work in Browse, then try again."),
+    );
+    return failed;
+  }
+
+  function capacityMeter(scan) {
+    if (typeof scan.free !== "number" || typeof scan.bytes !== "number" || scan.free <= 0) {
+      return null;
+    }
+    const fraction = scan.bytes / scan.free;
+    let tone = "";
+    if (fraction > 1) {
+      tone = "danger";
+    } else if (fraction > 0.85) {
+      tone = "warning";
+    }
+    const meter = el("div", `migration-capacity${tone ? ` is-${tone}` : ""}`);
+    const head = el("div", "migration-capacity-head");
+    const value = fraction > 1
+      ? `${formatBytes(scan.bytes - scan.free)} more than is free`
+      : `Uses ${Math.max(1, Math.round(fraction * 100))}% of the free space`;
+    head.append(el("span", null, "Space on the destination"), el("strong", null, value));
+    meter.append(head, progressBar(Math.min(1, fraction), { key: "capacity", tone }));
+    return meter;
+  }
+
   function checkStep() {
+    const source = remotePath(draft.sourceRemote, draft.sourceFolder);
+    const destination = remotePath(draft.destRemote, draft.destFolder);
     if (draft.scanning) {
       const wrap = el("div", "migration-scanning");
-      wrap.append(
-        el("span", "browse-loading-spinner", null),
-        el("p", "vault-intro", "Counting files and checking free space. On a big drive this can take a few minutes."),
+      const status = el("div", "migration-scanning-status");
+      status.append(
+        el("span", "migration-spinner", null),
+        el("p", "migration-intro", "Counting files and checking free space. On a big drive this can take a few minutes."),
       );
+      wrap.append(routeLine(source, destination, true), status, skeletonStats());
       return [wrap, navRow(button("Cancel", "secondary", () => void bridge.cancelMigrationTask()))];
     }
     if (draft.scanError) {
       return [
-        el("div", "vault-note is-bad", draft.scanError),
-        navRow(button("Back", "secondary", () => goStep(0)), button("Try again", "primary", () => startScan())),
+        routeLine(source, destination),
+        scanFailure(draft.scanError),
+        navRow(
+          button("Back", "secondary", () => goStep(0), false, { icon: "back" }),
+          button("Try again", "primary", () => startScan()),
+        ),
       ];
     }
     const scan = draft.scan;
     const fits = !(typeof scan.free === "number" && scan.bytes > scan.free);
     const stats = el("div", "migration-stats");
-    for (const [value, label] of [
-      [formatCount(scan.files), scan.files === 1 ? "file" : "files"],
-      [formatBytes(scan.bytes), "to copy"],
-      [typeof scan.free === "number" ? formatBytes(scan.free) : "Unknown", "free on the destination"],
+    for (const [value, label, tone] of [
+      [formatCount(scan.files), scan.files === 1 ? "file" : "files", ""],
+      [formatBytes(scan.bytes), "to copy", ""],
+      [typeof scan.free === "number" ? formatBytes(scan.free) : "Unknown", "free on the destination", fits ? "" : "danger"],
     ]) {
-      const stat = el("div", "migration-stat");
-      stat.append(el("strong", null, value), el("span", null, label));
+      const stat = el("div", `migration-stat${tone ? ` is-${tone}` : ""}`);
+      stat.append(el("strong", "migration-stat-value", value), el("span", "migration-stat-label", label));
       stats.appendChild(stat);
     }
     const tips = el("div", "migration-tips");
     tips.append(...scan.tips.map(tipNode));
     if (scan.files === 0) {
-      tips.append(el("div", "vault-note is-warn", "There's nothing to copy in that folder."));
+      tips.append(note("warn", "There's nothing to copy in that folder."));
     }
     return [
+      routeLine(scan.source || source, scan.destination || destination),
       stats,
+      capacityMeter(scan),
       tips,
       navRow(
-        button("Back", "secondary", () => goStep(0)),
-        button(fits ? "Next" : "Continue anyway", "primary", () => goStep(2), scan.files === 0),
+        button("Back", "secondary", () => goStep(0), false, { icon: "back" }),
+        button(fits ? "Next" : "Continue anyway", "primary", () => goStep(2), scan.files === 0, { icon: "arrowRight", trailing: true }),
       ),
-    ];
+    ].filter(Boolean);
   }
 
   function chosenSpeed() {
@@ -399,8 +575,9 @@
   }
 
   function speedField() {
-    const field = el("label", "field");
+    const field = el("label", "field migration-speed");
     const select = el("select");
+    select.dataset.focus = "speed";
     if (draft.scan.bytesPerSecond) {
       select.append(new Option(`From your recent jobs (${formatBytes(draft.scan.bytesPerSecond)}/s)`, ""));
     }
@@ -416,28 +593,30 @@
     return field;
   }
 
-  function whenChoice(nightly, title, text) {
-    const label = el("label", `migration-choice${draft.nightly === nightly ? " is-selected" : ""}`);
-    const input = el("input");
-    input.type = "radio";
-    input.name = "migration-when";
-    input.checked = draft.nightly === nightly;
-    input.addEventListener("change", () => {
-      draft.nightly = nightly;
-      render();
+  function whenChoice(nightly, title, text, iconName) {
+    const focusKey = nightly ? "when-night" : "when-now";
+    return choiceCard({
+      group: "migration-when",
+      focusKey,
+      checked: draft.nightly === nightly,
+      title,
+      text,
+      iconName,
+      onSelect: () => {
+        draft.nightly = nightly;
+        freshChoice = focusKey;
+        render();
+      },
     });
-    const copy = el("span", "migration-choice-text");
-    copy.append(el("strong", null, title), el("span", null, text));
-    label.append(input, copy);
-    return label;
   }
 
   function nightFields() {
-    const row = el("div", "migration-night");
+    const row = el("div", `migration-night${freshChoice === "when-night" ? " is-fresh" : ""}`);
     const timeField = el("label", "field");
     const time = el("input");
     time.type = "time";
     time.value = draft.startTime;
+    time.dataset.focus = "start-time";
     time.addEventListener("change", () => {
       draft.startTime = time.value || "01:00";
       render();
@@ -445,6 +624,7 @@
     timeField.append(el("span", null, "Start at"), time);
     const hoursField = el("label", "field");
     const hours = el("select");
+    hours.dataset.focus = "window-hours";
     for (const value of [2, 3, 4, 5, 6, 7, 8, 10, 12]) {
       hours.append(new Option(`${value} hours`, String(value)));
     }
@@ -464,6 +644,7 @@
     name.type = "text";
     name.maxLength = 80;
     name.value = draft.name;
+    name.dataset.focus = "name";
     name.addEventListener("input", () => {
       draft.name = name.value;
     });
@@ -471,8 +652,8 @@
 
     const choices = el("div", "migration-choices");
     choices.append(
-      whenChoice(false, "Start now", "Keep going until it's done. If it gets interrupted it continues the next day."),
-      whenChoice(true, "Only at night", "Runs in a time window each night so it doesn't slow down your day."),
+      whenChoice(false, "Start now", "Keep going until it's done. If it gets interrupted it continues the next day.", "now"),
+      whenChoice(true, "Only at night", "Runs in a time window each night so it doesn't slow down your day.", "night"),
     );
 
     const parts = [nameField, choices];
@@ -484,22 +665,29 @@
     }
     const estimate = estimateText();
     if (estimate) {
-      parts.push(el("div", "vault-note migration-estimate", estimate));
+      const estimateNote = note("", estimate);
+      estimateNote.classList.add("migration-estimate");
+      estimateNote.prepend(icon("clock"));
+      parts.push(estimateNote);
     }
     let startLabel = draft.nightly ? "Schedule it" : "Start migration";
     if (draft.creating) {
       startLabel = "Starting…";
     }
-    parts.push(
+    const recap = el("div", "migration-recap");
+    recap.append(
+      routeLine(draft.scan.source, draft.scan.destination),
       summaryList([
-        ["From", draft.scan.source],
-        ["To", draft.scan.destination],
+        ["Mode", draft.mode === "move" ? "Move" : "Copy"],
         ["Then", draft.mode === "move" ? "Check every file, then you can delete the originals" : "Check every file"],
       ]),
+    );
+    parts.push(
+      recap,
       errorLine(draft.error),
       navRow(
-        button("Back", "secondary", () => goStep(1)),
-        button(startLabel, "primary", () => void create(), draft.creating),
+        button("Back", "secondary", () => goStep(1), false, { icon: "back" }),
+        button(startLabel, `primary${draft.creating ? " is-busy" : ""}`, () => void create(), draft.creating),
       ),
     );
     return parts;
@@ -542,7 +730,17 @@
   }
 
   function statusChip(migration) {
-    return el("span", `migration-chip is-${migration.status}`, STATUS_LABELS[migration.status] || migration.status);
+    const chip = el("span", `migration-chip is-${migration.status}${isLive(migration) ? " is-live" : ""}`);
+    chip.append(el("span", "migration-chip-dot"), STATUS_LABELS[migration.status] || migration.status);
+    return chip;
+  }
+
+  function liveRun(migration) {
+    return migration.running ? liveCopy.get(migration.id) || null : null;
+  }
+
+  function copiedBytesNow(migration) {
+    return (migration.copiedBytes || 0) + (liveRun(migration)?.runBytes || 0);
   }
 
   function copiedFraction(migration) {
@@ -550,15 +748,55 @@
       return 1;
     }
     const total = migration.scan?.bytes;
-    return total ? Math.min(0.99, (migration.copiedBytes || 0) / total) : 0;
+    return total ? Math.min(0.99, copiedBytesNow(migration) / total) : 0;
   }
 
-  function progressBar(fraction) {
+  function progressBar(fraction, options = {}) {
     const track = el("div", "migration-progress");
+    if (options.tone) {
+      track.classList.add(`is-${options.tone}`);
+    }
+    if (options.live) {
+      track.classList.add("is-live");
+    }
+    const target = Math.round(fraction * 1000) / 10;
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", "100");
+    track.setAttribute("aria-valuenow", String(Math.round(target)));
     const fill = el("div", "migration-progress-fill");
-    fill.style.width = `${Math.round(fraction * 100)}%`;
+    fill.style.width = `${target}%`;
+    if (options.key) {
+      const start = fills.get(options.key) ?? 0;
+      if (start !== target) {
+        fill.style.setProperty("--from", `${start}%`);
+        fill.classList.add("is-growing");
+      }
+      fills.set(options.key, target);
+    }
     track.appendChild(fill);
     return track;
+  }
+
+  function percentLabel(fraction, key) {
+    const target = Math.round(fraction * 100);
+    const label = el("span", "migration-percent", `${target}%`);
+    const start = fills.get(`pct:${key}`) ?? 0;
+    if (start !== target) {
+      label.style.setProperty("--pct-from", String(start));
+      label.style.setProperty("--pct-to", String(target));
+      label.classList.add("is-ticking");
+    }
+    fills.set(`pct:${key}`, target);
+    return label;
+  }
+
+  function migrationProgress(migration, key) {
+    return progressBar(copiedFraction(migration), {
+      key,
+      tone: STATUS_TONES[migration.status],
+      live: isLive(migration),
+    });
   }
 
   function taskLine(migration) {
@@ -570,7 +808,9 @@
 
   function copyingLine(migration) {
     if (migration.running) {
-      return "Copying now. You can follow it on the Jobs dashboard.";
+      const speed = liveRun(migration)?.speed;
+      const pace = speed ? " at " + speed : "";
+      return `Copying now${pace}. You can follow it on the Jobs dashboard.`;
     }
     if (migration.queued) {
       return "Waiting for the current job to finish.";
@@ -604,19 +844,52 @@
     return lines[migration.status]?.() || "";
   }
 
-  function migrationCard(migration) {
-    const card = el("button", "migration-card");
+  function statusLineClass(migration) {
+    const failed = migration.status === "copying" && migration.lastOutcome === "failed" && !migration.running;
+    return `migration-status-line${failed ? " is-danger" : ""}`;
+  }
+
+  function migrationCard(migration, index) {
+    const card = el("button", `migration-card${isLive(migration) ? " is-live" : ""}`);
     card.type = "button";
+    card.style.setProperty("--i", String(Math.min(index, 8)));
     card.addEventListener("click", () => openDetail(migration.id));
     const head = el("div", "migration-card-head");
-    head.append(el("strong", null, migration.name), statusChip(migration));
+    head.append(el("strong", "migration-card-title", migration.name), statusChip(migration));
+    const meta = el("div", "migration-card-meta");
+    meta.append(el("span", statusLineClass(migration), statusLine(migration)), percentLabel(copiedFraction(migration), `card:${migration.id}`));
     card.append(
       head,
-      el("span", "migration-paths", `${migration.source} → ${migration.destination}`),
-      progressBar(copiedFraction(migration)),
-      el("span", "migration-status-line", statusLine(migration)),
+      routeLine(migration.source, migration.destination, Boolean(migration.running)),
+      migrationProgress(migration, `card:${migration.id}`),
+      meta,
     );
     return card;
+  }
+
+  function emptyState() {
+    const empty = el("div", "migration-empty");
+    const art = el("div", "migration-empty-art");
+    const from = el("span", "migration-empty-cloud");
+    from.append(icon("cloud"));
+    const to = el("span", "migration-empty-cloud is-target");
+    to.append(icon("cloud"));
+    const arrow = el("span", "migration-arrow");
+    arrow.append(icon("arrowRight"));
+    art.append(from, arrow, to);
+    const features = el("ul", "migration-features");
+    for (const text of ["Copies in the background, over days if it has to", "Picks up where it left off after any stop", "Checks every single file at the end"]) {
+      const item = el("li");
+      item.append(icon("check"), text);
+      features.appendChild(item);
+    }
+    empty.append(
+      art,
+      el("h3", "migration-empty-title", "Moving to a new cloud?"),
+      el("p", "migration-intro", "Pick where your files are now and where they should go. Glasswing handles the rest."),
+      features,
+    );
+    return empty;
   }
 
   function listView() {
@@ -624,20 +897,17 @@
     const finished = migrations.filter((migration) => !isActive(migration));
     const parts = [];
     if (!migrations.length) {
-      const empty = el("div", "migration-empty");
-      empty.append(
-        el("span", "migration-empty-icon", "☁→☁"),
-        el("p", "vault-intro", "Moving to a new cloud? Pick where your files are now and where they should go. Glasswing does the copying in the background over as many days as it needs, then checks every single file."),
-      );
-      parts.push(empty);
+      parts.push(emptyState());
     }
+    let index = 0;
+    const cards = (items) => items.map((migration) => migrationCard(migration, index++));
     if (active.length) {
-      parts.push(el("h3", "migration-section-title", "In progress"), ...active.map(migrationCard));
+      parts.push(el("h3", "migration-section-title", "In progress"), ...cards(active));
     }
     if (finished.length) {
-      parts.push(el("h3", "migration-section-title", "Finished"), ...finished.map(migrationCard));
+      parts.push(el("h3", "migration-section-title", "Finished"), ...cards(finished));
     }
-    parts.push(navRow(button("New migration", "primary", () => openNew(), remotes.length < 1)));
+    parts.push(navRow(button("New migration", "primary", () => openNew(), remotes.length < 1, { icon: "plus" })));
     return parts;
   }
 
@@ -646,7 +916,9 @@
       return null;
     }
     const details = el("details", "migration-report");
-    details.appendChild(el("summary", null, `${title} (${formatCount(total)})`));
+    const summary = el("summary");
+    summary.append(el("span", null, title), el("span", "migration-report-count", formatCount(total)));
+    details.appendChild(summary);
     const list = el("ul");
     for (const item of items) {
       list.appendChild(el("li", null, item));
@@ -670,7 +942,7 @@
 
   function removeButton(migration) {
     const armed = armedRemove === migration.id;
-    return button(armed ? "Click again to remove" : "Remove", `secondary${armed ? " danger" : ""}`, () => {
+    return button(armed ? "Click again to remove" : "Remove", `secondary migration-remove${armed ? " danger is-armed" : ""}`, () => {
       if (!armed) {
         armedRemove = migration.id;
         render();
@@ -691,11 +963,11 @@
   }
 
   function cleanupConfirm(migration) {
-    const box = el("div", "vault-note is-bad migration-cleanup");
+    const box = el("div", "migration-note is-bad migration-cleanup");
     const ack = el("input");
     ack.type = "checkbox";
-    const label = el("label", "vault-check");
-    label.append(ack, document.createTextNode(` Delete ${formatCount(migration.verify?.matched)} files from ${migration.source}`));
+    const label = el("label", "migration-check");
+    label.append(ack, el("span", null, `Delete ${formatCount(migration.verify?.matched)} files from ${migration.source}`));
     const go = button("Delete originals", "danger", () => {
       view = { name: "detail", id: migration.id };
       void act(() => bridge.cleanupMigration(migration.id), "Nothing was deleted");
@@ -703,12 +975,12 @@
     ack.addEventListener("change", () => {
       go.disabled = !ack.checked;
     });
-    box.append(
+    const copy = el("p", "migration-cleanup-text");
+    copy.append(
       el("strong", null, "This deletes the originals."),
-      document.createTextNode(" Glasswing checks everything one more time first and only deletes files that are identical on the new side. Anything that changed in the meantime stays put."),
-      label,
-      navRow(button("Not now", "secondary", () => openDetail(migration.id)), go),
+      " Glasswing checks everything one more time first and only deletes files that are identical on the new side. Anything that changed in the meantime stays put.",
     );
+    box.append(copy, label, navRow(button("Not now", "secondary", () => openDetail(migration.id)), go));
     return box;
   }
 
@@ -740,6 +1012,19 @@
     return actions;
   }
 
+  function detailHero(migration) {
+    const hero = el("div", `migration-hero${isLive(migration) ? " is-live" : ""}`);
+    const top = el("div", "migration-hero-top");
+    const total = migration.scan?.bytes;
+    let caption = total == null ? "" : `${formatBytes(total)} in total`;
+    if (migration.status === "copying" && total != null) {
+      caption = `${formatBytes(copiedBytesNow(migration))} of ${formatBytes(total)} copied`;
+    }
+    top.append(percentLabel(copiedFraction(migration), `detail:${migration.id}`), el("span", "migration-hero-caption", caption));
+    hero.append(top, migrationProgress(migration, `detail:${migration.id}`), el("p", statusLineClass(migration), statusLine(migration)));
+    return hero;
+  }
+
   function detailView() {
     const migration = migrations.find((item) => item.id === view.id);
     if (!migration) {
@@ -749,23 +1034,20 @@
     head.append(el("h3", "migration-detail-title", migration.name), statusChip(migration));
 
     const rows = [
-      ["From", migration.source],
-      ["To", migration.destination],
       ["Mode", migration.mode === "move" ? "Move (originals deleted after checking)" : "Copy (originals stay)"],
       ["Schedule", migration.startTime ? `Nightly at ${migration.startTime} for ${migration.windowHours} h` : "Runs until done, retries daily"],
       ["Size", migration.scan?.bytes == null ? "—" : `${formatCount(migration.scan.files)} files · ${formatBytes(migration.scan.bytes)}`],
-      ["Copied so far", `${formatBytes(migration.copiedBytes || 0)} in ${formatCount(migration.runs || 0)} run${migration.runs === 1 ? "" : "s"}`],
+      ["Copied so far", `${formatBytes(copiedBytesNow(migration))} in ${formatCount(migration.runs || 0)} run${migration.runs === 1 ? "" : "s"}`],
     ];
 
     const parts = [
-      button("← All migrations", "secondary migration-back", () => openList()),
+      button("All migrations", "migration-back", () => openList(), false, { icon: "back" }),
       head,
-      progressBar(copiedFraction(migration)),
-      el("p", "migration-status-line", statusLine(migration)),
-      summaryList(rows),
+      routeLine(migration.source, migration.destination, Boolean(migration.running)),
+      detailHero(migration),
     ];
     if (migration.jobMissing) {
-      parts.push(el("div", "vault-note is-warn", "The saved job for this migration was removed, so it can't continue. Remove the migration and start a new one."));
+      parts.push(note("warn", "The saved job for this migration was removed, so it can't continue. Remove the migration and start a new one."));
     }
     const verify = migration.verify;
     if (verify && !verify.error && migration.status === "needs-attention") {
@@ -775,6 +1057,7 @@
         reportList("Couldn't check", verify.samples?.errors || [], verify.errors),
       ].filter(Boolean));
     }
+    parts.push(summaryList(rows));
     if (view.confirmCleanup && migration.status === "verified") {
       parts.push(cleanupConfirm(migration));
     } else {
@@ -783,17 +1066,83 @@
     return parts;
   }
 
-  function render() {
-    let parts;
+  function viewState() {
     if (view.name === "new" && draft) {
-      const steps = [whereStep, checkStep, planStep];
-      parts = [stepper(draft.step), ...steps[draft.step]()];
-    } else if (view.name === "detail") {
-      parts = detailView();
-    } else {
-      parts = listView();
+      let phase = "";
+      if (draft.step === 1) {
+        phase = draft.scanning ? "scanning" : draft.scanError ? "error" : "result";
+      }
+      return { key: `new:${draft.step}:${phase}`, rank: 1 + draft.step, step: draft.step };
     }
-    ui.body.replaceChildren(...parts);
+    if (view.name === "detail" && migrations.some((item) => item.id === view.id)) {
+      return { key: `detail:${view.id}`, rank: 4, step: -1 };
+    }
+    return { key: "list", rank: 0, step: -1 };
+  }
+
+  function motionFor(next) {
+    if (rendered.key === null) {
+      return "open";
+    }
+    if (rendered.key === next.key) {
+      return "";
+    }
+    if (next.rank > rendered.rank) {
+      return "forward";
+    }
+    if (next.rank < rendered.rank) {
+      return "back";
+    }
+    return "swap";
+  }
+
+  function focusedKey() {
+    const active = document.activeElement;
+    return active && ui.dialog.contains(active) ? active.dataset?.focus || null : null;
+  }
+
+  function resolveMotion(next, now) {
+    const motion = motionFor(next);
+    if (!motion && rendered.motion && now - rendered.motionAt < 600) {
+      return { motion: rendered.motion, motionAt: rendered.motionAt };
+    }
+    return { motion, motionAt: now };
+  }
+
+  function viewParts() {
+    if (view.name === "new" && draft) {
+      return [whereStep, checkStep, planStep][draft.step]();
+    }
+    if (view.name === "detail") {
+      return detailView();
+    }
+    return listView();
+  }
+
+  function render() {
+    const next = viewState();
+    const now = performance.now();
+    const { motion, motionAt } = resolveMotion(next, now);
+    const focusKey = focusedKey();
+    const parts = viewParts();
+    const nav = ui.foot && parts.at(-1)?.classList?.contains("migration-nav") ? parts.pop() : null;
+    const pane = el("div", "migration-pane");
+    if (motion) {
+      pane.dataset.motion = motion;
+      pane.style.setProperty("--motion-offset", `${Math.round(motionAt - now)}ms`);
+    }
+    pane.append(...parts);
+    const inWizard = view.name === "new" && draft;
+    ui.body.replaceChildren(...(inWizard ? [stepper(draft.step, rendered.step)] : []), pane);
+    ui.foot?.replaceChildren(...(nav ? [nav] : []));
+    if (motion && motionAt === now) {
+      ui.body.scrollTop = 0;
+    }
+    rendered = { ...next, motion, motionAt };
+    freshChoice = null;
+    if (focusKey) {
+      ui.dialog.querySelector(`[data-focus="${focusKey}"]`)?.focus({ preventScroll: true });
+    }
   }
 
   function openList() {
@@ -817,6 +1166,8 @@
     ui.dialog.classList.remove("hidden");
     ui.dialog.setAttribute("aria-hidden", "false");
     view = { name: "list" };
+    rendered = { key: null, rank: 0, step: -1 };
+    fills = new Map();
     render();
     try {
       remotes = await bridge.listRemoteEntries();
@@ -847,13 +1198,19 @@
     });
     bridge.onMigrationsChanged?.(() => void refresh());
     bridge.onMigrationProgress?.((payload) => {
-      progress.set(payload.id, payload);
+      (payload.kind === "copy" ? liveCopy : progress).set(payload.id, payload);
       if (!ui.dialog.classList.contains("hidden")) {
         queueRender();
       }
     });
-    bridge.onJobStarted?.(() => void refresh());
-    bridge.onJobFinished?.(() => setTimeout(() => void refresh(), 500));
+    bridge.onJobStarted?.(() => {
+      liveCopy.clear();
+      void refresh();
+    });
+    bridge.onJobFinished?.(() => {
+      liveCopy.clear();
+      setTimeout(() => void refresh(), 500);
+    });
     void refresh();
   }
 

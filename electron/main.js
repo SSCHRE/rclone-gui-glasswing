@@ -103,19 +103,75 @@ function normalizeBwlimit(value) {
 }
 
 const THEMES = {
-  glass: { background: "#080b10", nativeTheme: "dark" },
-  material: { background: "#f0f4f9", nativeTheme: "light" },
-  "material-dark": { background: "#131314", nativeTheme: "dark" },
+  glass: { background: "#06070b", nativeTheme: "dark", titlebarSymbol: "#c9cfe6" },
+  bootstrap: { background: "#ffffff", nativeTheme: "light", titlebarSymbol: "#212529" },
+  pico: { background: "#13171f", nativeTheme: "dark", titlebarSymbol: "#c2c7d0" },
+  catppuccin: {
+    nativeTheme: "system",
+    light: { background: "#eff1f5", titlebarSymbol: "#4c4f69" },
+    dark: { background: "#1e1e2e", titlebarSymbol: "#cdd6f4" },
+  },
 };
+
+function themeColors(theme) {
+  const entry = THEMES[theme];
+  if (entry.nativeTheme !== "system") {
+    return entry;
+  }
+  return nativeTheme.shouldUseDarkColors ? entry.dark : entry.light;
+}
 
 function getTheme() {
   const theme = getAppSettings().theme;
   return Object.hasOwn(THEMES, theme) ? theme : "glass";
 }
 
+const UI_SCALE_MIN = 0.8;
+const UI_SCALE_MAX = 1.6;
+
+function isValidUiScale(scale) {
+  return Number.isFinite(scale) && scale >= UI_SCALE_MIN && scale <= UI_SCALE_MAX;
+}
+
+function getUiScale() {
+  const scale = Number(getAppSettings().uiScale);
+  return isValidUiScale(scale) ? scale : 1;
+}
+
+const TITLEBAR_HEIGHT = 44;
+const customTitlebarSupported = process.platform === "win32";
+let customTitlebarActive = false;
+
+function wantsCustomTitlebar() {
+  return customTitlebarSupported && getAppSettings().customTitlebar !== false;
+}
+
+function titlebarOverlay(theme, scale) {
+  return {
+    color: "#00000000",
+    symbolColor: themeColors(theme).titlebarSymbol,
+    height: Math.round(TITLEBAR_HEIGHT * scale),
+  };
+}
+
+function refreshTitlebarOverlay(window, theme = getTheme(), scale = getUiScale()) {
+  if (customTitlebarActive && window && !window.isDestroyed()) {
+    window.setTitleBarOverlay(titlebarOverlay(theme, scale));
+  }
+}
+
 function applyNativeTheme(theme) {
   nativeTheme.themeSource = THEMES[theme].nativeTheme;
 }
+
+nativeTheme.on("updated", () => {
+  const theme = getTheme();
+  if (THEMES[theme].nativeTheme !== "system" || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.setBackgroundColor(themeColors(theme).background);
+  refreshTitlebarOverlay(mainWindow, theme);
+});
 
 function getBwlimit() {
   try {
@@ -518,8 +574,13 @@ function createWindow() {
 
   const initialSize = getInitialContentSize();
   const icon = resolveAppIcon();
+  customTitlebarActive = wantsCustomTitlebar();
+  const titlebarOptions = customTitlebarActive
+    ? { titleBarStyle: "hidden", titleBarOverlay: titlebarOverlay(theme, getUiScale()) }
+    : {};
 
   mainWindow = new BrowserWindow({
+    ...titlebarOptions,
     width: initialSize.width,
     height: initialSize.height,
     minWidth: WINDOW_ABSOLUTE_MIN_WIDTH,
@@ -527,14 +588,18 @@ function createWindow() {
     useContentSize: true,
     center: true,
     show: false,
-    backgroundColor: THEMES[theme].background,
+    backgroundColor: themeColors(theme).background,
     icon,
     title: "Glasswing",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: [`--glasswing-theme=${theme}`],
+      additionalArguments: [
+        `--glasswing-theme=${theme}`,
+        `--glasswing-ui-scale=${getUiScale()}`,
+        `--glasswing-titlebar=${customTitlebarSupported ? (customTitlebarActive ? "custom" : "native") : "unsupported"}`,
+      ],
     },
   });
 
@@ -637,6 +702,25 @@ async function quitFromTray() {
 
   try {
     if ((await confirmStopActiveJob()) && (await confirmStopServes())) {
+      appQuitting = true;
+      app.quit();
+    }
+  } finally {
+    closeCheckInProgress = false;
+  }
+}
+
+async function restartApp() {
+  if (closeCheckInProgress) {
+    return;
+  }
+  closeCheckInProgress = true;
+
+  try {
+    if ((await confirmStopActiveJob()) && (await confirmStopServes())) {
+      const args = process.argv.slice(1).filter((arg) => arg !== "--hidden" && !arg.startsWith("--upload"));
+      const execPath = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+      app.relaunch({ execPath, args: process.env.PORTABLE_EXECUTABLE_FILE ? [] : args });
       appQuitting = true;
       app.quit();
     }
@@ -1427,8 +1511,31 @@ ipcMain.handle("set-theme", async (event, theme) => {
   }
   await saveAppSettings({ theme });
   applyNativeTheme(theme);
-  BrowserWindow.fromWebContents(event.sender)?.setBackgroundColor(THEMES[theme].background);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  window?.setBackgroundColor(themeColors(theme).background);
+  refreshTitlebarOverlay(window, theme);
   return theme;
+});
+
+ipcMain.handle("set-ui-scale", async (event, scale) => {
+  if (!isValidUiScale(scale)) {
+    throw new Error(`Unsupported text size "${scale}".`);
+  }
+  await saveAppSettings({ uiScale: scale });
+  refreshTitlebarOverlay(BrowserWindow.fromWebContents(event.sender), getTheme(), scale);
+  return scale;
+});
+
+ipcMain.handle("set-custom-titlebar", async (_event, enabled) => {
+  if (!customTitlebarSupported) {
+    throw new Error("Custom title bar is only available on Windows.");
+  }
+  await saveAppSettings({ customTitlebar: Boolean(enabled) });
+  return Boolean(enabled);
+});
+
+ipcMain.handle("restart-app", async () => {
+  await restartApp();
 });
 
 ipcMain.handle("set-bwlimit", async (_event, value) => {
@@ -2917,11 +3024,14 @@ async function startJob(job, { scheduled = null } = {}) {
     scheduled: scheduled ? { name: scheduled.name } : null,
   });
 
+  void attachMigrationToJob(jobState);
+
   const forwardOutput = (stream, type) => {
     stream.on("data", (chunk) => {
       const text = chunk.toString();
       jobState.outputTail = (jobState.outputTail + text).slice(-JOB_OUTPUT_TAIL_CHARS);
       jobState.tracker.push(text);
+      sendMigrationCopyProgress(jobState);
       send("job-output", {
         id: jobState.id,
         type,
@@ -3452,6 +3562,35 @@ async function describeMigrations() {
     });
   }
   return described;
+}
+
+const MIGRATION_PROGRESS_INTERVAL_MS = 1000;
+
+async function attachMigrationToJob(jobState) {
+  if (!jobState.historyId || jobState.job.dryRun) {
+    return;
+  }
+  const migration = await getMigrationStore().findByJob(jobState.historyId).catch(() => null);
+  if (migration?.status === "copying") {
+    jobState.migrationId = migration.id;
+  }
+}
+
+function sendMigrationCopyProgress(jobState) {
+  if (!jobState.migrationId) {
+    return;
+  }
+  const now = Date.now();
+  if (now - (jobState.migrationProgressAt || 0) < MIGRATION_PROGRESS_INTERVAL_MS) {
+    return;
+  }
+  const stats = jobState.tracker.current();
+  const runBytes = migrations.parseSize(stats.transferred);
+  if (runBytes == null) {
+    return;
+  }
+  jobState.migrationProgressAt = now;
+  send("migration-progress", { id: jobState.migrationId, kind: "copy", runBytes, speed: stats.speed });
 }
 
 async function handleMigrationRunFinished(jobState, result) {
