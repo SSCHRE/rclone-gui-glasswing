@@ -14,8 +14,10 @@ const migrations = require("./migrations");
 const remoteSearch = require("./remote-search");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
+const APP_USER_MODEL_ID = app.isPackaged ? "com.rclone.gui.glasswing" : "com.rclone.gui.glasswing.dev";
+
 if (process.platform === "win32") {
-  app.setAppUserModelId("com.rclone.gui.glasswing");
+  app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
 let mainWindow = null;
@@ -645,6 +647,26 @@ function createWindow() {
   if (icon) {
     mainWindow.setIcon(icon);
   }
+  applyTaskbarDetails(mainWindow);
+}
+
+function taskbarRelaunchCommand() {
+  const executable = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  return app.isPackaged ? `"${executable}"` : `"${executable}" "${app.getAppPath()}"`;
+}
+
+function applyTaskbarDetails(window) {
+  const iconPath = resolveAppIconPath();
+  if (process.platform !== "win32" || !iconPath) {
+    return;
+  }
+  window.setAppDetails({
+    appId: APP_USER_MODEL_ID,
+    appIconPath: iconPath,
+    appIconIndex: 0,
+    relaunchCommand: taskbarRelaunchCommand(),
+    relaunchDisplayName: "Glasswing",
+  });
 }
 
 async function confirmStopActiveJob() {
