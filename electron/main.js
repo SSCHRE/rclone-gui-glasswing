@@ -3748,11 +3748,20 @@ async function verifyMigration(id) {
     if (clean) {
       status = migration.mode === "move" ? "verified" : "done";
     }
-    await store.update(id, { status, verify: { ...verify, checkedAt: Date.now() } });
+    await store.update(id, {
+      status,
+      verify: { ...verify, checkedAt: Date.now() },
+      ...(clean ? { completedAt: Date.now(), completionShownAt: null } : {}),
+    });
     notifyInBackground(
-      clean ? `"${migration.name}" is verified` : `"${migration.name}" needs a look`,
-      clean ? `All ${verify.matched.toLocaleString()} files arrived safely.` : "Some files are missing or different. Open the migration to see which.",
+      clean ? `"${migration.name}" finished` : `"${migration.name}" needs a look`,
+      clean
+        ? `All ${verify.matched.toLocaleString()} files arrived safely. Open it to see what's next.`
+        : "Some files are missing or different. Open the migration to see which.",
     );
+    if (clean && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isFocused()) {
+      mainWindow.flashFrame(true);
+    }
     return verify;
   } catch (error) {
     await store.update(id, { status: "needs-attention", verify: { error: error.message, checkedAt: Date.now() } });
@@ -3988,6 +3997,10 @@ ipcMain.handle("migration-verify", async (_event, id) => {
   return verify ? { matched: verify.matched, missing: verify.missing, differ: verify.differ, errors: verify.errors } : null;
 });
 
+ipcMain.handle("migration-seen", async (_event, id) => {
+  await getMigrationStore().update(id, { completionShownAt: Date.now() });
+});
+
 ipcMain.handle("migration-cleanup", async (_event, id) => cleanupMigration(id));
 
 ipcMain.handle("migration-remove", async (_event, id) => {
@@ -4095,7 +4108,7 @@ async function explorerMenuState() {
 }
 
 async function repairExplorerMenu() {
-  if (process.platform !== "win32" || getAppSettings().explorerMenu !== true) {
+  if (process.platform !== "win32" || !app.isPackaged || getAppSettings().explorerMenu !== true) {
     return;
   }
   const { enabled, current } = await getExplorerMenu().status();

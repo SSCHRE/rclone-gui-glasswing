@@ -67,6 +67,9 @@
   let rendered = { key: null, rank: 0, step: -1 };
   let freshChoice = null;
   let fills = new Map();
+  let celebrating = null;
+  let completionOpening = false;
+  const shownCompletions = new Set();
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -200,6 +203,44 @@
     previousStatuses = new Map(migrations.map((migration) => [migration.id, migration.status]));
   }
 
+  function pendingCompletion() {
+    return migrations.find((migration) => migration.completedAt && !migration.completionShownAt && !shownCompletions.has(migration.id) && ["verified", "done"].includes(migration.status));
+  }
+
+  function otherDialogOpen() {
+    return [...document.querySelectorAll(".popup-root:not(.hidden)")].some((root) => root !== ui.dialog);
+  }
+
+  function wizardBusy() {
+    return completionOpening || (!ui.dialog.classList.contains("hidden") && (view.name === "new" || view.name === "detail"));
+  }
+
+  function showCompletion() {
+    const migration = pendingCompletion();
+    if (!migration || otherDialogOpen() || wizardBusy()) {
+      return;
+    }
+    void bridge.markMigrationSeen?.(migration.id);
+    shownCompletions.add(migration.id);
+    celebrating = migration.id;
+    if (ui.dialog.classList.contains("hidden")) {
+      completionOpening = true;
+      void open().then(() => {
+        completionOpening = false;
+        openDetail(migration.id);
+      });
+    } else {
+      openDetail(migration.id);
+    }
+  }
+
+  function completionNote(migration) {
+    const text = migration.mode === "move"
+      ? "All done. Everything was copied and checked. You can delete the originals now or remove this migration from your jobs."
+      : "All done. Everything was copied and checked. You can remove this migration from your jobs whenever you like.";
+    return note("good", [el("strong", null, "Migration finished. "), text]);
+  }
+
   async function refresh() {
     try {
       migrations = await bridge.listMigrations();
@@ -208,6 +249,7 @@
     }
     announceChanges();
     renderBadge();
+    showCompletion();
     if (!ui.dialog.classList.contains("hidden")) {
       render();
     }
@@ -1046,6 +1088,9 @@
       routeLine(migration.source, migration.destination, Boolean(migration.running)),
       detailHero(migration),
     ];
+    if (celebrating === migration.id && ["verified", "done"].includes(migration.status)) {
+      parts.splice(2, 0, completionNote(migration));
+    }
     if (migration.jobMissing) {
       parts.push(note("warn", "The saved job for this migration was removed, so it can't continue. Remove the migration and start a new one."));
     }
@@ -1158,6 +1203,9 @@
   }
 
   function openDetail(id) {
+    if (celebrating !== id) {
+      celebrating = null;
+    }
     view = { name: "detail", id };
     render();
   }
@@ -1212,6 +1260,13 @@
       setTimeout(() => void refresh(), 500);
     });
     void refresh();
+    window.addEventListener("focus", showCompletion);
+    document.addEventListener("visibilitychange", showCompletion);
+    setInterval(() => {
+      if (pendingCompletion()) {
+        showCompletion();
+      }
+    }, 1500);
   }
 
   window.MigrationWizard = { init, open };

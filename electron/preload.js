@@ -135,6 +135,7 @@ openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-prev
   runMigrationNow: (id) => ipcRenderer.invoke("migration-run-now", id),
   verifyMigration: (id) => ipcRenderer.invoke("migration-verify", id),
   cleanupMigration: (id) => ipcRenderer.invoke("migration-cleanup", id),
+  markMigrationSeen: (id) => ipcRenderer.invoke("migration-seen", id),
   removeMigration: (id) => ipcRenderer.invoke("migration-remove", id),
   onMigrationsChanged: (callback) => {
     const listener = () => callback();
