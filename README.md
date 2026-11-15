@@ -133,8 +133,10 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [ ] Rclone self update
 
 ## Screenshots
-![App Screenshot](https://i.ibb.co/tPwg0PsH/Screenshot-2026-07-20-032851.png)
-![App Screenshot2](https://i.ibb.co/gbSwX4RH/electron-lt-Ori2-HGPQ.png)
+![App Screenshot](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg)
+![App Screenshot2](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/browse.jpg)
+![App Screenshot3](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/storage.jpg)
+![App Screenshot4](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/vault.jpg)
 
 ## License
 
