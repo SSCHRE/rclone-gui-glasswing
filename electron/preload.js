@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   skipUpdateVersion: (version) => ipcRenderer.invoke("skip-update-version", version),
   openReleasePage: () => ipcRenderer.invoke("open-release-page"),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
+  checkRcloneUpdate: () => ipcRenderer.invoke("check-rclone-update"),
+  updateRclone: () => ipcRenderer.invoke("update-rclone"),
   listRemotes: () => ipcRenderer.invoke("list-remotes"),
   listRemoteEntries: () => ipcRenderer.invoke("list-remote-entries"),
   getRemoteUsage: (name) => ipcRenderer.invoke("get-remote-usage", name),

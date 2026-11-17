@@ -228,6 +228,53 @@ svg {
   text-overflow: ellipsis;
 }
 
+.version-line .rclone-version-button {
+  display: inline-block;
+  position: relative;
+  padding: 0 2px;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.version-line .rclone-version-button:hover {
+  color: var(--text);
+}
+
+.version-line .rclone-version-button.has-update {
+  padding-right: 12px;
+  overflow: visible;
+}
+
+.version-line .rclone-version-button.has-update::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success-glow);
+}
+
+.version-line .rclone-version-button.is-checking {
+  opacity: 0.6;
+}
+
+.rclone-update-error {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--danger);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rclone-update-error.hidden {
+  display: none;
+}
+
 .app-version {
   color: var(--muted);
   font-weight: 600;

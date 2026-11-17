@@ -1198,6 +1198,92 @@ ipcMain.handle("get-rclone-version", async () => {
   return firstLine || "rclone (unknown version)";
 });
 
+function compareVersions(a, b) {
+  const parts = (value) => String(value).replace(/^v/i, "").split("-")[0].split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const left = parts(a);
+  const right = parts(b);
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const diff = (left[index] || 0) - (right[index] || 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function parseSelfUpdateCheck(output) {
+  const pick = (label) => output.match(new RegExp(`^${label}:\\s+(\\S+)`, "m"))?.[1] || "";
+  const current = pick("yours");
+  const latest = pick("latest");
+  const beta = pick("beta");
+  if (!current || !latest) {
+    throw new Error("Couldn't read the rclone update info.");
+  }
+  return {
+    current,
+    latest,
+    beta,
+    updateAvailable: compareVersions(latest, current) > 0,
+  };
+}
+
+function describeSelfUpdateFailure(stderr) {
+  const text = String(stderr || "").trim();
+  const manager = text.match(/\b(winget|chocolatey|choco|scoop|homebrew|brew|apt|dpkg|snap|pacman|nix|flatpak|rpm|yum|dnf)\b/i)?.[1];
+  if (manager && /package|install/i.test(text)) {
+    return `rclone was installed with ${manager}, update it there.`;
+  }
+  if (/access is denied|permission denied|operation not permitted/i.test(text)) {
+    return `Glasswing can't write to the folder rclone lives in. Run it as administrator or update rclone by hand.\n${text}`;
+  }
+  return text || "rclone selfupdate failed.";
+}
+
+function selfUpdateBlocker() {
+  if (activeJob || jobStarting) {
+    return "A job is still running. Wait for it to finish before updating rclone.";
+  }
+  if (migrationTask) {
+    return "A migration check is still running. Wait for it to finish before updating rclone.";
+  }
+  if (activeUpload || activeDownload) {
+    return "An upload or download is still running. Wait for it to finish before updating rclone.";
+  }
+  if (activeRemoteSearch) {
+    return "A search is still running. Wait for it to finish before updating rclone.";
+  }
+  if (mounts.hasMounts()) {
+    return "Unmount your drives before updating rclone.";
+  }
+  if (serves.hasServes()) {
+    return "Stop your running serves before updating rclone.";
+  }
+  return "";
+}
+
+ipcMain.handle("check-rclone-update", async () => {
+  const result = await runRclone(["selfupdate", "--check"], { timeoutMs: 45000 });
+  if (result.code !== 0) {
+    throw new Error(describeSelfUpdateFailure(result.stderr));
+  }
+  const parsed = parseSelfUpdateCheck(result.stdout);
+  console.log("rclone update check", JSON.stringify(parsed));
+  return parsed;
+});
+
+ipcMain.handle("update-rclone", async () => {
+  const blocker = selfUpdateBlocker();
+  if (blocker) {
+    throw new Error(blocker);
+  }
+  const result = await runRclone(["selfupdate", "--stable"], { timeoutMs: 5 * 60 * 1000 });
+  if (result.code !== 0) {
+    throw new Error(describeSelfUpdateFailure(result.stderr));
+  }
+  const version = await runRclone(["version"], { timeoutMs: 15000 });
+  return version.stdout.split(/\r?\n/)[0].trim() || "rclone (unknown version)";
+});
+
 ipcMain.handle("list-remotes", async () => listRemoteNames());
 
 ipcMain.handle("list-remote-entries", async () => readRemoteEntries());
