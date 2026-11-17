@@ -41,6 +41,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Vault wizard**: Create an rclone crypt vault in the Remote manager
 
 ### Other
+- **Rclone self update**: a dot shows up next to the rclone version when a newer one is out, click it to update rclone without leaving the app
 - **Bandwidth limit**: Set a bandwidth limit. Permanently or between specific hours.
 - **Themes**: Choose between the default glass theme, or Material theme (dark/light)
 
@@ -130,7 +131,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Search remote
 - [x] Cloud migration wizard
 - [ ] Split screen browse
-- [ ] Rclone self update
+- [x] Rclone self update
 
 ## Screenshots
 ![App Screenshot](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg)

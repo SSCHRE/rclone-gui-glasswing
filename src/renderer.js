@@ -64,6 +64,14 @@ const elements = {
   updateSkip: document.getElementById("update-skip"),
   updateDot: document.getElementById("update-dot"),
   updateOpen: document.getElementById("update-open"),
+  rcloneUpdateDialog: document.getElementById("rclone-update-dialog"),
+  rcloneUpdateCurrent: document.getElementById("rclone-update-current"),
+  rcloneUpdateLatest: document.getElementById("rclone-update-latest"),
+  rcloneUpdateNote: document.getElementById("rclone-update-note"),
+  rcloneUpdateError: document.getElementById("rclone-update-error"),
+  rcloneUpdateSkip: document.getElementById("rclone-update-skip"),
+  rcloneUpdateLater: document.getElementById("rclone-update-later"),
+  rcloneUpdateGo: document.getElementById("rclone-update-go"),
   jobHistoryPicker: document.getElementById("job-history-picker"),
   loadJob: document.getElementById("load-job"),
   updateJob: document.getElementById("update-job"),
@@ -798,6 +806,124 @@ async function checkForUpdates({ automatic = false } = {}) {
     }
   }
 }
+const RCLONE_UPDATE_STARTUP_DELAY_MS = UPDATE_STARTUP_DELAY_MS + 4000;
+const RCLONE_SKIP_KEY = "glasswing.skippedRcloneVersion";
+let rcloneUpdate = null;
+let rcloneUpdateBusy = false;
+let rcloneUpdateChecking = false;
+
+function readSkippedRcloneVersion() {
+  try {
+    return localStorage.getItem(RCLONE_SKIP_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeSkippedRcloneVersion(version) {
+  try {
+    localStorage.setItem(RCLONE_SKIP_KEY, version);
+  } catch {
+    return;
+  }
+}
+
+function setRcloneUpdateIndicator(update) {
+  rcloneUpdate = update;
+  elements.version.classList.toggle("has-update", Boolean(update));
+  elements.version.title = update ? `rclone v${update.latest} available` : "Check for an rclone update";
+}
+
+function hideRcloneUpdateDialog() {
+  if (rcloneUpdateBusy) {
+    return;
+  }
+  elements.rcloneUpdateDialog.classList.add("hidden");
+  elements.rcloneUpdateDialog.setAttribute("aria-hidden", "true");
+}
+
+function showRcloneUpdateDialog(update) {
+  elements.rcloneUpdateCurrent.textContent = `v${update.current}`;
+  elements.rcloneUpdateLatest.textContent = `v${update.latest}`;
+  elements.rcloneUpdateError.textContent = "";
+  elements.rcloneUpdateError.classList.add("hidden");
+  elements.rcloneUpdateNote.hidden = false;
+  elements.rcloneUpdateDialog.classList.remove("hidden");
+  elements.rcloneUpdateDialog.setAttribute("aria-hidden", "false");
+  elements.rcloneUpdateGo.focus();
+}
+
+function setRcloneUpdateBusy(busy) {
+  rcloneUpdateBusy = busy;
+  for (const button of [elements.rcloneUpdateSkip, elements.rcloneUpdateLater, elements.rcloneUpdateGo]) {
+    button.disabled = busy;
+  }
+  elements.rcloneUpdateGo.textContent = busy ? "Updating…" : "Update rclone";
+  elements.rcloneUpdateDialog.querySelector(".popup-card").setAttribute("aria-busy", String(busy));
+}
+
+async function checkRcloneUpdate({ automatic = false } = {}) {
+  if (rcloneUpdateChecking || rcloneUpdateBusy) {
+    return;
+  }
+  rcloneUpdateChecking = true;
+  if (!automatic) {
+    elements.version.classList.add("is-checking");
+  }
+  try {
+    const result = await window.rcloneGui.checkRcloneUpdate();
+    if (result.updateAvailable) {
+      const skipped = readSkippedRcloneVersion() === result.latest;
+      setRcloneUpdateIndicator(skipped && automatic ? null : result);
+      if (!automatic) {
+        showRcloneUpdateDialog(result);
+      }
+    } else {
+      setRcloneUpdateIndicator(null);
+      if (!automatic) {
+        showSnackbar({
+          title: "Up to date",
+          message: `rclone is up to date (v${result.current}).`,
+          type: "success",
+        });
+      }
+    }
+  } catch (error) {
+    if (!automatic) {
+      showSnackbar({
+        title: "rclone update check failed",
+        message: error.message || "Could not check for an rclone update",
+        type: "error",
+      });
+    }
+  } finally {
+    rcloneUpdateChecking = false;
+    elements.version.classList.remove("is-checking");
+  }
+}
+
+async function runRcloneUpdate() {
+  if (!rcloneUpdate || rcloneUpdateBusy) {
+    return;
+  }
+  elements.rcloneUpdateError.classList.add("hidden");
+  setRcloneUpdateBusy(true);
+  try {
+    const versionLine = await window.rcloneGui.updateRclone();
+    const version = String(versionLine).replace(/^rclone\s+/, "");
+    setRcloneUpdateBusy(false);
+    setRcloneUpdateIndicator(null);
+    elements.version.textContent = versionLine;
+    hideRcloneUpdateDialog();
+    showSnackbar({ title: "rclone updated", message: `rclone updated to ${version}`, type: "success" });
+  } catch (error) {
+    setRcloneUpdateBusy(false);
+    elements.rcloneUpdateError.textContent = String(error?.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") || "The rclone update failed.";
+    elements.rcloneUpdateError.classList.remove("hidden");
+    elements.rcloneUpdateGo.textContent = "Try again";
+  }
+}
+
 const STORAGE_METER_INPUT_DELAY_MS = 600;
 const pathMeters = window.StorageMeter
   ? {
@@ -1226,6 +1352,30 @@ elements.updateSkip?.addEventListener("click", async () => {
     showSnackbar({ title: "Couldn't skip that version", message: error.message || "", type: "error" });
   }
 });
+elements.version.addEventListener("click", () => {
+  if (rcloneUpdate) {
+    showRcloneUpdateDialog(rcloneUpdate);
+  } else if (window.rcloneGui) {
+    void checkRcloneUpdate();
+  }
+});
+elements.rcloneUpdateLater.addEventListener("click", hideRcloneUpdateDialog);
+elements.rcloneUpdateGo.addEventListener("click", () => void runRcloneUpdate());
+elements.rcloneUpdateSkip.addEventListener("click", () => {
+  const version = rcloneUpdate?.latest;
+  hideRcloneUpdateDialog();
+  if (!version) {
+    return;
+  }
+  writeSkippedRcloneVersion(version);
+  setRcloneUpdateIndicator(null);
+  showSnackbar({
+    title: "Version skipped",
+    message: `You won't be reminded about rclone v${version}. Click the rclone version to check again.`,
+    type: "success",
+  });
+});
+elements.rcloneUpdateDialog.querySelector("[data-rclone-update-close]").addEventListener("click", hideRcloneUpdateDialog);
 elements.updateDialog.querySelector("[data-update-close]").addEventListener("click", hideUpdateDialog);
 elements.updateOpen.addEventListener("click", () => {
   if (updateReleaseUrl) {
@@ -1354,6 +1504,11 @@ document.addEventListener("keydown", (event) => {
       return;
     }
 
+    if (!elements.rcloneUpdateDialog.classList.contains("hidden")) {
+      hideRcloneUpdateDialog();
+      return;
+    }
+
     if (!elements.updateDialog.classList.contains("hidden")) {
       hideUpdateDialog();
       return;
@@ -1465,6 +1620,9 @@ setTimeout(() => {
   void checkForUpdates({ automatic: true });
   setInterval(() => void checkForUpdates({ automatic: true }), UPDATE_RECHECK_MS);
 }, UPDATE_STARTUP_DELAY_MS);
+setTimeout(() => {
+  void checkRcloneUpdate({ automatic: true });
+}, RCLONE_UPDATE_STARTUP_DELAY_MS);
 
 
 

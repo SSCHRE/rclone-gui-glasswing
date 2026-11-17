@@ -36,7 +36,7 @@
             <p class="subtitle version-line">
               <span id="app-version" class="app-version"></span>
               <span class="version-separator" aria-hidden="true">·</span>
-              <span id="rclone-version">Checking rclone...</span>
+              <button id="rclone-version" type="button" class="rclone-version-button" title="Check for an rclone update">Checking rclone...</button>
             </p>
           </div>
           <button id="check-for-updates" type="button" class="icon-button" aria-label="Check for updates" title="Check for updates">
@@ -837,6 +837,27 @@
           <button id="update-skip" type="button" class="secondary update-skip">Skip this version</button>
           <button id="update-later" type="button" class="secondary">Later</button>
           <button id="update-open" type="button" class="primary">View release</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="rclone-update-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-rclone-update-close></div>
+      <div class="popup-card popup-card-form success" role="dialog" aria-modal="true" aria-labelledby="rclone-update-title" aria-describedby="rclone-update-message">
+        <p id="rclone-update-title" class="popup-title">rclone update available</p>
+        <div id="rclone-update-message" class="popup-message">
+          <div class="update-versions">
+            <span id="rclone-update-current" class="update-version"></span>
+            <span class="update-arrow" aria-hidden="true">&rarr;</span>
+            <span id="rclone-update-latest" class="update-version is-latest"></span>
+          </div>
+          <span id="rclone-update-note" class="update-date">Glasswing will replace the rclone program in place. Nothing else on your PC changes.</span>
+          <span id="rclone-update-error" class="rclone-update-error hidden" role="alert"></span>
+        </div>
+        <div class="popup-actions update-actions">
+          <button id="rclone-update-skip" type="button" class="secondary update-skip">Skip this version</button>
+          <button id="rclone-update-later" type="button" class="secondary">Not now</button>
+          <button id="rclone-update-go" type="button" class="primary">Update rclone</button>
         </div>
       </div>
     </div>
