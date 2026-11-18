@@ -47,6 +47,11 @@ const remoteManager = {
   mountStatus: document.getElementById("remote-mount-status"),
   mountForm: document.getElementById("remote-mount-form"),
   mountLetter: document.getElementById("remote-mount-letter"),
+  mountLetterField: document.getElementById("remote-mount-letter").closest(".field"),
+  mountFolderField: document.getElementById("remote-mount-folder-field"),
+  mountFolder: document.getElementById("remote-mount-folder"),
+  mountFolderPick: document.getElementById("remote-mount-folder-pick"),
+  mountTitleText: document.getElementById("remote-mount-title-text"),
   mountCache: document.getElementById("remote-mount-cache"),
   mountReadOnly: document.getElementById("remote-mount-readonly"),
   mountBtn: document.getElementById("remote-mount-btn"),
@@ -54,6 +59,9 @@ const remoteManager = {
   mountOpenBtn: document.getElementById("remote-mount-open"),
   unmountBtn: document.getElementById("remote-unmount-btn"),
   mountHint: document.getElementById("remote-mount-hint"),
+  mountAlert: document.getElementById("remote-mount-alert"),
+  mountAlertText: document.getElementById("remote-mount-alert-text"),
+  mountReconnectBtn: document.getElementById("remote-mount-reconnect"),
   detailAvatar: document.getElementById("remote-detail-avatar"),
 };
 
@@ -66,6 +74,28 @@ let busy = false;
 let mountStatus = null;
 let mountError = "";
 let mountPending = "";
+let mountFailure = null;
+let mountChecking = false;
+const mountFolders = new Map();
+
+function isLinuxMount() {
+  return mountStatus?.platform === "linux";
+}
+
+function mountBlocked() {
+  if (isLinuxMount()) {
+    return !mountStatus.fuse?.available;
+  }
+  return !(mountStatus?.freeDriveLetters || []).length;
+}
+
+function shortMountPoint(mountPoint) {
+  return `…/${mountPoint.split("/").pop()}`;
+}
+
+function defaultMountFolder(name) {
+  return `${mountStatus.mountRoot}/${name.replaceAll("/", "_")}`;
+}
 
 function setBusy(nextBusy) {
   busy = nextBusy;
@@ -90,7 +120,7 @@ function setBusy(nextBusy) {
     }
   }
 
-  if (!nextBusy && !(mountStatus?.freeDriveLetters || []).length) {
+  if (!nextBusy && mountBlocked()) {
     remoteManager.mountBtn.disabled = true;
   }
 }
@@ -166,7 +196,7 @@ function renderRemoteList() {
     if (mount) {
       const drive = document.createElement("span");
       drive.className = "remote-mount-badge";
-      drive.textContent = mount.mountPoint;
+      drive.textContent = isLinuxMount() ? shortMountPoint(mount.mountPoint) : mount.mountPoint;
       drive.title = `Mounted at ${mount.mountPoint}`;
       const badges = document.createElement("span");
       badges.className = "remote-list-item-badges";
@@ -211,6 +241,12 @@ function renderMountLetters() {
   }
 }
 
+function renderLinuxMountFields(name) {
+  if (!remoteManager.mountFolder.matches(":focus") && !mountPending) {
+    remoteManager.mountFolder.value = mountFolders.get(name) || defaultMountFolder(name);
+  }
+}
+
 function renderMountPanel() {
   const section = remoteManager.mountSection;
   if (!selectedRemoteName || !mountStatus?.supported) {
@@ -220,29 +256,85 @@ function renderMountPanel() {
 
   section.classList.remove("hidden");
   const mount = getMount(selectedRemoteName);
+  const linuxMode = isLinuxMount();
+  remoteManager.mountLetterField.classList.toggle("hidden", linuxMode);
+  remoteManager.mountFolderField.classList.toggle("hidden", !linuxMode);
+  if (linuxMode) {
+    remoteManager.mountTitleText.textContent = "Mount as folder";
+    remoteManager.mountOpenBtn.textContent = "Open folder";
+  }
 
   remoteManager.mountForm.classList.toggle("hidden", Boolean(mount));
   remoteManager.mountActive.classList.toggle("hidden", !mount);
-  remoteManager.mountStatus.textContent = mount ? `Mounted at ${mount.mountPoint}` : mountPending;
+  remoteManager.mountStatus.textContent = mount ? `Mounted at ${mount.mountPoint}` : mountChecking ? "Checking sign-in…" : mountPending;
   remoteManager.mountStatus.classList.toggle("is-mounted", Boolean(mount));
 
   let hint;
   if (mount) {
     const details = [mount.readOnly ? "read-only" : "", `${mount.cacheMode} cache`].filter(Boolean).join(", ");
-    hint = `Mounted with ${details}. The drive stays available while Glasswing is open.`;
+    hint = `Mounted with ${details}. The ${isLinuxMount() ? "folder" : "drive"} stays available while Glasswing is open.`;
   } else {
-    if (!mountPending) {
+    if (linuxMode) {
+      renderLinuxMountFields(selectedRemoteName);
+    } else if (!mountPending) {
       renderMountLetters();
     }
-    hint = "Show this remote as a drive in File Explorer. It stays mounted while Glasswing is open.";
+    hint = linuxMode
+      ? "Show this remote as a folder in your file manager. It stays mounted while Glasswing is open."
+      : "Show this remote as a drive in File Explorer. It stays mounted while Glasswing is open.";
+    if (linuxMode && !mountStatus.fuse?.available) {
+      hint = mountStatus.fuse?.message || "Mounting needs FUSE. Install fuse3 (e.g. `sudo apt install fuse3`) and try again.";
+    }
   }
 
   remoteManager.mountHint.textContent = mountError || hint;
   remoteManager.mountHint.classList.toggle("is-error", Boolean(mountError));
-  remoteManager.mountBtn.textContent = mountPending ? "Mounting…" : "Mount";
+  renderMountAlert();
+  remoteManager.mountBtn.textContent = mountChecking ? "Checking sign-in…" : mountPending ? "Mounting…" : "Mount";
   if (!busy) {
-    remoteManager.mountBtn.disabled = !(mountStatus.freeDriveLetters || []).length;
+    remoteManager.mountBtn.disabled = mountBlocked();
   }
+}
+
+function selectedRemoteUsesOAuth() {
+  const entry = remoteEntries.find((item) => item.name === selectedRemoteName);
+  return optionNeedsAuthorize(providers.find((item) => item.Name === entry?.type));
+}
+
+function mountFailureText(failure, name) {
+  if (failure.code === "auth") {
+    if (remoteEntries.find((item) => item.name === name)?.type === "crypt") {
+      return `The sign-in or credentials for the storage behind ${name} were rejected. Reconnect the remote it uses and try again.`;
+    }
+    return selectedRemoteUsesOAuth()
+      ? `Your sign-in for ${name} has expired. Reconnect and try again.`
+      : `The credentials for ${name} were rejected. Check them in the remote's config and try again.`;
+  }
+  if (failure.code === "unreachable") {
+    return `Couldn't reach ${name}. Check your connection and try again.`;
+  }
+  return failure.message || `Couldn't check ${name} before mounting.`;
+}
+
+function renderMountAlert() {
+  const failure = mountFailure?.name === selectedRemoteName ? mountFailure : null;
+  remoteManager.mountAlert.classList.toggle("hidden", !failure);
+  if (!failure) {
+    return;
+  }
+  remoteManager.mountAlertText.textContent = mountFailureText(failure, failure.name);
+  const canReconnect = failure.code === "auth" && selectedRemoteUsesOAuth();
+  remoteManager.mountReconnectBtn.classList.toggle("hidden", !canReconnect);
+}
+
+async function reconnectFromMountAlert() {
+  const name = selectedRemoteName;
+  if (!name) {
+    return;
+  }
+  mountFailure = null;
+  await reconnectSelectedRemote();
+  renderMountPanel();
 }
 
 async function refreshMountStatus() {
@@ -266,28 +358,43 @@ function cleanIpcError(error, fallback) {
 
 async function mountSelectedRemote() {
   const name = selectedRemoteName;
+  const linuxMode = isLinuxMount();
   const driveLetter = remoteManager.mountLetter.value;
-  if (!name || !driveLetter) {
+  const mountPoint = remoteManager.mountFolder.value.trim();
+  if (!name || (linuxMode ? !mountPoint : !driveLetter)) {
     return;
   }
 
   mountError = "";
-  mountPending = `Mounting at ${driveLetter}:…`;
+  mountFailure = null;
+  if (linuxMode) {
+    mountFolders.set(name, mountPoint);
+  }
+  mountPending = linuxMode ? `Mounting at ${mountPoint}…` : `Mounting at ${driveLetter}:…`;
+  mountChecking = true;
   setBusy(true);
   renderMountPanel();
   try {
-    mountStatus = await window.rcloneGui.mountRemote({
+    const result = await window.rcloneGui.mountRemote({
       remote: name,
       driveLetter,
+      mountPoint,
       cacheMode: remoteManager.mountCache.value,
       readOnly: remoteManager.mountReadOnly.checked,
     });
+    if (result?.failure) {
+      mountFailure = { ...result.failure, name };
+      mountPending = "";
+    } else {
+      mountStatus = result;
+    }
   } catch (error) {
     mountError = cleanIpcError(error, "Could not mount the remote.");
     mountPending = "";
     await refreshMountStatus();
   } finally {
     mountPending = "";
+    mountChecking = false;
     setBusy(false);
     renderRemoteList();
     renderMountPanel();
@@ -965,8 +1072,25 @@ remoteManager.reconnectBtn.addEventListener("click", () => {
 remoteManager.openWizardBtn.addEventListener("click", () => {
   void window.rcloneGui.openRcloneConfig();
 });
+remoteManager.mountReconnectBtn.addEventListener("click", () => {
+  void reconnectFromMountAlert();
+});
 remoteManager.mountBtn.addEventListener("click", () => {
   void mountSelectedRemote();
+});
+remoteManager.mountFolderPick.addEventListener("click", async () => {
+  const picked = await window.rcloneGui.pickFolder();
+  if (picked) {
+    remoteManager.mountFolder.value = picked;
+    if (selectedRemoteName) {
+      mountFolders.set(selectedRemoteName, picked);
+    }
+  }
+});
+remoteManager.mountFolder.addEventListener("input", () => {
+  if (selectedRemoteName) {
+    mountFolders.set(selectedRemoteName, remoteManager.mountFolder.value);
+  }
 });
 remoteManager.unmountBtn.addEventListener("click", () => {
   void unmountSelectedRemote();
@@ -982,6 +1106,13 @@ remoteManager.mountOpenBtn.addEventListener("click", () => {
 });
 window.rcloneGui?.onMountsChanged?.((payload) => {
   const event = payload?.event;
+  if (event?.type === "checked") {
+    if (event.remote === selectedRemoteName) {
+      mountChecking = false;
+      renderMountPanel();
+    }
+    return;
+  }
   if (event?.unexpected && event.remote === selectedRemoteName) {
     mountError = `${event.mountPoint} was unmounted unexpectedly: ${event.message}`;
   }
