@@ -155,3 +155,54 @@ jobs:
             dist/*.deb
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Read version
+        id: version
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Release ${{ steps.version.outputs.tag }} already exists, bump the version in package.json to make a new one."
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download builds
+        if: steps.exists.outputs.found == 'false'
+        uses: actions/download-artifact@v5
+        with:
+          pattern: glasswing-*-${{ github.sha }}
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        if: steps.exists.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*.exe artifacts/*.AppImage artifacts/*.deb artifacts/*.blockmap artifacts/latest*.yml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No build files found"; exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
+            --target "${{ github.sha }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
