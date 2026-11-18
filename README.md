@@ -124,16 +124,16 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Mount a remote
 - [x] Drag and drop upload
 - [x] Scheduled jobs
-- [ ] macOS build (`.dmg` / `.app`)
 - [x] Linux build (AppImage / `.deb`)
 - [x] Sync preview
 - [x] Run/job history
 - [x] Rclone serve
 - [x] Search remote
 - [x] Cloud migration wizard
-- [ ] Split screen browse
 - [x] Rclone self update
-
+- [ ] Self updater
+- [ ] Split screen browse
+- [ ] macOS build (`.dmg` / `.app`)
 ## Screenshots
 ![App Screenshot](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg)
 ![App Screenshot2](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/browse.jpg)
