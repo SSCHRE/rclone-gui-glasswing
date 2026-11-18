@@ -23,7 +23,15 @@ function normalizeMountPoint(input, homeDir) {
     return "";
   }
   const normalized = path.posix.normalize(value);
-  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+  return trimTrailingSlashes(normalized);
+}
+
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 1 && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function detectFuse({ pathEnv, exists }) {
@@ -35,7 +43,7 @@ function detectFuse({ pathEnv, exists }) {
 }
 
 function unescapeMountinfo(field) {
-  return field.replace(/\\([0-7]{3})/g, (_match, octal) => String.fromCharCode(parseInt(octal, 8)));
+  return field.replace(/\\([0-7]{3})/g, (_match, octal) => String.fromCharCode(Number.parseInt(octal, 8)));
 }
 
 function parseMountinfo(text) {
@@ -56,7 +64,7 @@ function parseMountinfo(text) {
 }
 
 function isMountedIn(text, dir) {
-  const target = path.posix.normalize(dir).replace(/(.)\/+$/, "$1");
+  const target = trimTrailingSlashes(path.posix.normalize(dir));
   return parseMountinfo(text).some((entry) => entry.mountPoint === target);
 }
 

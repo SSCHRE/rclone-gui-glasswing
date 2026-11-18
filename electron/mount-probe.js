@@ -70,7 +70,7 @@ function summarise(stderr) {
     .replace(/^Failed to lsjson:\s*/, "")
     .replace(/^error in ListJSON:\s*/, "")
     .replace(/^Failed to create file system for "[^"]*":\s*/, "")
-    .replace(/<[^>]*>/g, " ")
+    .split("<").map((part, index) => (index === 0 ? part : part.slice(part.indexOf(">") + 1))).join(" ")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned.length > MAX_DETAIL ? `${cleaned.slice(0, MAX_DETAIL).trim()}…` : cleaned;
