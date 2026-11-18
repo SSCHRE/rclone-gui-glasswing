@@ -35,7 +35,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Quick insert remote**: drop `remote:path` into source or destination
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal
-- **Remote mounting**: Mount your rclone remote to as a system drive
+- **Remote mounting**: mount a remote as a drive on Windows (needs WinFsp) or as a folder on Linux (needs FUSE)
 - **Serve a remote**: share a remote (or a folder in it) over HTTP, WebDAV, FTP or SFTP, just on your pc or to other devices on your network
 - **Storage overview**: Monitor your remote space/usage in 1 simple view
 - **Vault wizard**: Create an rclone crypt vault in the Remote manager
@@ -51,7 +51,8 @@ Glasswing does **not** store or collect ANY credentials. It uses your existing r
 
 1. **[rclone](https://rclone.org/install/)** installed and available on your `PATH`
 2. At least one remote configured (`rclone config` or the in-app remote manager), or local paths only
-3. For development: **[Node.js](https://nodejs.org/)** 18+ and npm
+3. Only if you want to mount remotes: **WinFsp** on Windows, or **fuse3** on Linux (`sudo apt install fuse3`)
+4. For development: **[Node.js](https://nodejs.org/)** 18+ and npm
 
 Verify rclone works in a terminal:
 
