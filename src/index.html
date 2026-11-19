@@ -989,6 +989,35 @@
         <div id="migration-foot" class="migration-foot"></div>
       </div>
     </div>
+    <div id="run-detail-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-run-detail-close></div>
+      <div class="popup-card popup-card-run-detail" role="dialog" aria-modal="true" aria-labelledby="run-detail-title">
+        <div class="run-detail-head">
+          <div class="run-detail-head-text">
+            <p id="run-detail-title" class="popup-title"></p>
+            <p id="run-detail-tags" class="run-detail-tags"></p>
+          </div>
+          <div class="run-detail-nav">
+            <button id="run-detail-newer" type="button" class="secondary run-detail-icon-btn" aria-label="Newer run" title="Newer run (left arrow)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <button id="run-detail-older" type="button" class="secondary run-detail-icon-btn" aria-label="Older run" title="Older run (right arrow)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+            <button id="run-detail-x" type="button" class="secondary run-detail-icon-btn" aria-label="Close" title="Close (Esc)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <div id="run-detail-body" class="run-detail-body"></div>
+        <div class="popup-actions run-detail-actions">
+          <button id="run-detail-copy-log" type="button" class="secondary">Copy log</button>
+          <button id="run-detail-load" type="button" class="secondary">Load job</button>
+          <button id="run-detail-close" type="button" class="primary">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="schedule-dialog" class="popup-root hidden" aria-hidden="true">
       <div class="popup-backdrop" data-schedule-close></div>
       <div class="popup-card popup-card-form popup-card-schedule" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
