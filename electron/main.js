@@ -13,6 +13,7 @@ const { createRunHistory, createRunTracker } = require("./run-history");
 const scheduler = require("./scheduler");
 const migrations = require("./migrations");
 const remoteSearch = require("./remote-search");
+const { createAppUpdater } = require("./app-updater");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
 const APP_USER_MODEL_ID = app.isPackaged ? "com.rclone.gui.glasswing" : "com.rclone.gui.glasswing.dev";
@@ -1039,7 +1040,9 @@ ipcMain.handle("open-release-page", async () => {
   await shell.openExternal(latestReleaseUrl);
 });
 
-ipcMain.handle("check-for-updates", async () => {
+let latestRelease = null;
+
+function fetchLatestRelease() {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: "api.github.com",
@@ -1061,21 +1064,17 @@ ipcMain.handle("check-for-updates", async () => {
         if (res.statusCode === 200) {
           try {
             const release = JSON.parse(data);
-            const latestVersion = release.tag_name.replace(/^v/, "");
-            const currentVersion = app.getVersion();
+            if (typeof release.tag_name !== "string") {
+              throw new Error("no tag");
+            }
+            latestRelease = release;
             latestReleaseUrl = isOwnReleaseUrl(release.html_url) ? release.html_url : RELEASES_PAGE_URL;
-
-            resolve({
-              currentVersion,
-              latestVersion,
-              hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
-              skipped: getAppSettings().skippedUpdateVersion === latestVersion,
-              releaseUrl: latestReleaseUrl,
-              publishedAt: release.published_at,
-            });
+            resolve(release);
           } catch (error) {
             reject(new Error("Failed to parse GitHub release data"));
           }
+        } else if (res.statusCode === 429 || (res.statusCode === 403 && res.headers["x-ratelimit-remaining"] === "0")) {
+          reject(new Error("GitHub is rate limiting requests right now. Try again in a bit."));
         } else {
           reject(new Error(`GitHub API returned status ${res.statusCode}`));
         }
@@ -1092,7 +1091,37 @@ ipcMain.handle("check-for-updates", async () => {
 
     req.end();
   });
+}
+
+ipcMain.handle("check-for-updates", async () => {
+  const release = await fetchLatestRelease();
+  const latestVersion = release.tag_name.replace(/^v/, "");
+  const currentVersion = app.getVersion();
+
+  return {
+    currentVersion,
+    latestVersion,
+    hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+    skipped: getAppSettings().skippedUpdateVersion === latestVersion,
+    releaseUrl: latestReleaseUrl,
+    publishedAt: release.published_at,
+  };
 });
+
+const appUpdater = createAppUpdater({
+  app,
+  send,
+  ensureRelease: async () => latestRelease || fetchLatestRelease(),
+  getBlocker: () => selfUpdateBlocker("Glasswing"),
+  prepareQuit: () => {
+    appQuitting = true;
+  },
+});
+
+ipcMain.handle("get-update-capability", async () => appUpdater.getCapability());
+ipcMain.handle("download-update", async () => appUpdater.download());
+ipcMain.handle("install-update", async () => appUpdater.install());
+ipcMain.handle("get-downloaded-update", async () => appUpdater.getDownloaded());
 
 ipcMain.handle("skip-update-version", async (_event, version) => {
   const text = String(version || "").trim();
@@ -1240,24 +1269,24 @@ function describeSelfUpdateFailure(stderr) {
   return text || "rclone selfupdate failed.";
 }
 
-function selfUpdateBlocker() {
+function selfUpdateBlocker(target = "rclone") {
   if (activeJob || jobStarting) {
-    return "A job is still running. Wait for it to finish before updating rclone.";
+    return `A job is still running. Wait for it to finish before updating ${target}.`;
   }
   if (migrationTask) {
-    return "A migration check is still running. Wait for it to finish before updating rclone.";
+    return `A migration check is still running. Wait for it to finish before updating ${target}.`;
   }
   if (activeUpload || activeDownload) {
-    return "An upload or download is still running. Wait for it to finish before updating rclone.";
+    return `An upload or download is still running. Wait for it to finish before updating ${target}.`;
   }
   if (activeRemoteSearch) {
-    return "A search is still running. Wait for it to finish before updating rclone.";
+    return `A search is still running. Wait for it to finish before updating ${target}.`;
   }
   if (mounts.hasMounts()) {
-    return "Unmount your drives before updating rclone.";
+    return `Unmount your drives before updating ${target}.`;
   }
   if (serves.hasServes()) {
-    return "Stop your running serves before updating rclone.";
+    return `Stop your running serves before updating ${target}.`;
   }
   return "";
 }
@@ -4280,6 +4309,7 @@ void app.whenReady().then(() => {
     queueExplorerUploads(launchUploads);
   }
   void repairExplorerMenu();
+  void appUpdater.cleanupOnStartup();
 
   void refreshSchedules();
   setTimeout(() => void checkSchedules(), SCHEDULER_FIRST_CHECK_MS);

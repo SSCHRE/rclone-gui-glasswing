@@ -56,6 +56,8 @@ jobs:
           node --check electron/storage-history.js
           node --check src/theme.js
           node --check scripts/generate-icons.js
+          node --check electron/app-updater.js
+          node --check electron/portable-updater.js
 
       - name: Generate icons
         run: npm run icons
@@ -153,6 +155,8 @@ jobs:
           path: |
             dist/*.AppImage
             dist/*.deb
+            dist/*.blockmap
+            dist/latest-linux.yml
           if-no-files-found: error
           retention-days: 14
 

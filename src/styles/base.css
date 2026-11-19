@@ -1500,6 +1500,36 @@ button:focus-visible {
   font-size: var(--fs-sm);
 }
 
+.update-progress {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.update-progress.hidden,
+.update-date.hidden,
+.update-notes-link.hidden {
+  display: none;
+}
+
+.update-date + .update-date,
+.update-date + .rclone-update-error {
+  margin-top: var(--space-2);
+}
+
+.update-notes-link {
+  display: block;
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .update-actions {
   flex-wrap: wrap;
 }
@@ -1508,6 +1538,10 @@ button:focus-visible {
 .update-actions .secondary {
   flex: 0 0 auto;
   min-width: 88px;
+}
+
+.update-actions [hidden] {
+  display: none;
 }
 
 .update-actions .update-skip {

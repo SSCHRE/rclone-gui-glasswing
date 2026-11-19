@@ -23,6 +23,15 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   skipUpdateVersion: (version) => ipcRenderer.invoke("skip-update-version", version),
+  getUpdateCapability: () => ipcRenderer.invoke("get-update-capability"),
+  downloadUpdate: () => ipcRenderer.invoke("download-update"),
+  installUpdate: () => ipcRenderer.invoke("install-update"),
+  getDownloadedUpdate: () => ipcRenderer.invoke("get-downloaded-update"),
+  onAppUpdateProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("app-update-progress", listener);
+    return () => ipcRenderer.removeListener("app-update-progress", listener);
+  },
   openReleasePage: () => ipcRenderer.invoke("open-release-page"),
   getRcloneVersion: () => ipcRenderer.invoke("get-rclone-version"),
   checkRcloneUpdate: () => ipcRenderer.invoke("check-rclone-update"),
