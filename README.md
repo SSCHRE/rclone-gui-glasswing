@@ -144,7 +144,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Search remote
 - [x] Cloud migration wizard
 - [x] Rclone self update
-- [ ] Self updater
+- [x] Self updater
 - [ ] Split screen browse
 - [ ] macOS build (`.dmg` / `.app`)
 ## Screenshots
