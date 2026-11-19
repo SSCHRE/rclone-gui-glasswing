@@ -64,6 +64,14 @@ const elements = {
   updateSkip: document.getElementById("update-skip"),
   updateDot: document.getElementById("update-dot"),
   updateOpen: document.getElementById("update-open"),
+  updateTitle: document.getElementById("update-title"),
+  updateProgress: document.getElementById("update-progress"),
+  updateProgressBar: document.querySelector("#update-progress .migration-progress"),
+  updateProgressFill: document.getElementById("update-progress-fill"),
+  updateProgressText: document.getElementById("update-progress-text"),
+  updateHint: document.getElementById("update-hint"),
+  updateError: document.getElementById("update-error"),
+  updateNotes: document.getElementById("update-notes"),
   rcloneUpdateDialog: document.getElementById("rclone-update-dialog"),
   rcloneUpdateCurrent: document.getElementById("rclone-update-current"),
   rcloneUpdateLatest: document.getElementById("rclone-update-latest"),
@@ -738,9 +746,191 @@ let updateReleaseUrl = "";
 let shownUpdateVersion = "";
 let pendingUpdate = null;
 
+let updateCapability = { canSelfUpdate: false };
+let updatePhase = "available";
+let updateProgress = null;
+let updateErrorMessage = "";
+let shownUpdate = null;
+
+function formatUpdateBytes(size) {
+  if (!Number.isFinite(size) || size < 0) {
+    return "0 B";
+  }
+  if (size < 1024) {
+    return `${Math.round(size)} B`;
+  }
+  const units = ["KB", "MB", "GB"];
+  let value = size / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function cleanUpdateError(error, fallback) {
+  return String(error?.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") || fallback;
+}
+
 function hideUpdateDialog() {
+  if (updatePhase === "installing") {
+    return;
+  }
   elements.updateDialog.classList.add("hidden");
   elements.updateDialog.setAttribute("aria-hidden", "true");
+}
+
+function setUpdateHint(text) {
+  elements.updateHint.textContent = text;
+  elements.updateHint.classList.toggle("hidden", !text);
+}
+
+function renderUpdateDialog() {
+  const selfUpdate = updateCapability.canSelfUpdate;
+  const phase = updatePhase;
+  const busy = phase === "downloading" || phase === "installing";
+
+  elements.updateTitle.textContent = phase === "downloaded" || phase === "installing" ? "Ready to update" : "Update available";
+
+  const showProgress = phase === "downloading";
+  elements.updateProgress.classList.toggle("hidden", !showProgress);
+  if (showProgress) {
+    const percent = Math.max(0, Math.min(100, Number(updateProgress?.percent) || 0));
+    elements.updateProgressFill.style.width = `${percent}%`;
+    elements.updateProgressBar.setAttribute("aria-valuenow", String(Math.round(percent)));
+    elements.updateProgressText.textContent = updateProgress && updateProgress.total
+      ? `${formatUpdateBytes(updateProgress.transferred)} of ${formatUpdateBytes(updateProgress.total)} · ${formatUpdateBytes(updateProgress.bytesPerSecond)}/s`
+      : "Starting download…";
+  }
+
+  elements.updateError.textContent = updateErrorMessage;
+  elements.updateError.classList.toggle("hidden", !updateErrorMessage);
+
+  let hint = "";
+  if (!selfUpdate) {
+    hint = updateCapability.reason || "";
+  } else if (phase === "downloaded" || phase === "installing") {
+    if (updateCapability.kind === "deb") {
+      hint = "Linux will ask for your password to install it.";
+    } else if (updateCapability.kind === "portable") {
+      hint = "Glasswing will close for a moment and start again.";
+    }
+  }
+  setUpdateHint(hint);
+
+  elements.updateNotes.classList.toggle("hidden", !selfUpdate || !updateReleaseUrl);
+
+  elements.updateSkip.hidden = phase === "downloaded" || phase === "installing";
+  elements.updateSkip.disabled = busy;
+  elements.updateLater.disabled = phase === "installing";
+  elements.updateLater.textContent = selfUpdate && (phase === "available" || phase === "downloading" || phase === "error") ? "Not now" : "Later";
+
+  const primary = elements.updateOpen;
+  primary.disabled = busy;
+  if (!selfUpdate) {
+    primary.textContent = "View release";
+    primary.hidden = !updateReleaseUrl;
+  } else {
+    primary.hidden = false;
+    primary.textContent = {
+      available: "Download and install",
+      downloading: "Downloading…",
+      downloaded: "Restart to update",
+      installing: "Restarting…",
+      error: "Try again",
+    }[phase];
+  }
+  elements.updateDialog.querySelector(".popup-card").setAttribute("aria-busy", String(busy));
+}
+
+function normalizeAppUpdateProgress(progress) {
+  return {
+    percent: Number(progress?.percent) || 0,
+    transferred: Number(progress?.transferred) || 0,
+    total: Number(progress?.total) || 0,
+    bytesPerSecond: Number(progress?.bytesPerSecond) || 0,
+  };
+}
+
+async function loadUpdateCapability() {
+  try {
+    const capability = await window.rcloneGui.getUpdateCapability?.();
+    updateCapability = capability && typeof capability === "object" ? capability : { canSelfUpdate: false };
+  } catch {
+    updateCapability = { canSelfUpdate: false };
+  }
+}
+
+async function syncDownloadedUpdate(version) {
+  if (updatePhase === "downloading" || updatePhase === "installing") {
+    return;
+  }
+  try {
+    const downloaded = await window.rcloneGui.getDownloadedUpdate?.();
+    if (downloaded?.version && downloaded.version === version) {
+      updatePhase = "downloaded";
+      updateErrorMessage = "";
+    } else if (updatePhase === "downloaded") {
+      updatePhase = "available";
+    }
+  } catch {
+    return;
+  }
+}
+
+async function startUpdateDownload() {
+  if (updatePhase === "downloading" || updatePhase === "installing") {
+    return;
+  }
+  const version = shownUpdateVersion;
+  updatePhase = "downloading";
+  updateProgress = null;
+  updateErrorMessage = "";
+  renderUpdateDialog();
+  try {
+    await window.rcloneGui.downloadUpdate();
+    if (version !== shownUpdateVersion) {
+      return;
+    }
+    updatePhase = "downloaded";
+    const dialogOpen = !elements.updateDialog.classList.contains("hidden");
+    renderUpdateDialog();
+    if (!dialogOpen) {
+      showSnackbar({
+        title: "Update ready",
+        message: "Click the refresh button next to the version to restart and finish updating.",
+        type: "success",
+      });
+    }
+  } catch (error) {
+    if (version !== shownUpdateVersion) {
+      return;
+    }
+    updatePhase = "error";
+    updateErrorMessage = cleanUpdateError(error, "The update download failed.");
+    renderUpdateDialog();
+  }
+}
+
+async function startUpdateInstall() {
+  if (updatePhase !== "downloaded") {
+    return;
+  }
+  const version = shownUpdateVersion;
+  updatePhase = "installing";
+  updateErrorMessage = "";
+  renderUpdateDialog();
+  try {
+    await window.rcloneGui.installUpdate();
+  } catch (error) {
+    if (version !== shownUpdateVersion) {
+      return;
+    }
+    updatePhase = "downloaded";
+    updateErrorMessage = cleanUpdateError(error, "Couldn't restart to update.");
+    renderUpdateDialog();
+  }
 }
 
 function setUpdateIndicator(update) {
@@ -750,7 +940,14 @@ function setUpdateIndicator(update) {
   elements.checkForUpdates.setAttribute("aria-label", elements.checkForUpdates.title);
 }
 
-function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseUrl }) {
+async function showUpdateDialog(update) {
+  const { currentVersion, latestVersion, publishedAt, releaseUrl } = update;
+  if (shownUpdate?.latestVersion !== latestVersion) {
+    updatePhase = "available";
+    updateProgress = null;
+    updateErrorMessage = "";
+  }
+  shownUpdate = update;
   shownUpdateVersion = latestVersion;
   updateReleaseUrl = releaseUrl || "";
   elements.updateCurrent.textContent = `v${currentVersion}`;
@@ -761,10 +958,14 @@ function showUpdateDialog({ currentVersion, latestVersion, publishedAt, releaseU
     ? `Released ${published.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`
     : "";
 
-  elements.updateOpen.hidden = !updateReleaseUrl;
+  await loadUpdateCapability();
+  if (updateCapability.canSelfUpdate) {
+    await syncDownloadedUpdate(latestVersion);
+  }
+  renderUpdateDialog();
   elements.updateDialog.classList.remove("hidden");
   elements.updateDialog.setAttribute("aria-hidden", "false");
-  (updateReleaseUrl ? elements.updateOpen : elements.updateLater).focus();
+  (elements.updateOpen.hidden || elements.updateOpen.disabled ? elements.updateLater : elements.updateOpen).focus();
 }
 
 async function checkForUpdates({ automatic = false } = {}) {
@@ -777,9 +978,9 @@ async function checkForUpdates({ automatic = false } = {}) {
     if (result.hasUpdate) {
       setUpdateIndicator(result.skipped && automatic ? null : result);
       if (!automatic) {
-        showUpdateDialog(result);
+        await showUpdateDialog(result);
       } else if (!result.skipped && shownUpdateVersion !== result.latestVersion) {
-        showUpdateDialog(result);
+        await showUpdateDialog(result);
       }
     } else if (automatic) {
       setUpdateIndicator(null);
@@ -1378,10 +1579,28 @@ elements.rcloneUpdateSkip.addEventListener("click", () => {
 elements.rcloneUpdateDialog.querySelector("[data-rclone-update-close]").addEventListener("click", hideRcloneUpdateDialog);
 elements.updateDialog.querySelector("[data-update-close]").addEventListener("click", hideUpdateDialog);
 elements.updateOpen.addEventListener("click", () => {
+  if (!updateCapability.canSelfUpdate) {
+    if (updateReleaseUrl) {
+      void window.rcloneGui.openReleasePage();
+    }
+    hideUpdateDialog();
+  } else if (updatePhase === "downloaded") {
+    void startUpdateInstall();
+  } else {
+    void startUpdateDownload();
+  }
+});
+elements.updateNotes.addEventListener("click", () => {
   if (updateReleaseUrl) {
     void window.rcloneGui.openReleasePage();
   }
-  hideUpdateDialog();
+});
+window.rcloneGui?.onAppUpdateProgress?.((progress) => {
+  if (updatePhase !== "downloading") {
+    return;
+  }
+  updateProgress = normalizeAppUpdateProgress(progress);
+  renderUpdateDialog();
 });
 elements.popupRoot.querySelector("[data-popup-close]").addEventListener("click", hidePopup);
 
@@ -1536,6 +1755,10 @@ elements.stopJob.addEventListener("click", async () => {
 });
 
 elements.checkForUpdates.addEventListener("click", () => {
+  if (pendingUpdate && (updatePhase === "downloading" || updatePhase === "downloaded")) {
+    void showUpdateDialog(pendingUpdate);
+    return;
+  }
   void checkForUpdates();
 });
 

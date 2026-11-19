@@ -832,6 +832,15 @@
             <span id="update-latest" class="update-version is-latest"></span>
           </div>
           <span id="update-date" class="update-date"></span>
+          <div id="update-progress" class="update-progress hidden">
+            <div class="migration-progress is-live" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="update-progress-text">
+              <div id="update-progress-fill" class="migration-progress-fill"></div>
+            </div>
+            <span id="update-progress-text" class="update-date"></span>
+          </div>
+          <span id="update-hint" class="update-date hidden"></span>
+          <span id="update-error" class="rclone-update-error hidden" role="alert"></span>
+          <button id="update-notes" type="button" class="update-notes-link hidden">Release notes</button>
         </div>
         <div class="popup-actions update-actions">
           <button id="update-skip" type="button" class="secondary update-skip">Skip this version</button>
