@@ -42,6 +42,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 
 ### Other
 - **Rclone self update**: a dot shows up next to the rclone version when a newer one is out, click it to update rclone without leaving the app
+- **Self update**: Glasswing can update itself from inside the app (installer, portable exe, AppImage and .deb). On Linux the .deb asks for your password to install.
 - **Bandwidth limit**: Set a bandwidth limit. Permanently or between specific hours.
 - **Themes**: Choose between the default glass theme, or Material theme (dark/light)
 
@@ -81,6 +82,18 @@ npm start
 Icons are regenerated automatically before `npm run build` (`npm run icons`).
 
 CI builds the portable app and installer on every push to `main`; download them from the workflow run’s artifacts.
+
+### Releasing
+
+For maintainers:
+
+1. Bump `version` in `package.json`
+2. Merge/push to `main`
+3. CI builds Windows + Linux and makes a new release `vX.Y.Z` with everything attached (notes get generated from the PRs, edit them after if you want)
+
+If that version already has a release, CI just builds and skips the release, so pushes without a version bump don't do anything weird.
+
+The update files (`latest.yml`, `latest-linux.yml`, blockmaps) get attached too, that's what the in-app updater reads. Download counts on the release show installs + updates per version.
 
 ### Path examples
 
