@@ -315,7 +315,7 @@ function loadRun(run) {
 }
 
 function detailStat(label, value, tone) {
-  const card = el("div", `stat-card run-detail-stat${tone ? ` is-${tone}` : ""}`);
+  const card = el("div", tone ? `stat-card run-detail-stat is-${tone}` : "stat-card run-detail-stat");
   card.append(el("span", "stat-label", label), el("span", "stat-value", value));
   return card;
 }
@@ -350,7 +350,7 @@ function detailField(label, value, { copy = false, wide = false, mono = true } =
 }
 
 function averageSpeed(run) {
-  return run.speed && !/^0(\.0+)?\s*[A-Za-z]*\/s$/i.test(run.speed) ? run.speed : "—";
+  return run.speed && !/^0(?:\.0+)? ?[a-z]*\/s$/i.test(run.speed) ? run.speed : "—";
 }
 
 function detailFlags(run) {
@@ -365,7 +365,7 @@ function detailFlags(run) {
 }
 
 function renderLogLines(box, text) {
-  const lines = text.replace(/\s+$/, "").split(/\r?\n/);
+  const lines = text.trimEnd().split(/\r?\n/);
   box.replaceChildren(
     ...lines.map((line) => el("span", ERROR_LINE.test(line) ? "run-detail-log-line is-error" : "run-detail-log-line", line || " ")),
   );
@@ -519,7 +519,7 @@ function renderTabAlert() {
   const lastFailed = runs[0]?.status === "failed";
   ui.tab?.classList.toggle("has-alert", lastFailed);
   if (ui.tab) {
-    ui.tab.title = lastFailed ? `Last run failed: ${runs[0].name || `${runs[0].source} → ${runs[0].destination}`}` : "";
+    ui.tab.title = lastFailed ? `Last run failed: ${runs[0].name || [runs[0].source, runs[0].destination].join(" → ")}` : "";
   }
 }
 
