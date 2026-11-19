@@ -575,6 +575,27 @@
   flex: 1 1 200px;
 }
 
+.remote-mount-controls .remote-mount-folder {
+  order: -1;
+  flex: 1 1 100%;
+}
+
+.remote-mount-folder-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.remote-mount-folder-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.popup-card-remote-manager .remote-mount-controls .remote-mount-folder-row button {
+  min-width: 0;
+  flex: 0 0 auto;
+  height: var(--control-h);
+}
+
 .remote-mount-controls .checkbox {
   min-height: var(--control-h);
   margin: 0;
@@ -594,6 +615,28 @@
   color: var(--muted);
   font-size: var(--fs-sm);
   line-height: 1.5;
+}
+
+.remote-mount-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.remote-mount-alert.hidden {
+  display: none;
+}
+
+.remote-mount-alert > span {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.popup-card-remote-manager .remote-mount-alert button {
+  flex: 0 0 auto;
+  height: var(--control-h);
 }
 
 .remote-mount-hint:empty {

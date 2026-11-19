@@ -1149,7 +1149,7 @@
                 <div class="remote-mount-heading">
                   <h4 id="remote-mount-title" class="remote-mount-title">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M6 16h.01" /><path d="M10 16h.01" /></svg>
-                    <span>Mount as drive</span>
+                    <span id="remote-mount-title-text">Mount as drive</span>
                   </h4>
                   <span id="remote-mount-status" class="remote-mount-status"></span>
                 </div>
@@ -1166,6 +1166,13 @@
                       <option value="off">Off (no local cache)</option>
                     </select>
                   </label>
+                  <div id="remote-mount-folder-field" class="field remote-mount-field remote-mount-folder hidden">
+                    <label class="field-label" for="remote-mount-folder">Mount folder</label>
+                    <div class="remote-mount-folder-row">
+                      <input id="remote-mount-folder" type="text" spellcheck="false" autocomplete="off" />
+                      <button id="remote-mount-folder-pick" type="button" class="secondary">Choose folder…</button>
+                    </div>
+                  </div>
                   <label class="checkbox remote-mount-readonly">
                     <input id="remote-mount-readonly" type="checkbox" />
                     Read-only
@@ -1175,6 +1182,10 @@
                 <div id="remote-mount-active" class="remote-mount-controls hidden">
                   <button id="remote-mount-open" type="button" class="primary">Open in Explorer</button>
                   <button id="remote-unmount-btn" type="button" class="danger">Unmount</button>
+                </div>
+                <div id="remote-mount-alert" class="vault-note is-warn remote-mount-alert hidden" role="alert">
+                  <span id="remote-mount-alert-text"></span>
+                  <button id="remote-mount-reconnect" type="button" class="secondary hidden">Reconnect</button>
                 </div>
                 <p id="remote-mount-hint" class="remote-mount-hint"></p>
               </section>

@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
+const mountProbe = require("./mount-probe");
 const serves = require("./serves");
 const { createStorageHistory } = require("./storage-history");
 const { createRunHistory, createRunTracker } = require("./run-history");
@@ -1683,13 +1684,38 @@ ipcMain.handle("set-bwlimit", async (_event, value) => {
   return { bwlimit, mountsUpdated, mountsNeedRemount: isTimetable ? mounts.listMounts().length : 0 };
 });
 
+async function probeRemoteAccess(remote) {
+  let result;
+  try {
+    const run = await runRclone(rcloneArgs("lsjson", [`${remote}:`], mountProbe.PROBE_FLAGS), {
+      timeoutMs: mountProbe.PROBE_TIMEOUT_MS,
+    });
+    result = mountProbe.classifyProbe(run);
+  } catch (error) {
+    result = /timed out/i.test(error.message || "")
+      ? mountProbe.classifyProbe({ timedOut: true })
+      : { ok: false, code: "other", detail: error.message || "" };
+  }
+  if (result.ok) {
+    return null;
+  }
+  return { code: result.code, message: mountProbe.probeMessage(result, remote), detail: result.detail };
+}
+
 ipcMain.handle("mount-remote", async (_event, payload) => {
   const remote = await configuredRemote(payload?.remote);
+
+  const failure = await probeRemoteAccess(remote);
+  if (failure) {
+    return { failure };
+  }
+  sendMountsChanged({ type: "checked", remote });
 
   const mount = await mounts.startMount(
     {
       remote,
       driveLetter: payload.driveLetter,
+      mountPoint: payload.mountPoint,
       cacheMode: payload.cacheMode,
       readOnly: Boolean(payload.readOnly),
       bwlimit: getBwlimit(),
@@ -1764,7 +1790,7 @@ ipcMain.handle("open-mount", async (_event, remote) => {
   if (!mount) {
     throw new Error(`"${remote}" is not mounted.`);
   }
-  const error = await shell.openPath(`${mount.mountPoint}\\`);
+  const error = await shell.openPath(process.platform === "win32" ? `${mount.mountPoint}\\` : mount.mountPoint);
   if (error) {
     throw new Error(error);
   }
