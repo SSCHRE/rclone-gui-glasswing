@@ -1255,6 +1255,7 @@ function readSplitState() {
 function applySplitRatio(ratio) {
   splitRatio = Math.min(0.75, Math.max(0.25, ratio));
   browseUi.panesHost.style.setProperty("--split-ratio", String(splitRatio));
+  browseUi.divider.setAttribute("aria-valuenow", String(Math.round(splitRatio * 100)));
 }
 
 function setActivePane(pane) {
@@ -1308,6 +1309,7 @@ function bindDivider() {
   const divider = browseUi.divider;
   const host = browseUi.panesHost;
   let dragging = false;
+  divider.tabIndex = 0;
 
   divider.addEventListener("pointerdown", (event) => {
     dragging = true;
