@@ -460,54 +460,6 @@
 
       <main id="browse-view" class="layout browse-layout hidden" data-app-view="browse" hidden>
         <section class="panel browse-panel">
-          <div class="browse-toolbar">
-            <label class="field browse-remote-field">
-              <span class="browse-sr-only">Remote</span>
-              <svg class="browse-remote-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
-              </svg>
-              <select id="browse-remote-picker">
-                <option value="">Select a configured remote...</option>
-              </select>
-            </label>
-            <div class="browse-toolbar-actions" role="group" aria-label="Folder navigation">
-              <button id="browse-up" type="button" class="browse-tool-btn" aria-label="Up one folder" data-tip="Up one folder" disabled>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M14 9 9 4 4 9" />
-                  <path d="M20 20h-7a4 4 0 0 1-4-4V4" />
-                </svg>
-              </button>
-              <button id="browse-refresh" type="button" class="browse-tool-btn" aria-label="Reload" data-tip="Reload" disabled>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                  <path d="M21 3v5h-5" />
-                </svg>
-              </button>
-            </div>
-            <div class="browse-location-row">
-              <nav id="browse-breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
-              <div id="browse-storage" class="browse-storage"></div>
-            </div>
-            <div class="field browse-search-field">
-              <label class="field-label browse-sr-only" for="browse-search">Search</label>
-              <div class="browse-search-box">
-                <span class="browse-search-icon" aria-hidden="true">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="m20.5 20.5-4.3-4.3" />
-                  </svg>
-                </span>
-                <input id="browse-search" type="search" placeholder="Search this folder" autocomplete="off" spellcheck="false" title="Name, *.pdf, or several words" disabled />
-                <button id="browse-search-go" type="button" class="browse-search-go" aria-label="Search" title="Search (Enter)" disabled>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M20 4v7a4 4 0 0 1-4 4H4" />
-                    <path d="m9 10-5 5 5 5" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-
           <div id="browse-pending-upload" class="browse-pending-upload hidden" aria-live="polite">
             <svg class="browse-pending-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 16V4M7 9l5-5 5 5" />
@@ -523,45 +475,8 @@
             </div>
           </div>
 
-          <div id="browse-search-bar" class="browse-search-bar hidden" aria-live="polite">
-            <span id="browse-search-spinner" class="browse-loading-spinner browse-search-spinner" aria-hidden="true"></span>
-            <span id="browse-search-summary" class="browse-search-summary"></span>
-            <button id="browse-search-stop" type="button" class="secondary">Stop</button>
-            <button id="browse-search-exit" type="button" class="secondary">Back to folder</button>
-          </div>
-
-          <div class="browse-table-wrap">
-            <div class="browse-table-scroll">
-              <table class="browse-table" aria-label="Remote contents">
-                <thead>
-                  <tr>
-                    <th scope="col" class="browse-col-sortable" data-sort="name">Name</th>
-                    <th scope="col" class="browse-col-size browse-col-sortable" data-sort="size">Size</th>
-                    <th scope="col" class="browse-col-modified browse-col-sortable" data-sort="modified">Modified</th>
-                  </tr>
-                </thead>
-                <tbody id="browse-entries"></tbody>
-              </table>
-              <p id="browse-empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
-            </div>
-            <div id="browse-loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
-              <div class="browse-loading-pill">
-                <span class="browse-loading-spinner" aria-hidden="true"></span>
-                <span class="browse-loading-text">Loading…</span>
-                <button id="browse-cancel" type="button" class="browse-loading-cancel">Cancel</button>
-              </div>
-            </div>
-            <div class="browse-drop-hint" aria-hidden="true">
-              <span class="browse-drop-hint-icon">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 13v8" />
-                  <path d="M4 14.9A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.24" />
-                  <path d="m8 17 4-4 4 4" />
-                </svg>
-              </span>
-              <strong>Drop to upload</strong>
-              <span>Files land in the folder you're looking at</span>
-            </div>
+          <div id="browse-panes" class="browse-panes">
+            <div id="browse-divider" class="browse-divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0" hidden></div>
           </div>
 
           <div class="browse-footer">
@@ -606,6 +521,23 @@
                   <span class="browse-action-label">Use as destination</span>
                 </button>
               </div>
+              <div id="browse-transfer-group" class="browse-action-group browse-action-group-transfer hidden">
+                <button id="browse-copy-across" type="button" class="secondary browse-action" aria-label="Copy to the other pane" data-tip="Copy to the other pane" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="12" height="12" rx="2" />
+                    <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <span class="browse-action-label">Copy →</span>
+                </button>
+                <button id="browse-move-across" type="button" class="secondary browse-action" aria-label="Move to the other pane" data-tip="Move to the other pane" disabled>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12h13" />
+                    <path d="m12 6 6 6-6 6" />
+                    <path d="M21 4v16" />
+                  </svg>
+                  <span class="browse-action-label">Move →</span>
+                </button>
+              </div>
               <div class="browse-action-group browse-action-group-selection">
                 <button id="browse-delete" type="button" class="danger browse-action" aria-label="Delete" data-tip="Delete" disabled>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -636,6 +568,104 @@
             </div>
           </div>
         </section>
+      <template id="browse-pane-template">
+        <div class="browse-pane">
+          <div class="browse-toolbar">
+            <label class="field browse-remote-field">
+              <span class="browse-sr-only">Remote</span>
+              <svg class="browse-remote-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+              </svg>
+              <select data-ref="remote-picker">
+                <option value="">Select a configured remote...</option>
+              </select>
+            </label>
+            <div class="browse-toolbar-actions" role="group" aria-label="Folder navigation">
+              <button data-ref="up" type="button" class="browse-tool-btn" aria-label="Up one folder" data-tip="Up one folder" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 9 9 4 4 9" />
+                  <path d="M20 20h-7a4 4 0 0 1-4-4V4" />
+                </svg>
+              </button>
+              <button data-ref="refresh" type="button" class="browse-tool-btn" aria-label="Reload" data-tip="Reload" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+              </button>
+              <button type="button" class="browse-tool-btn browse-split-btn" data-ref="split" aria-pressed="false" aria-label="Split view" data-tip="Split view (Ctrl+\)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M12 4v16" />
+                </svg>
+              </button>
+            </div>
+            <div class="browse-location-row">
+              <nav data-ref="breadcrumbs" class="browse-breadcrumbs" aria-label="Path"></nav>
+              <div data-ref="storage" class="browse-storage"></div>
+            </div>
+            <div class="field browse-search-field">
+              <label class="field-label browse-sr-only">Search</label>
+              <div class="browse-search-box">
+                <span class="browse-search-icon" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20.5 20.5-4.3-4.3" />
+                  </svg>
+                </span>
+                <input data-ref="search" type="search" placeholder="Search this folder" autocomplete="off" spellcheck="false" title="Name, *.pdf, or several words" disabled />
+                <button data-ref="search-go" type="button" class="browse-search-go" aria-label="Search" title="Search (Enter)" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+                    <path d="m9 10-5 5 5 5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div data-ref="search-bar" class="browse-search-bar hidden" aria-live="polite">
+            <span data-ref="search-spinner" class="browse-loading-spinner browse-search-spinner" aria-hidden="true"></span>
+            <span data-ref="search-summary" class="browse-search-summary"></span>
+            <button data-ref="search-stop" type="button" class="secondary">Stop</button>
+            <button data-ref="search-exit" type="button" class="secondary">Back to folder</button>
+          </div>
+
+          <div class="browse-table-wrap" data-ref="table-wrap">
+            <div class="browse-table-scroll">
+              <table class="browse-table" aria-label="Remote contents">
+                <thead>
+                  <tr>
+                    <th scope="col" class="browse-col-sortable" data-sort="name">Name</th>
+                    <th scope="col" class="browse-col-size browse-col-sortable" data-sort="size">Size</th>
+                    <th scope="col" class="browse-col-modified browse-col-sortable" data-sort="modified">Modified</th>
+                  </tr>
+                </thead>
+                <tbody data-ref="entries"></tbody>
+              </table>
+              <p data-ref="empty" class="browse-empty hidden">Select a remote to browse its files and folders.</p>
+            </div>
+            <div data-ref="loading" class="browse-loading hidden" aria-live="polite" aria-busy="false">
+              <div class="browse-loading-pill">
+                <span class="browse-loading-spinner" aria-hidden="true"></span>
+                <span class="browse-loading-text">Loading…</span>
+                <button data-ref="cancel" type="button" class="browse-loading-cancel">Cancel</button>
+              </div>
+            </div>
+            <div class="browse-drop-hint" aria-hidden="true">
+              <span class="browse-drop-hint-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 13v8" />
+                  <path d="M4 14.9A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.24" />
+                  <path d="m8 17 4-4 4 4" />
+                </svg>
+              </span>
+              <strong>Drop to upload</strong>
+              <span>Files land in the folder you're looking at</span>
+            </div>
+          </div>
+        </div>
+      </template>
       </main>
       <main id="storage-view" class="layout storage-layout hidden" data-app-view="storage" hidden>
         <section class="panel storage-panel">
@@ -1364,6 +1394,25 @@
             </svg>
           </span>
           <span class="context-menu-label">Download</span>
+        </button>
+        <button id="context-copy-across" type="button" class="context-menu-item hidden" data-action="copy-across" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="12" height="12" rx="2" />
+              <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Copy to other side</span>
+        </button>
+        <button id="context-move-across" type="button" class="context-menu-item hidden" data-action="move-across" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12h13" />
+              <path d="m12 6 6 6-6 6" />
+              <path d="M21 4v16" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Move to other side</span>
         </button>
         <button id="context-delete" type="button" class="context-menu-item context-menu-item-danger" data-action="delete" role="menuitem">
           <span class="context-menu-icon" aria-hidden="true">
