@@ -108,6 +108,14 @@ getPathForFile: (file) => webUtils.getPathForFile(file),
     ipcRenderer.on("upload-progress", listener);
     return () => ipcRenderer.removeListener("upload-progress", listener);
   },
+  copyRemoteItems: (payload) => ipcRenderer.invoke("copy-remote-items", payload),
+  moveRemoteItems: (payload) => ipcRenderer.invoke("move-remote-items", payload),
+  cancelRemoteTransfer: () => ipcRenderer.invoke("cancel-remote-transfer"),
+  onRemoteTransferProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("remote-transfer-progress", listener);
+    return () => ipcRenderer.removeListener("remote-transfer-progress", listener);
+  },
     deleteRemoteFile: (payload) => ipcRenderer.invoke("delete-remote-file", payload),
     createRemoteFolder: (payload) => ipcRenderer.invoke("create-remote-folder", payload),
 openRemotePreview: (remotePath, options) => ipcRenderer.invoke("open-remote-preview", remotePath, options),

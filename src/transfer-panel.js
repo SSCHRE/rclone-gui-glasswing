@@ -46,7 +46,12 @@ class TransferPanel {
     const icon = document.createElement("span");
     icon.className = "transfer-panel-icon";
     icon.setAttribute("aria-hidden", "true");
-    const arrow = this.labels.direction === "up" ? "M12 19V5M6 11l6-6 6 6" : "M12 5v14M6 13l6 6 6-6";
+    const arrows = {
+      up: "M12 19V5M6 11l6-6 6 6",
+      across: "M5 12h14M13 6l6 6-6 6",
+      down: "M12 5v14M6 13l6 6 6-6",
+    };
+    const arrow = arrows[this.labels.direction] || arrows.down;
     icon.innerHTML =
       `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="transfer-icon-arrow" d="${arrow}" /><path class="transfer-icon-check" pathLength="1" d="M5 12.5l4.5 4.5L19 7.5" /><path class="transfer-icon-cross" d="M12 7v6M12 17h.01" /></svg>`;
 

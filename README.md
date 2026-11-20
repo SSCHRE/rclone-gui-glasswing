@@ -145,7 +145,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Cloud migration wizard
 - [x] Rclone self update
 - [x] Self updater
-- [ ] Split screen browse
+- [x] Split screen browse
 - [ ] macOS build (`.dmg` / `.app`)
 ## Screenshots
 ![App Screenshot](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg)

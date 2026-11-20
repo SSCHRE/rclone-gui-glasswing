@@ -1276,8 +1276,8 @@ function selfUpdateBlocker(target = "rclone") {
   if (migrationTask) {
     return `A migration check is still running. Wait for it to finish before updating ${target}.`;
   }
-  if (activeUpload || activeDownload) {
-    return `An upload or download is still running. Wait for it to finish before updating ${target}.`;
+  if (activeUpload || activeDownload || activeRemoteTransfer) {
+    return `A transfer is still running. Wait for it to finish before updating ${target}.`;
   }
   if (activeRemoteSearch) {
     return `A search is still running. Wait for it to finish before updating ${target}.`;
@@ -2205,8 +2205,8 @@ function stopActiveUpload() {
 }
 
 ipcMain.handle("upload-to-remote", async (_event, payload) => {
-  if (activeUpload) {
-    throw new Error("An upload is already running.");
+  if (activeUpload || activeRemoteTransfer) {
+    throw new Error("An upload, copy or move is already running.");
   }
 
   const target = await normalizeRemoteBrowsePath(payload?.remotePath);
@@ -2374,8 +2374,8 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   if (activeJob) {
     throw new Error("Wait for the current job to finish before downloading.");
   }
-  if (activeDownload) {
-    throw new Error("A download is already running.");
+  if (activeDownload || activeRemoteTransfer) {
+    throw new Error("A download, copy or move is already running.");
   }
 
   const remotePath = payload?.remotePath;
@@ -2447,6 +2447,135 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
 
 ipcMain.handle("cancel-download", async () => {
   stopActiveDownload();
+});
+
+let activeRemoteTransfer = null;
+
+function stopActiveRemoteTransfer() {
+  if (!activeRemoteTransfer) {
+    return;
+  }
+  activeRemoteTransfer.cancelled = true;
+  const child = activeRemoteTransfer.child;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
+function remoteItemName(remotePath) {
+  const afterRemote = remotePath.slice(remotePath.indexOf(":") + 1);
+  return afterRemote.split("/").filter(Boolean).pop() || "";
+}
+
+async function runRemoteTransfer(operation, payload) {
+  if (activeJob) {
+    throw new Error(`Wait for the current job to finish before ${operation === "move" ? "moving" : "copying"}.`);
+  }
+  if (activeRemoteTransfer || activeUpload || activeDownload) {
+    throw new Error("Another copy, move, upload or download is already running.");
+  }
+
+  const destination = await normalizeRemoteBrowsePath(payload?.destination);
+  const items = Array.isArray(payload?.items)
+    ? payload.items.filter((item) => typeof item?.path === "string" && item.path.trim())
+    : [];
+  if (!items.length) {
+    throw new Error("Choose at least one item.");
+  }
+
+  const transfer = { child: null, cancelled: false };
+  activeRemoteTransfer = transfer;
+  const failed = [];
+  let completed = 0;
+
+  try {
+    for (const [index, item] of items.entries()) {
+      if (transfer.cancelled) {
+        break;
+      }
+
+      const source = await normalizeRemoteBrowsePath(item.path);
+      const name = remoteItemName(source);
+      if (!name) {
+        failed.push({ name: source, error: "A whole remote can't be copied or moved from here." });
+        continue;
+      }
+
+      const isDir = Boolean(item.isDir);
+      const target = joinRemoteChild(destination, name);
+      if (source === target || (isDir && (destination === source || isInsideRemotePath(source, destination)))) {
+        failed.push({
+          name,
+          error: isDir && source !== target
+            ? "A folder can't go inside itself."
+            : "That is already where it lives.",
+        });
+        continue;
+      }
+
+      send("remote-transfer-progress", { index, bytes: 0, confirmed: 0, total: 0, current: "" });
+
+      const errors = [];
+      const flags = [
+        "--stats",
+        "1s",
+        "--stats-log-level",
+        "NOTICE",
+        "--retries",
+        "1",
+        "--use-json-log",
+        ...(operation === "move" && isDir ? ["--delete-empty-src-dirs"] : []),
+        ...bwlimitArgs(),
+      ];
+      const result = await runRclone(
+        rcloneArgs(isDir ? operation : `${operation}to`, [source, target], flags),
+        {
+          timeoutMs: 0,
+          onSpawn: (child) => {
+            transfer.child = child;
+            child.stderr.on("data", createJsonLogReader((entry) => {
+              if (entry.level === "error" && entry.msg) {
+                errors.push(String(entry.msg).trim());
+              }
+              const stats = entry.stats;
+              if (stats) {
+                const bytes = Number(stats.bytes) || 0;
+                send("remote-transfer-progress", {
+                  index,
+                  bytes,
+                  confirmed: bytes,
+                  total: Number(stats.totalBytes) || 0,
+                  current: stats.transferring?.[0]?.name || "",
+                });
+              }
+            }));
+          },
+        },
+      );
+      transfer.child = null;
+
+      if (transfer.cancelled) {
+        break;
+      }
+      if (result.code !== 0) {
+        failed.push({ name, error: errors[errors.length - 1] || `Failed to ${operation} "${name}".` });
+        continue;
+      }
+      completed += 1;
+    }
+  } finally {
+    activeRemoteTransfer = null;
+  }
+
+  return { completed, failed, total: items.length, cancelled: transfer.cancelled, destination };
+}
+
+ipcMain.handle("copy-remote-items", async (_event, payload) => runRemoteTransfer("copy", payload));
+ipcMain.handle("move-remote-items", async (_event, payload) => runRemoteTransfer("move", payload));
+ipcMain.handle("cancel-remote-transfer", async () => {
+  stopActiveRemoteTransfer();
 });
 
 ipcMain.handle("delete-remote-file", async (_event, payload) => {
@@ -4349,6 +4478,7 @@ app.on("before-quit", (event) => {
   stopPreviewFetch();
   stopActiveUpload();
   stopActiveDownload();
+  stopActiveRemoteTransfer();
 
   if (mounts.hasMounts() || serves.hasServes() || mountsAndServesStopping) {
     event.preventDefault();
