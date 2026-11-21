@@ -19,13 +19,16 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Saved jobs**: save, load, update and remove jobs for quick re-use
 - **Stop job**: cancel a running transfer
 - **Schedule jobs**: Schedule saved jobs to be run at specific times
+- **Run history**: every run is logged, click one to see the details (speed, files, errors, log)
 - **Cloud migration**: move a whole cloud to another one. It checks size and free space first, keeps going in the background (or only at night) over as many days as it needs, handles stuff like Google Drive's 750 GB/day limit, checks every file at the end and can delete the originals once they're verified
 
 ### Browse
 - **Remote browser**: navigate folders on any remote, sort by column, reload or cancel slow listings
 - **Previews**: images (`.jpg`, `.png`), text, PDF, streamed audio/video (`.mp3`, `.mp4`) and archive contents (`.zip`, `.7z`), with previous/next navigation
 - **Upload**: pick files or drag them onto the list, with progress, cancel, and a confirmation before replacing existing files
-- **Download, new folder and delete** directly on the remote
+- **Download, new folder, rename and delete** directly on the remote
+- **Multi select**: ctrl/shift click or just drag a box around files like in Explorer
+- **Split screen**: two remotes side by side (`Ctrl+\`), copy or move stuff between them with the buttons, right click menu or drag and drop (hold Shift to move)
 - **Use as source / destination**: send the current path straight to the job form
 - **Listing cache**: recently visited folders open instantly
 - **Searching**: Search for files or folders in your rclone remote
@@ -44,7 +47,8 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Rclone self update**: a dot shows up next to the rclone version when a newer one is out, click it to update rclone without leaving the app
 - **Self update**: Glasswing can update itself from inside the app (installer, portable exe, AppImage and .deb). On Linux the .deb asks for your password to install.
 - **Bandwidth limit**: Set a bandwidth limit. Permanently or between specific hours.
-- **Themes**: Choose between the default glass theme, or Material theme (dark/light)
+- **Themes**: the default glass theme, Bootstrap, Pico or Catppuccin (follows your system's light/dark mode)
+- **Custom title bar** on Windows, can be turned off under Appearance if you prefer the normal one
 
 Glasswing does **not** store or collect ANY credentials. It uses your existing rclone installation and config on the machine.
 
