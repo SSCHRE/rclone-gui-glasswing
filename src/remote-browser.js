@@ -62,6 +62,7 @@ const contextUi = {
   uploadBtn: document.getElementById("context-upload"),
   copyAcrossBtn: document.getElementById("context-copy-across"),
   moveAcrossBtn: document.getElementById("context-move-across"),
+  renameBtn: document.getElementById("context-rename"),
 };
 let contextPane = null;
 
@@ -103,6 +104,30 @@ let activePreviewToken = 0;
 let previewOwner = null;
 let searchTokenCounter = 0;
 const panes = [];
+const pendingRenames = new Map();
+
+function applyPendingRenames(list, folder) {
+  const pending = pendingRenames.get(folder);
+  if (!pending || !pending.size) {
+    return list;
+  }
+  const names = new Set(list.map((item) => item.name));
+  const result = [];
+  for (const item of list) {
+    if (pending.has(item.name)) {
+      const newName = pending.get(item.name);
+      if (names.has(newName)) {
+        continue;
+      }
+      result.push({ ...item, name: newName, pendingRename: true });
+    } else if ([...pending.values()].includes(item.name)) {
+      result.push({ ...item, pendingRename: true });
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
 let activePane = null;
 let splitOn = false;
 let splitRatio = 0.5;
@@ -1598,13 +1623,14 @@ let currentPreviewIndex = -1;
 let searchState = null;
 let searchRenderQueued = false;
 let statusState = { message: "", isError: false };
+let renameState = null;
 
 function isActive() {
   return activePane === pane;
 }
 
 function getSortedEntries() {
-  const sorted = [...entries];
+  const sorted = [...(searchState ? entries : applyPendingRenames(entries, currentPath()))];
   
   sorted.sort((a, b) => {
     const dirA = a.isDir || false;
@@ -1847,6 +1873,10 @@ function canDownloadSelection() {
 function canDeleteSelection() {
   return !loading && selection.size > 0;
 }
+
+function canRenameSelection() {
+  return selection.size === 1 && !loading && !searchState && Boolean(window.rcloneGui?.renameRemoteItem);
+}
 function canTransferAcross() {
   const other = splitOn ? otherPaneOf(pane) : null;
   return Boolean(other && other.getRemote() && currentRemote && selection.size && !loading);
@@ -2050,7 +2080,8 @@ function clearSelectionState() {
 }
 
 function pruneSelection(visibleEntries) {
-  const visible = new Set(visibleEntries.map(entryPath));
+  const shown = searchState ? visibleEntries : applyPendingRenames(visibleEntries, currentPath());
+  const visible = new Set(shown.map(entryPath));
   for (const path of [...selection.keys()]) {
     if (!visible.has(path)) {
       selection.delete(path);
@@ -2094,7 +2125,7 @@ function toggleEntry(entry) {
 }
 
 function selectRangeTo(entry, { additive = false } = {}) {
-  const sorted = getSortedEntries();
+  const sorted = getSortedEntries().filter((item) => !item.pendingRename);
   const targetIndex = sorted.indexOf(entry);
   const anchorIndex = selectionAnchor ? sorted.findIndex((item) => entryPath(item) === selectionAnchor) : -1;
   if (targetIndex < 0 || anchorIndex < 0) {
@@ -2116,6 +2147,9 @@ function selectRangeTo(entry, { additive = false } = {}) {
 function selectAllEntries() {
   selection.clear();
   for (const entry of getSortedEntries()) {
+    if (entry.pendingRename) {
+      continue;
+    }
     const item = selectionItem(entry);
     selection.set(item.path, item);
   }
@@ -2183,7 +2217,7 @@ function collectMarqueeRows(scroller) {
   const rows = [];
   for (const row of remoteBrowser.entriesBody.querySelectorAll("tr[data-path]")) {
     const entry = entriesByPath.get(row.dataset.path);
-    if (!entry) {
+    if (!entry || entry.pendingRename) {
       continue;
     }
     const rect = row.getBoundingClientRect();
@@ -2401,6 +2435,7 @@ function handleMarqueeDown(event) {
 }
 
 function renderEntries({ animate = true } = {}) {
+  cancelRename();
   const scrollContainer = remoteBrowser.entriesBody.parentElement;
   const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
   const wasAtBottom= scrollContainer ? scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 10 : false;
@@ -2428,9 +2463,13 @@ function renderEntries({ animate = true } = {}) {
     row.dataset.index = index;
     row.style.setProperty("--row-index", Math.min(index, 30));
     row.dataset.isdir = entry.isDir ? "1" : "0";
-    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}${animate ? "" : " is-static"}${selection.has(rowPath) ? " is-selected" : ""}`;
-    row.tabIndex = 0;
-    if (splitOn) {
+    row.className = `browse-row${entry.isDir ? " is-dir" : " is-file"}${animate ? "" : " is-static"}${selection.has(rowPath) ? " is-selected" : ""}${entry.pendingRename ? " is-pending" : ""}`;
+    row.tabIndex = entry.pendingRename ? -1 : 0;
+    if (entry.pendingRename) {
+      row.setAttribute("aria-busy", "true");
+      row.title = "Renaming…";
+    }
+    if (splitOn && !entry.pendingRename) {
       row.draggable = true;
       row.addEventListener("dragstart", (event) => beginRowDrag(pane, event, entry));
       row.addEventListener("dragend", endRowDrag);
@@ -2460,6 +2499,12 @@ function renderEntries({ animate = true } = {}) {
       name.textContent = entry.name;
     }
     nameWrap.append(icon, name);
+    if (entry.pendingRename) {
+      const spinner = document.createElement("span");
+      spinner.className = "browse-loading-spinner is-small";
+      spinner.setAttribute("aria-hidden", "true");
+      nameWrap.append(spinner);
+    }
     if (searchState) {
       nameWrap.append(createGoToFolderButton(entry));
     }
@@ -2474,6 +2519,11 @@ function renderEntries({ animate = true } = {}) {
     modCell.textContent = formatModTime(entry.modTime);
 
     row.append(nameCell, sizeCell, modCell);
+
+    if (entry.pendingRename) {
+      remoteBrowser.entriesBody.appendChild(row);
+      continue;
+    }
 
     row.addEventListener("mousedown", (event) => {
       if (event.shiftKey) {
@@ -3245,6 +3295,174 @@ async function deleteSelectedFile() {
   }
 }
 
+function renameSelectionEnd(name, isDir) {
+  const dot = name.lastIndexOf(".");
+  return !isDir && dot > 0 ? dot : name.length;
+}
+
+function cancelRename() {
+  if (!renameState) {
+    return;
+  }
+  const state = renameState;
+  renameState = null;
+  state.input.remove();
+  state.nameEl.hidden = false;
+  state.row.draggable = splitOn;
+}
+
+function startRename() {
+  if (!canRenameSelection()) {
+    return;
+  }
+  const entry = entries.find((item) => entryPath(item) === selectedPath);
+  const row = [...remoteBrowser.entriesBody.querySelectorAll("tr[data-path]")].find((item) => item.dataset.path === selectedPath);
+  const nameEl = row?.querySelector(".browse-entry-name");
+  if (!entry || !nameEl) {
+    return;
+  }
+  cancelRename();
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "browse-rename-input";
+  input.value = entry.name;
+  input.spellcheck = false;
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", "New name");
+
+  const state = { entry, row, nameEl, input };
+  renameState = state;
+  row.draggable = false;
+  nameEl.hidden = true;
+  nameEl.after(input);
+  row.scrollIntoView({ block: "nearest" });
+  input.focus();
+  input.setSelectionRange(0, renameSelectionEnd(entry.name, entry.isDir));
+
+  for (const type of ["click", "dblclick", "mousedown", "contextmenu", "dragstart"]) {
+    input.addEventListener(type, (event) => event.stopPropagation());
+  }
+  input.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commitRename(state);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelRename();
+      row.focus();
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (document.hasFocus()) {
+      void commitRename(state);
+    }
+  });
+}
+
+function repaintPending(folder) {
+  if (!currentRemote || searchState || loading || currentPath() !== folder) {
+    return;
+  }
+  renderEntries({ animate: false });
+}
+
+function settleRename(folder, oldName, newName, { select = false } = {}) {
+  if (!currentRemote || searchState || currentPath() !== folder) {
+    return;
+  }
+  entries = entries.map((item) => (item.name === oldName ? { ...item, name: newName } : item));
+  if (loading) {
+    return;
+  }
+  renderEntries({ animate: false });
+  if (!select || selection.size) {
+    return;
+  }
+  const renamed = entries.find((item) => item.name === newName);
+  if (renamed) {
+    selectEntry(renamed);
+    const row = [...remoteBrowser.entriesBody.querySelectorAll("tr[data-path]")].find((item) => item.dataset.path === entryPath(renamed));
+    row?.scrollIntoView({ block: "nearest" });
+    row?.focus({ preventScroll: true });
+  }
+}
+
+function clearPendingRename(folder, oldName) {
+  const pending = pendingRenames.get(folder);
+  pending?.delete(oldName);
+  if (pending && !pending.size) {
+    pendingRenames.delete(folder);
+  }
+}
+
+async function commitRename(state) {
+  if (renameState !== state) {
+    return;
+  }
+  const newName = state.input.value.trim();
+  const { entry } = state;
+  cancelRename();
+  if (!newName || newName === entry.name) {
+    return;
+  }
+
+  const remote = currentRemote;
+  const subPath = currentSubPath;
+  const folder = currentPath();
+  const oldPath = entryPath(entry);
+  const taken = applyPendingRenames(entries, folder).some((item) => item.name === newName);
+  if (taken) {
+    const message = `"${newName}" already exists in this folder.`;
+    setStatus(message, true);
+    notify({ title: "Rename failed", message, type: "error" });
+    return;
+  }
+
+  const pending = pendingRenames.get(folder) || new Map();
+  pending.set(entry.name, newName);
+  pendingRenames.set(folder, pending);
+  selection.delete(oldPath);
+  if (selectionAnchor === oldPath) {
+    selectionAnchor = null;
+  }
+  applySelection();
+  for (const other of panes) {
+    other.repaintPending(folder);
+  }
+
+  try {
+    await window.rcloneGui.renameRemoteItem({
+      remote,
+      path: joinSubPath(subPath, entry.name),
+      isDir: Boolean(entry.isDir),
+      newName,
+    });
+  } catch (error) {
+    clearPendingRename(folder, entry.name);
+    const message = String(error?.message || "Could not rename the item.").replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+    for (const other of panes) {
+      other.repaintPending(folder);
+      other.softRefresh(folder);
+    }
+    if (currentPath() === folder && !searchState) {
+      setStatus(message, true);
+    }
+    notify({ title: "Rename failed", message, type: "error" });
+    return;
+  }
+
+  clearPendingRename(folder, entry.name);
+  dropCachedListings(folder);
+  dropCachedListings(oldPath);
+  for (const other of panes) {
+    other.settleRename(folder, entry.name, newName, { select: other === pane });
+    other.softRefresh(folder);
+  }
+  notify({ title: "Renamed", message: `${entry.name} to ${newName}`, type: "success" });
+}
+
 function matchCount(count) {
   return `${count.toLocaleString()} ${count === 1 ? "match" : "matches"}`;
 }
@@ -3578,6 +3796,9 @@ function showNewFolderDialog() {
 function showContextMenu(event) {
   event.preventDefault();
   const row = event.target.closest("tr[data-path]");
+  if (row?.classList.contains("is-pending")) {
+    return;
+  }
   closeContextMenu();
   setActivePane(pane);
 
@@ -3633,6 +3854,12 @@ function showContextMenu(event) {
     } else if (label) {
       label.textContent = `${base} to ${first ? "the right" : "the left"}`;
     }
+  }
+
+  const canRename = canRenameSelection();
+  contextUi.renameBtn?.classList.toggle("hidden", !canRename);
+  if (contextUi.renameBtn) {
+    contextUi.renameBtn.disabled = !canRename;
   }
 
   const canDelete = canDeleteSelection();
@@ -3728,6 +3955,9 @@ function bindPaneEvents() {
     } else if (event.key === "Escape" && selection.size && !contextMenuOpen) {
       event.preventDefault();
       selectEntry(null);
+    } else if (event.key === "F2" && canRenameSelection()) {
+      event.preventDefault();
+      startRename();
     } else if (event.key === "Delete" && canDeleteSelection()) {
       event.preventDefault();
       void deleteSelectedFile();
@@ -3793,7 +4023,7 @@ Object.assign(pane, {
   getLocation: () => ({ remote: currentRemote, subPath: currentSubPath }),
   currentPath,
   isSearching: () => Boolean(searchState),
-  existingNames: () => new Set(searchState ? [] : entries.map((entry) => entry.name)),
+  existingNames: () => new Set(searchState ? [] : applyPendingRenames(entries, currentPath()).map((entry) => entry.name)),
   selectedItems,
   prepareDrag,
   setTransferTarget,
@@ -3807,6 +4037,7 @@ Object.assign(pane, {
   previewSelectedFile,
   downloadSelectedFile,
   deleteSelectedFile,
+  startRename,
   useActivePath,
   loadListing,
   chooseRemote,
@@ -3823,6 +4054,8 @@ Object.assign(pane, {
   navigatePreview,
   previewContext: () => ({ size: selectedSize, total: previewableFiles.length, index: currentPreviewIndex, path: selectedPath || "" }),
   softRefresh,
+  repaintPending,
+  settleRename,
   onViewShown,
   onSplitChange,
   focusList,
@@ -3903,6 +4136,11 @@ function bindContextMenu() {
   deleteBtn.addEventListener("click", () => {
     closeContextMenu();
     void contextPane?.deleteSelectedFile();
+  });
+
+  contextUi.renameBtn?.addEventListener("click", () => {
+    closeContextMenu();
+    contextPane?.startRename();
   });
 
   copyAcrossBtn?.addEventListener("click", () => {

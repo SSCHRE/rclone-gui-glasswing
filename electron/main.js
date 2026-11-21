@@ -1279,6 +1279,9 @@ function selfUpdateBlocker(target = "rclone") {
   if (activeUpload || activeDownload || activeRemoteTransfer) {
     return `A transfer is still running. Wait for it to finish before updating ${target}.`;
   }
+  if (activeRename > 0) {
+    return `A rename is still running. Wait for it to finish before updating ${target}.`;
+  }
   if (activeRemoteSearch) {
     return `A search is still running. Wait for it to finish before updating ${target}.`;
   }
@@ -2601,6 +2604,77 @@ ipcMain.handle("delete-remote-file", async (_event, payload) => {
   }
 
   return { source };
+});
+
+let activeRename = 0;
+
+function validateNewItemName(value) {
+  const name = String(value ?? "").trim();
+  if (!name) {
+    throw new Error("The name can't be empty.");
+  }
+  if (name === "." || name === "..") {
+    throw new Error("The name can't be \".\" or \"..\".");
+  }
+  if (name.includes("/") || name.includes("\\")) {
+    throw new Error("The name can't contain slashes.");
+  }
+  return name;
+}
+
+ipcMain.handle("rename-remote-item", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before renaming.");
+  }
+  if (activeRemoteTransfer || activeUpload || activeDownload) {
+    throw new Error("Another copy, move, upload or download is already running.");
+  }
+
+  const newName = validateNewItemName(payload?.newName);
+  const remote = String(payload?.remote || "").trim();
+  const itemPath = String(payload?.path || "").trim();
+  if (!remote || !itemPath.replace(/^\/+/, "")) {
+    throw new Error("A whole remote can't be renamed from here.");
+  }
+
+  const source = await normalizeRemoteBrowsePath(`${remote}:${itemPath}`);
+  const oldName = remoteItemName(source);
+  if (!oldName) {
+    throw new Error("A whole remote can't be renamed from here.");
+  }
+  if (oldName === newName) {
+    return { source, target: source, renamed: false };
+  }
+
+  const colon = source.indexOf(":");
+  const slash = source.lastIndexOf("/");
+  const parent = slash > colon ? source.slice(0, slash) : source.slice(0, colon + 1);
+  const target = joinRemoteChild(parent, newName);
+
+  activeRename += 1;
+  try {
+    const existing = await runRclone(rcloneArgs("lsjson", [target], ["--stat"]), { timeoutMs: 120000 });
+    if (existing.code === 0 && existing.stdout.trim()) {
+      let found = null;
+      try {
+        found = JSON.parse(existing.stdout);
+      } catch {
+        found = null;
+      }
+      if (found && typeof found === "object" && !Array.isArray(found)) {
+        throw new Error(`"${newName}" already exists in this folder.`);
+      }
+    }
+
+    const result = await runRclone(rcloneArgs("moveto", [source, target]), { timeoutMs: 0 });
+    if (result.code !== 0) {
+      throw new Error(result.stderr || result.stdout || `Failed to rename "${oldName}".`);
+    }
+  } finally {
+    activeRename -= 1;
+  }
+
+  return { source, target, renamed: true };
 });
 
 ipcMain.handle("create-remote-folder", async (_event, payload) => {

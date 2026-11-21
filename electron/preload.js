@@ -110,6 +110,7 @@ getPathForFile: (file) => webUtils.getPathForFile(file),
   },
   copyRemoteItems: (payload) => ipcRenderer.invoke("copy-remote-items", payload),
   moveRemoteItems: (payload) => ipcRenderer.invoke("move-remote-items", payload),
+  renameRemoteItem: (payload) => ipcRenderer.invoke("rename-remote-item", payload),
   cancelRemoteTransfer: () => ipcRenderer.invoke("cancel-remote-transfer"),
   onRemoteTransferProgress: (callback) => {
     const listener = (_event, payload) => callback(payload);
