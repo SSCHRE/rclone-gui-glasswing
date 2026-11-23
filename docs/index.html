@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Glasswing – Free rclone GUI</title>
-  <meta name="description" content="Glasswing is a free, open-source rclone GUI for Windows and Linux. Sync, copy, browse, mount and encrypt Google Drive, OneDrive, Dropbox, S3 and 70+ other cloud storage providers without the command line." />
+  <meta name="description" content="Glasswing is a free, open-source rclone GUI for Windows, Linux and macOS. Sync, copy, browse, mount and encrypt Google Drive, OneDrive, Dropbox, S3 and 70+ other cloud storage providers without the command line." />
   <link rel="canonical" href="https://sschre.github.io/rclone-gui-glasswing/" />
   <link rel="icon" type="image/png" href="assets/favicon.png" />
   <link rel="apple-touch-icon" href="assets/icon.png" />
@@ -31,7 +31,7 @@
     "alternateName": "Glasswing rclone GUI",
     "description": "A free, open-source desktop GUI for rclone. Sync, copy, browse, mount and encrypt cloud storage like Google Drive, OneDrive, Dropbox and S3.",
     "applicationCategory": "UtilitiesApplication",
-    "operatingSystem": "Windows, Linux",
+    "operatingSystem": "Windows, Linux, macOS",
     "url": "https://sschre.github.io/rclone-gui-glasswing/",
     "downloadUrl": "https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest",
     "image": "https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg",
@@ -49,7 +49,7 @@
       { "@type": "Question", "name": "Do I need rclone installed?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Glasswing is a GUI on top of rclone, it doesn't replace it. Install rclone from rclone.org first and make sure it's on your PATH." } },
       { "@type": "Question", "name": "Does Glasswing store my passwords or tokens?", "acceptedAnswer": { "@type": "Answer", "text": "No. It reads your normal rclone config file on your own PC. Nothing gets collected or sent anywhere." } },
       { "@type": "Question", "name": "Which cloud providers does it work with?", "acceptedAnswer": { "@type": "Answer", "text": "Anything rclone supports: Google Drive, OneDrive, Dropbox, Amazon S3, Backblaze B2, pCloud, Mega, SFTP, WebDAV and 70+ more." } },
-      { "@type": "Question", "name": "Is there a Mac version?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Windows and Linux for now, macOS is on the roadmap." } }
+      { "@type": "Question", "name": "Is there a Mac version?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. There's a .dmg for Apple Silicon and Intel Macs. It isn't signed yet, so on first launch you need to right-click the app and pick Open." } }
     ]
   }
   </script>
@@ -1139,7 +1139,7 @@
           <img src="assets/icon.png" alt="Glasswing icon" width="68" height="68" />
           <h1>Glasswing</h1>
         </div>
-        <p class="hero-lead">A free <strong>rclone GUI</strong> for Windows and Linux.</p>
+        <p class="hero-lead">A free <strong>rclone GUI</strong> for Windows, Linux and macOS.</p>
         <p class="hero-sub">Sync, copy, browse, mount and encrypt (and much more) your Google Drive, OneDrive, Dropbox, S3 or whatever else rclone talks to. Without having to remember which flag does what. Version 4 has a whole new look, sidebar and everything.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">Download the latest release</a>
@@ -1316,7 +1316,7 @@ Transferring:
         <h2>Getting started</h2>
         <ol class="steps">
           <li><strong>Install rclone</strong><span>Grab it from <a href="https://rclone.org/install/">rclone.org</a>. If <code>rclone version</code> works in a terminal you're good.</span></li>
-          <li><strong>Download Glasswing</strong><span>From the <a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">releases page</a>. There's an installer and a portable exe for Windows, and an AppImage and .deb for Linux.</span></li>
+          <li><strong>Download Glasswing</strong><span>From the <a href="https://github.com/SSCHRE/rclone-gui-glasswing/releases/latest">releases page</a>. There's an installer and a portable exe for Windows, an AppImage and .deb for Linux, and a .dmg for Mac (Apple Silicon or Intel).</span></li>
           <li><strong>Add a remote (or don't)</strong><span>If you already use rclone, your remotes just show up. Otherwise open Manage remotes and add one.</span></li>
         </ol>
       </div>
@@ -1327,7 +1327,7 @@ Transferring:
         <h2>What it doesn't do (yet)</h2>
         <p class="muted">Being honest here so you don't download it for the wrong reasons:</p>
         <ul class="not-yet">
-          <li>No macOS build yet. It's on the list.</li>
+          <li>The Mac version isn't signed yet, so the first launch needs a right-click and Open. It also can't update itself, you grab new versions from the releases page.</li>
           <li>It doesn't install rclone for you, you need that first.</li>
         </ul>
       </div>
@@ -1358,8 +1358,8 @@ Transferring:
         </details>
         <details>
           <summary>Which operating systems are supported?</summary>
-          <p>Currently Windows and Linux* are supported. MacOS is planned</p>
-          <i>* Mounting works on both, you just need WinFsp on Windows or fuse3 on Linux.</i>
+          <p>Windows, Linux and macOS* are supported.</p>
+          <i>* Mounting works everywhere, you just need WinFsp on Windows or fuse3 on Linux. On macOS the official rclone mounts without anything extra (the Homebrew one needs macFUSE).</i>
         </details>
         <details>
           <summary>Found a bug or have an idea?</summary>

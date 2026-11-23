@@ -1325,8 +1325,14 @@ async function init() {
       rcloneVersion = await checkRcloneVersion();
       elements.version.textContent = `${rcloneVersion} · loading remotes…`;
     } catch (error) {
-      elements.version.textContent = "rclone not found on PATH";
-      setStatus("Install rclone and ensure it is available on PATH.", "error");
+      const notFound = error?.code === "ENOENT" || /ENOENT/.test(String(error?.message));
+      elements.version.textContent = notFound ? "rclone not found on PATH" : "rclone failed to start";
+      setStatus(
+        notFound
+          ? "Install rclone and ensure it is available on PATH."
+          : `rclone was found but didn't run: ${String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")}`,
+        "error",
+      );
       elements.runJob.disabled = true;
       return;
     }
@@ -1927,7 +1933,7 @@ window.rcloneGui.onMountsChanged?.(({ event }) => {
       type: "error",
       autoClose: false,
     });
-  } else {
+  } else if (event.type === "unmounted") {
     showSnackbar({
       title: "Drive unmounted",
       message: [`${event.mountPoint} (`, { strong: event.remote }, ") is no longer mounted"],

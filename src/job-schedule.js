@@ -293,7 +293,7 @@ async function loadSettings() {
   ui.runInBackground.checked = settings.runInBackground;
   ui.openAtLogin.checked = settings.openAtLogin;
   ui.openAtLogin.disabled = !settings.canOpenAtLogin;
-  ui.loginNote.textContent = settings.canOpenAtLogin ? "(starts in the tray)" : "(only in the installed app)";
+  ui.loginNote.textContent = settings.canOpenAtLogin ? `(starts in the ${window.rcloneGui.platform === "darwin" ? "menu bar" : "tray"})` : "(only in the installed app)";
   ui.loginLabel.textContent = window.rcloneGui.platform === "win32"
     ? "Start Glasswing with Windows"
     : "Start Glasswing when you log in";
