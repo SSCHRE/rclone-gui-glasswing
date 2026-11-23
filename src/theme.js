@@ -21,6 +21,31 @@ const titlebarMode = window.rcloneGui?.titlebarMode || "unsupported";
 let customTitlebarWanted = titlebarMode === "custom";
 root.classList.toggle("has-custom-titlebar", titlebarMode === "custom");
 
+const isMac = window.rcloneGui?.platform === "darwin";
+root.classList.toggle("is-mac", isMac);
+
+function macifyShortcutHints(scope) {
+  for (const element of scope.querySelectorAll("[title*='Ctrl+'], [data-tip*='Ctrl+'], [aria-label*='Ctrl+']")) {
+    for (const attribute of ["title", "data-tip", "aria-label"]) {
+      const value = element.getAttribute(attribute);
+      if (value?.includes("Ctrl+")) {
+        element.setAttribute(attribute, value.replaceAll("Ctrl+", "⌘"));
+      }
+    }
+  }
+  for (const template of scope.querySelectorAll("template")) {
+    macifyShortcutHints(template.content);
+  }
+}
+
+function applyMacLabels() {
+  macifyShortcutHints(document);
+  const background = document.getElementById("run-in-background-label");
+  if (background) {
+    background.textContent = "Keep running in the menu bar when the window is closed";
+  }
+}
+
 const UI_SCALES = [0.9, 1, 1.1, 1.2, 1.35, 1.5];
 let uiScale = closestUiScale(window.rcloneGui?.initialUiScale ?? 1);
 
@@ -267,6 +292,9 @@ document.addEventListener("DOMContentLoaded", () => {
   ui.titlebarDivider = document.getElementById("titlebar-menu-divider");
   ui.titlebarRestart = document.getElementById("titlebar-restart");
   document.getElementById("titlebar")?.toggleAttribute("hidden", titlebarMode !== "custom");
+  if (isMac) {
+    applyMacLabels();
+  }
   render();
   renderTitlebarSetting();
 

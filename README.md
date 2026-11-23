@@ -5,7 +5,17 @@ A desktop GUI for [rclone](https://rclone.org/). Run rclone jobs with a live pro
 
 ## Download
 
-Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (portable) from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases).
+Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (portable) from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases). On Linux there's an AppImage and a `.deb`, and on macOS a `.dmg` (one for Apple Silicon, one for Intel).
+
+### First launch on macOS
+
+The Mac build isn't signed yet (no Apple developer account), so macOS will say the app is damaged or can't be checked for malware. It's not actually damaged. Either right-click the app and pick **Open**, or run this once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Glasswing.app
+```
+
+Self update doesn't work on the Mac build for now, new versions have to be downloaded from the releases page.
 
 ## Features
 
@@ -38,7 +48,7 @@ Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (po
 - **Quick insert remote**: drop `remote:path` into source or destination
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal
-- **Remote mounting**: mount a remote as a drive on Windows (needs WinFsp) or as a folder on Linux (needs FUSE)
+- **Remote mounting**: mount a remote as a drive on Windows (needs WinFsp) or as a folder on Linux (needs FUSE) and macOS (no extra install with the official rclone, otherwise macFUSE)
 - **Serve a remote**: share a remote (or a folder in it) over HTTP, WebDAV, FTP or SFTP, just on your pc or to other devices on your network
 - **Storage overview**: Monitor your remote space/usage in 1 simple view
 - **Vault wizard**: Create an rclone crypt vault in the Remote manager
@@ -56,7 +66,7 @@ Glasswing does **not** store or collect ANY credentials. It uses your existing r
 
 1. **[rclone](https://rclone.org/install/)** installed and available on your `PATH`
 2. At least one remote configured (`rclone config` or the in-app remote manager), or local paths only
-3. Only if you want to mount remotes: **WinFsp** on Windows, or **fuse3** on Linux (`sudo apt install fuse3`)
+3. Only if you want to mount remotes: **WinFsp** on Windows, **fuse3** on Linux (`sudo apt install fuse3`). On macOS the official rclone from rclone.org mounts without anything extra; the Homebrew one can't mount, so use the official one or install **macFUSE**
 4. For development: **[Node.js](https://nodejs.org/)** 18+ and npm
 
 Verify rclone works in a terminal:
@@ -88,17 +98,28 @@ Icons are regenerated automatically before `npm run build` (`npm run icons`).
 
 CI builds the portable app and installer on every push to `main`; download them from the workflow run’s artifacts.
 
+## Build (macOS)
+
+On a Mac:
+
+```bash
+npm install
+npm run build:mac
+```
+
+You get a `.dmg` and a `.zip` for both Apple Silicon (`arm64`) and Intel (`x64`) in `dist/`. They're ad-hoc signed only, not notarized.
+
 ### Releasing
 
 For maintainers:
 
 1. Bump `version` in `package.json`
 2. Merge/push to `main`
-3. CI builds Windows + Linux and makes a new release `vX.Y.Z` with everything attached (notes get generated from the PRs, edit them after if you want)
+3. CI builds Windows, Linux + macOS and makes a new release `vX.Y.Z` with everything attached (notes get generated from the PRs, edit them after if you want)
 
 If that version already has a release, CI just builds and skips the release, so pushes without a version bump don't do anything weird.
 
-The update files (`latest.yml`, `latest-linux.yml`, blockmaps) get attached too, that's what the in-app updater reads. Download counts on the release show installs + updates per version.
+The update files (`latest.yml`, `latest-linux.yml`, `latest-mac.yml`) get attached too, that's what the in-app updater reads. Download counts on the release show installs + updates per version.
 
 ### Path examples
 
@@ -150,7 +171,7 @@ Never commit `rclone.conf` or copy it into this repository or any forked reposit
 - [x] Rclone self update
 - [x] Self updater
 - [x] Split screen browse
-- [ ] macOS build (`.dmg` / `.app`)
+- [x] macOS build (`.dmg` / `.app`)
 ## Screenshots
 ![App Screenshot](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/jobs.jpg)
 ![App Screenshot2](https://sschre.github.io/rclone-gui-glasswing/assets/screenshots/browse.jpg)

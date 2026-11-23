@@ -31,33 +31,11 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Check JavaScript syntax
+        shell: bash
         run: |
-          node --check electron/main.js
-          node --check electron/preload.js
-          node --check electron/mounts.js
-          node --check electron/serves.js
-          node --check src/renderer.js
-          node --check src/job-output.js
-          node --check src/speed-graph.js
-          node --check src/remote-manager.js
-          node --check src/remote-serve.js
-          node --check src/vault-wizard.js
-          node --check src/remote-browser.js
-          node --check src/transfer-panel.js
-          node --check src/bandwidth-settings.js
-          node --check src/job-schedule.js
-          node --check electron/scheduler.js
-          node --check electron/migrations.js
-          node --check src/migration-wizard.js
-          node --check electron/remote-search.js
-          node --check electron/explorer-menu.js
-          node --check src/storage-usage.js
-          node --check src/storage-view.js
-          node --check electron/storage-history.js
-          node --check src/theme.js
-          node --check scripts/generate-icons.js
-          node --check electron/app-updater.js
-          node --check electron/portable-updater.js
+          for file in electron/*.js src/*.js scripts/*.js; do
+            node --check "$file"
+          done
 
       - name: Generate icons
         run: npm run icons
@@ -159,10 +137,76 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: validate
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Build macOS app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR build: packaging unpacked app only (no dmg, no publish)"
+            npx electron-builder --mac dir --arm64 --publish never
+            exit 0
+          fi
+          for attempt in 1 2; do
+            if npm run build:mac -- --publish never; then
+              exit 0
+            fi
+            echo "macOS build failed (attempt $attempt), cleaning up mounted images and retrying"
+            hdiutil info | awk '/\/dev\/disk/ && /Glasswing/ {print $1}' | xargs -I{} hdiutil detach {} -force || true
+            rm -f dist/*.dmg dist/*.blockmap
+          done
+          exit 1
+
+      - name: Check macOS packages
+        if: github.event_name != 'pull_request'
+        run: |
+          ls -lh dist/*.dmg dist/*.zip dist/latest-mac.yml
+          for arch in arm64 x64; do
+            ls dist/*-"$arch".dmg dist/*-"$arch".zip
+          done
+          for app in dist/mac-arm64/Glasswing.app dist/mac/Glasswing.app; do
+            test -d "$app" || { echo "MISSING: $app"; exit 1; }
+            test -n "$(find "$app/Contents/Resources/app.asar.unpacked/node_modules/7zip-bin/mac" -name 7za -type f)" || { echo "MISSING: 7za in $app"; exit 1; }
+          done
+          grep -q "arm64.zip" dist/latest-mac.yml
+          grep -q "x64.zip" dist/latest-mac.yml
+
+      - name: Upload macOS artifacts
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: glasswing-mac-${{ github.sha }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-mac]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
       contents: write
@@ -200,7 +244,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          files=(artifacts/*.exe artifacts/*.AppImage artifacts/*.deb artifacts/latest*.yml)
+          files=(artifacts/*.exe artifacts/*.AppImage artifacts/*.deb artifacts/*.dmg artifacts/*.zip artifacts/latest*.yml)
           if [ ${#files[@]} -eq 0 ]; then
             echo "No build files found"; exit 1
           fi

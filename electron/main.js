@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, Notification, Tray, powerMonitor, screen, nativeImage, nativeTheme, shell, protocol, net } = require("electron");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const os = require("os");
@@ -16,7 +16,43 @@ const remoteSearch = require("./remote-search");
 const { createAppUpdater } = require("./app-updater");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
 
-const APP_USER_MODEL_ID = app.isPackaged ? "com.rclone.gui.glasswing" : "com.rclone.gui.glasswing.dev";
+function loginShellPath() {
+  if (process.platform === "win32") {
+    return [];
+  }
+  const shell = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh");
+  const marker = "__GLASSWING_PATH__";
+  try {
+    const result = spawnSync(shell, ["-ilc", `printf '${marker}%s${marker}' "$PATH"`], {
+      encoding: "utf8",
+      timeout: 3000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const match = String(result.stdout || "").split(marker);
+    return match.length >= 3 ? match[1].split(":").filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function extendPathForGuiLaunch() {
+  const home = os.homedir();
+  const extra = process.platform === "darwin"
+    ? ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", path.join(home, "bin"), path.join(home, ".local", "bin")]
+    : process.platform === "linux"
+      ? ["/usr/local/bin", "/snap/bin", path.join(home, "bin"), path.join(home, ".local", "bin")]
+      : [];
+  const current = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  const candidates = [...loginShellPath(), ...extra];
+  const missing = [...new Set(candidates)].filter((dir) => !current.includes(dir) && fsSync.existsSync(dir));
+  if (missing.length) {
+    process.env.PATH = [...current, ...missing].join(path.delimiter);
+  }
+}
+
+extendPathForGuiLaunch();
+
+const APP_USER_MODEL_ID =app.isPackaged ? "com.rclone.gui.glasswing" : "com.rclone.gui.glasswing.dev";
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
@@ -26,7 +62,8 @@ let mainWindow = null;
 let activeJob = null;
 let jobStarting = false;
 let appQuitting = false;
-let windowRevealed = !process.argv.includes("--hidden") || process.argv.some((arg) => arg.startsWith("--upload"));
+const launchedHidden = process.argv.includes("--hidden") || (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
+let windowRevealed = !launchedHidden || process.argv.some((arg) => arg.startsWith("--upload"));
 let closeConfirmed = false;
 let closeCheckInProgress = false;
 let mountsAndServesStopping = false;
@@ -575,6 +612,7 @@ function fitWindowToContent(window, { width, height } = {}, snap = false) {
 function createWindow() {
   const theme = getTheme();
   applyNativeTheme(theme);
+  closeConfirmed = false;
 
   const initialSize = getInitialContentSize();
   const icon = resolveAppIcon();
@@ -646,7 +684,7 @@ function createWindow() {
     void confirmClose();
   });
 
-  if (icon) {
+  if (icon && process.platform !== "darwin") {
     mainWindow.setIcon(icon);
   }
   applyTaskbarDetails(mainWindow);
@@ -732,6 +770,33 @@ async function quitFromTray() {
   } finally {
     closeCheckInProgress = false;
   }
+}
+
+function installApplicationMenu() {
+  if (process.platform !== "darwin") {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  const devViewItems = app.isPackaged ? [] : [{ type: "separator" }, { role: "reload" }, { role: "toggleDevTools" }];
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Glasswing",
+        submenu: [
+          { role: "about" },
+          { type: "separator" },
+          { role: "hide" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
+          { label: "Quit Glasswing", accelerator: "Command+Q", click: () => void quitFromTray() },
+        ],
+      },
+      { role: "editMenu" },
+      { label: "View", submenu: [{ role: "togglefullscreen" }, ...devViewItems] },
+      { role: "windowMenu" },
+    ]),
+  );
 }
 
 async function restartApp() {
@@ -1294,6 +1359,24 @@ function selfUpdateBlocker(target = "rclone") {
   return "";
 }
 
+function packageManagedRclone() {
+  const found = findOnPath(process.platform === "win32" ? "rclone.exe" : "rclone");
+  if (!found || process.platform === "win32") {
+    return null;
+  }
+  let resolved = found;
+  try {
+    resolved = fsSync.realpathSync(found);
+  } catch {}
+  if (/\/Cellar\/|\/Homebrew\/|^\/opt\/homebrew\/|\/\.?linuxbrew\//i.test(resolved) || found.startsWith("/opt/homebrew/")) {
+    return { name: "Homebrew", command: "brew upgrade rclone" };
+  }
+  if (process.platform === "linux" && /^\/snap\//.test(resolved)) {
+    return { name: "Snap", command: "sudo snap refresh rclone" };
+  }
+  return null;
+}
+
 ipcMain.handle("check-rclone-update", async () => {
   const result = await runRclone(["selfupdate", "--check"], { timeoutMs: 45000 });
   if (result.code !== 0) {
@@ -1308,6 +1391,10 @@ ipcMain.handle("update-rclone", async () => {
   const blocker = selfUpdateBlocker();
   if (blocker) {
     throw new Error(blocker);
+  }
+  const managed = packageManagedRclone();
+  if (managed) {
+    throw new Error(`This rclone was installed with ${managed.name}. Run "${managed.command}" in a terminal to update it.`);
   }
   const result = await runRclone(["selfupdate", "--stable"], { timeoutMs: 5 * 60 * 1000 });
   if (result.code !== 0) {
@@ -1642,7 +1729,7 @@ function sendMountsChanged(event = null) {
   send("mounts-changed", { mounts: mounts.listMounts(), event });
 }
 
-ipcMain.handle("get-mount-status", async () => mounts.getStatus());
+ipcMain.handle("get-mount-status", async () => mounts.refreshStatus());
 
 ipcMain.handle("get-bwlimit", async () => getBwlimit());
 
@@ -1857,6 +1944,28 @@ async function openRcloneConfigInLinuxTerminal() {
   child.unref();
 }
 
+async function openRcloneConfigInMacTerminal() {
+  const scriptDir = await fs.mkdtemp(path.join(os.tmpdir(), "glasswing-"));
+  const script = path.join(scriptDir, "rclone-config.command");
+  const searchPath = process.env.PATH || "";
+  await fs.writeFile(
+    script,
+    `#!/bin/sh
+rm -rf -- "$(dirname -- "$0")"
+PATH=${quotePosixArg(searchPath)}
+export PATH
+rclone config
+printf "\\nPress Enter to close this window."
+read _
+exit
+`,
+    { mode: 0o700, flag: "wx" },
+  );
+  const child = spawn("/usr/bin/open", ["-a", "Terminal", script], { detached: true, stdio: "ignore" });
+  child.on("error", () => {});
+  child.unref();
+}
+
 ipcMain.handle("open-rclone-config", async () => {
   if (process.platform === "linux") {
     await openRcloneConfigInLinuxTerminal();
@@ -1870,6 +1979,11 @@ ipcMain.handle("open-rclone-config", async () => {
       windowsHide: true,
     });
     child.unref();
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    await openRcloneConfigInMacTerminal();
     return;
   }
 
@@ -3526,10 +3640,13 @@ function shouldKeepRunning() {
 }
 
 function canOpenAtLogin() {
-  return app.isPackaged && (process.platform === "win32" || process.platform === "linux");
+  return app.isPackaged && (process.platform === "win32" || process.platform === "linux" || process.platform === "darwin");
 }
 
 function loginItemOptions() {
+  if (process.platform === "darwin") {
+    return {};
+  }
   return { path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: ["--hidden"] };
 }
 
@@ -3646,10 +3763,21 @@ function hideToTray() {
   if (!getAppSettings().trayHintShown) {
     showNotification(
       "Glasswing is still running",
-      "Your scheduled jobs keep running in the background. Right-click the tray icon to quit.",
+      process.platform === "darwin"
+        ? "Your scheduled jobs keep running in the background. Use the menu bar icon or Cmd+Q to quit."
+        : "Your scheduled jobs keep running in the background. Right-click the tray icon to quit.",
     );
     void saveAppSettings({ trayHintShown: true });
   }
+}
+
+function menuBarIcon(iconPath) {
+  const image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    return image;
+  }
+  const retina = image.resize({ width: 36, height: 36, quality: "best" });
+  return nativeImage.createFromBuffer(retina.toPNG(), { scaleFactor: 2 });
 }
 
 function updateTray() {
@@ -3664,8 +3792,10 @@ function updateTray() {
     if (!iconPath) {
       return;
     }
-    tray = new Tray(iconPath);
-    tray.on("click", showWindow);
+    tray = new Tray(process.platform === "darwin" ? menuBarIcon(iconPath) : iconPath);
+    if (process.platform !== "darwin") {
+      tray.on("click", showWindow);
+    }
   }
 
   const next = nextScheduledJob();
@@ -4486,6 +4616,8 @@ ipcMain.handle("dismiss-explorer-menu-offer", async () => {
   return true;
 });
 
+const ACTIVATE_IGNORE_AFTER_HIDDEN_LAUNCH_MS = 2000;
+
 const hasInstanceLock = app.requestSingleInstanceLock();
 if (!hasInstanceLock) {
   app.quit();
@@ -4504,7 +4636,13 @@ void app.whenReady().then(() => {
   if (!hasInstanceLock) {
     return;
   }
-  Menu.setApplicationMenu(null);
+  installApplicationMenu();
+  if (process.platform === "darwin" && !app.isPackaged) {
+    const dockIcon = resolveAppIcon();
+    if (dockIcon) {
+      app.dock?.setIcon(dockIcon);
+    }
+  }
   protocol.handle(PREVIEW_MEDIA_SCHEME, handlePreviewMediaRequest);
   createWindow();
   const launchUploads = uploadPathsFromArgv(process.argv);
@@ -4529,10 +4667,12 @@ void app.whenReady().then(() => {
     fitWindowToContent(mainWindow, { width, height }, false);
   });
 
+  const readyAt = Date.now();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+    if (launchedHidden && Date.now() - readyAt < ACTIVATE_IGNORE_AFTER_HIDDEN_LAUNCH_MS) {
+      return;
     }
+    showWindow();
   });
 });
 
@@ -4541,10 +4681,19 @@ app.on("window-all-closed", () => {
   stopPreviewServe();
   if (process.platform !== "darwin") {
     app.quit();
+    return;
+  }
+  if (!appQuitting && (mounts.hasMounts() || serves.hasServes())) {
+    void Promise.all([mounts.stopAllMounts(), serves.stopAllServes()]);
   }
 });
 
 app.on("before-quit", (event) => {
+  if (process.platform === "darwin" && !appQuitting && (activeJob || serves.hasServes())) {
+    event.preventDefault();
+    void quitFromTray();
+    return;
+  }
   appQuitting = true;
   stopActiveJob();
   stopRemoteSearch();

@@ -3,8 +3,10 @@ const fsSync = require("fs");
 const fsPromises = require("fs/promises");
 const net = require("net");
 const os = require("os");
+const path = require("path");
 const { randomUUID } = require("crypto");
 const linux = require("./mounts-linux");
+const darwin = require("./mounts-darwin");
 
 const CACHE_MODE_FLAGS = Object.freeze({
   off: "--vfs-cache-mode=off",
@@ -20,13 +22,23 @@ const STDERR_TAIL_BYTES = 4096;
 
 const mounts = new Map();
 const staleLinuxMounts = new Map();
+const DARWIN_SUPPORT_TTL_MS = 15000;
+let darwinSupport = null;
 
 function isLinux() {
   return process.platform === "linux";
 }
 
+function isDarwin() {
+  return process.platform === "darwin";
+}
+
+function usesFolders() {
+  return isLinux() || isDarwin();
+}
+
 function isSupported() {
-  return process.platform === "win32" || isLinux();
+  return process.platform === "win32" || usesFolders();
 }
 
 function readMountinfo() {
@@ -57,18 +69,84 @@ function runCommand(command, args) {
   });
 }
 
-async function linuxUnmount(dir) {
-  if (!linuxIsMounted(dir)) {
+function runCapture(command, args) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    const child = spawn(command, args, { shell: false });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.on("error", () => resolve(""));
+    child.on("close", () => resolve(stdout));
+  });
+}
+
+function realParentPath(dir) {
+  try {
+    return path.join(fsSync.realpathSync(path.dirname(dir)), path.basename(dir));
+  } catch {
+    return "";
+  }
+}
+
+function sameFolder(left, right) {
+  try {
+    const a = fsSync.statSync(left);
+    const b = fsSync.statSync(right);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false;
+  }
+}
+
+async function darwinIsMounted(dir) {
+  const output = await runCapture("/sbin/mount", []);
+  const real = realParentPath(dir);
+  const aliases = [real, real && `/System/Volumes/Data${real}`, `/System/Volumes/Data${dir}`];
+  if (darwin.isMountedIn(output, dir, aliases)) {
+    return true;
+  }
+  const name = path.basename(dir);
+  const parent = path.dirname(dir);
+  return darwin
+    .parseMountOutput(output)
+    .some((entry) => path.basename(entry.mountPoint) === name && sameFolder(path.dirname(entry.mountPoint), parent));
+}
+
+async function detectDarwinSupport() {
+  if (darwinSupport && Date.now() - darwinSupport.checkedAt < DARWIN_SUPPORT_TTL_MS) {
+    return darwinSupport;
+  }
+  const nfsmount = (await runCommand("rclone", ["nfsmount", "--help"])).code === 0;
+  const fuse = darwin.hasFuse((file) => fsSync.existsSync(file));
+  const mount = !nfsmount && fuse && (await runCommand("rclone", ["mount", "--help"])).code === 0;
+  const mode = darwin.pickMode({ nfsmount, mount, fuse });
+  darwinSupport = {
+    mode,
+    available: Boolean(mode),
+    message: mode ? "" : darwin.NO_SUPPORT_MESSAGE,
+    checkedAt: Date.now(),
+  };
+  return darwinSupport;
+}
+
+async function folderIsMounted(dir) {
+  return isDarwin() ? darwinIsMounted(dir) : linuxIsMounted(dir);
+}
+
+async function folderUnmount(dir) {
+  if (!(await folderIsMounted(dir))) {
     return;
   }
-  const result = await linux.runUnmountChain(dir, runCommand);
-  if (!result.ok && linuxIsMounted(dir)) {
+  const chain = isDarwin() ? darwin.runUnmountChain : linux.runUnmountChain;
+  const result = await chain(dir, runCommand);
+  if (!result.ok && (await folderIsMounted(dir))) {
     throw new Error(result.error || `Could not unmount ${dir}.`);
   }
 }
 
-async function prepareLinuxMountPoint(dir) {
-  if (linuxIsMounted(dir)) {
+async function prepareMountFolder(dir) {
+  if (await folderIsMounted(dir)) {
     throw new Error(`${dir} already has something mounted on it. Pick another folder.`);
   }
   let entries;
@@ -83,7 +161,8 @@ async function prepareLinuxMountPoint(dir) {
       throw new Error(`${dir} is a file, not a folder. Pick a folder.`);
     }
     if (error.code === "ENOTCONN") {
-      throw new Error(`${dir} is a leftover mount from an earlier session. Unmount it with "fusermount -u ${dir}" and try again.`);
+      const unmountCommand = isDarwin() ? `umount "${dir}"` : `fusermount -u ${dir}`;
+      throw new Error(`${dir} is a leftover mount from an earlier session. Unmount it with "${unmountCommand}" and try again.`);
     }
     throw new Error(`Can't use ${dir}: ${error.message}`);
   }
@@ -140,7 +219,21 @@ function getStatus() {
     status.mountRoot = linux.defaultMountRoot(os.homedir());
     status.fuse = linuxFuseStatus();
   }
+  if (isDarwin()) {
+    status.platform = "darwin";
+    status.mountRoot = darwin.defaultMountRoot(os.homedir());
+    status.fuse = darwinSupport
+      ? { available: darwinSupport.available, message: darwinSupport.message }
+      : { available: true, message: "" };
+  }
   return status;
+}
+
+async function refreshStatus() {
+  if (isDarwin()) {
+    await detectDarwinSupport();
+  }
+  return getStatus();
 }
 
 function getFreePort() {
@@ -200,9 +293,22 @@ async function startMount({ remote, driveLetter, mountPoint: requestedMountPoint
   }
 
   const onLinux = isLinux();
+  const onDarwin = isDarwin();
+  const folderMode = onLinux || onDarwin;
   let letter = "";
   let mountPoint;
-  if (onLinux) {
+  let darwinMode = "";
+  if (onDarwin) {
+    const support = await detectDarwinSupport();
+    if (!support.available) {
+      throw new Error(support.message);
+    }
+    darwinMode = support.mode;
+    mountPoint = linux.normalizeMountPoint(requestedMountPoint || darwin.defaultMountPoint(os.homedir(), remote), os.homedir());
+    if (!mountPoint || mountPoint === "/") {
+      throw new Error("Pick a folder to mount into.");
+    }
+  } else if (onLinux) {
     const fuse = linuxFuseStatus();
     if (!fuse.available) {
       throw new Error(fuse.message);
@@ -228,18 +334,20 @@ async function startMount({ remote, driveLetter, mountPoint: requestedMountPoint
     throw new Error(`Unknown cache mode "${cacheMode}".`);
   }
   const cacheModeFlag = CACHE_MODE_FLAGS[cacheMode];
-  if (onLinux) {
+  if (folderMode) {
     for (const other of mounts.values()) {
       if (other.mountPoint === mountPoint) {
         throw new Error(`${mountPoint} is already used by "${other.remote}". Pick another folder.`);
       }
     }
-    await prepareLinuxMountPoint(mountPoint);
+    await prepareMountFolder(mountPoint);
   }
 
   const rc = { port: await getFreePort(), user: "glasswing", pass: randomUUID() };
   let args;
-  if (onLinux) {
+  if (onDarwin) {
+    args = darwin.buildMountArgs({ mode: darwinMode, remote, mountPoint, cacheModeFlag, rc, readOnly, bwlimit });
+  } else if (onLinux) {
     args = linux.buildMountArgs({ remote, mountPoint, cacheModeFlag, rc, readOnly, bwlimit });
   } else {
     const flags = [
@@ -261,8 +369,8 @@ async function startMount({ remote, driveLetter, mountPoint: requestedMountPoint
     }
     args = ["mount", ...flags, "--", `${remote}:`, mountPoint];
   }
-  const describeError = onLinux ? linux.friendlyLinuxMountError : friendlyMountError;
-  const isReady = onLinux ? () => linuxIsMounted(mountPoint) : () => driveExists(letter);
+  const describeError = onDarwin ? darwin.friendlyMountError : onLinux ? linux.friendlyLinuxMountError : friendlyMountError;
+  const isReady = folderMode ? () => folderIsMounted(mountPoint) : () => driveExists(letter);
   const child = spawn("rclone", args, {
     windowsHide: true,
     shell: false,
@@ -302,21 +410,33 @@ async function startMount({ remote, driveLetter, mountPoint: requestedMountPoint
       handler();
     };
 
+    let checking = false;
     const poll = setInterval(() => {
-      if (isReady()) {
-        finish(() => {
-          mount.ready = true;
-          mount.stderr = "";
-          resolve(describeMount(mount));
-        });
+      if (checking) {
+        return;
       }
+      checking = true;
+      Promise.resolve(isReady())
+        .then((ready) => {
+          if (ready) {
+            finish(() => {
+              mount.ready = true;
+              mount.stderr = "";
+              resolve(describeMount(mount));
+            });
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          checking = false;
+        });
     }, MOUNT_READY_POLL_MS);
 
     const timer = setTimeout(() => {
       finish(() => {
         mounts.delete(remote);
         child.kill();
-        reject(new Error(`Timed out waiting for ${mountPoint} to appear. ${describeError(mount.stderr)}`));
+        reject(new Error(`Timed out waiting for ${mountPoint} to appear. ${mount.stderr.trim() ? describeError(mount.stderr) : "rclone was running, but the folder never showed up as mounted."}`));
       });
     }, MOUNT_READY_TIMEOUT_MS);
 
@@ -336,8 +456,8 @@ async function startMount({ remote, driveLetter, mountPoint: requestedMountPoint
       finish(() => reject(new Error(describeError(mount.stderr, code))));
 
       if (wasReady) {
-        if (onLinux && !mount.stopping) {
-          linuxUnmount(mountPoint).catch(() => {});
+        if (folderMode && !mount.stopping) {
+          folderUnmount(mountPoint).catch(() => {});
         }
         onExit?.({
           remote,
@@ -383,7 +503,7 @@ async function stopMount(remote, { force = false } = {}) {
   if (!mount) {
     const stale = staleLinuxMounts.get(remote);
     if (stale) {
-      await linuxUnmount(stale);
+      await folderUnmount(stale);
       staleLinuxMounts.delete(remote);
     }
     return { stopped: true, pending: 0 };
@@ -407,9 +527,9 @@ async function stopMount(remote, { force = false } = {}) {
   }
 
   mounts.delete(remote);
-  if (isLinux()) {
+  if (usesFolders()) {
     staleLinuxMounts.set(remote, mount.mountPoint);
-    await linuxUnmount(mount.mountPoint);
+    await folderUnmount(mount.mountPoint);
     staleLinuxMounts.delete(remote);
   }
   return { stopped: true, pending: 0 };
@@ -439,6 +559,7 @@ function hasMounts() {
 
 module.exports = {
   getStatus,
+  refreshStatus,
   listMounts,
   startMount,
   stopMount,

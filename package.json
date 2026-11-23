@@ -1,6 +1,6 @@
 {
   "name": "rclone-glasswing-gui",
-  "version": "4.2.3",
+  "version": "4.2.4",
   "description": "Glasswing — an electron based Rclone GUI with a live job dashboard and modern UI.",
   "main": "electron/main.js",
   "scripts": {
@@ -16,7 +16,9 @@
     "prebuild:appimage": "npm run icons",
     "build:appimage": "electron-builder --linux AppImage",
     "prebuild:deb": "npm run icons",
-    "build:deb": "electron-builder --linux deb"
+    "build:deb": "electron-builder --linux deb",
+    "prebuild:mac": "npm run icons",
+    "build:mac": "electron-builder --mac"
   },
   "author": "",
   "license": "MIT",
@@ -67,6 +69,30 @@
       "installerHeaderIcon": "build/icon.ico",
       "runAfterFinish": false,
       "artifactName": "Glasswing-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false,
+      "artifactName": "Glasswing-${version}-${arch}.${ext}"
     },
     "linux": {
       "icon": "build/icons",

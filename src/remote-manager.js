@@ -79,7 +79,11 @@ let mountChecking = false;
 const mountFolders = new Map();
 
 function isLinuxMount() {
-  return mountStatus?.platform === "linux";
+  return mountStatus?.platform === "linux" || mountStatus?.platform === "darwin";
+}
+
+function isMacMount() {
+  return mountStatus?.platform === "darwin";
 }
 
 function mountBlocked() {
@@ -261,7 +265,7 @@ function renderMountPanel() {
   remoteManager.mountFolderField.classList.toggle("hidden", !linuxMode);
   if (linuxMode) {
     remoteManager.mountTitleText.textContent = "Mount as folder";
-    remoteManager.mountOpenBtn.textContent = "Open folder";
+    remoteManager.mountOpenBtn.textContent = isMacMount() ? "Show in Finder" : "Open folder";
   }
 
   remoteManager.mountForm.classList.toggle("hidden", Boolean(mount));
@@ -280,7 +284,7 @@ function renderMountPanel() {
       renderMountLetters();
     }
     hint = linuxMode
-      ? "Show this remote as a folder in your file manager. It stays mounted while Glasswing is open."
+      ? `Show this remote as a folder in ${isMacMount() ? "Finder" : "your file manager"}. It stays mounted while Glasswing is open.`
       : "Show this remote as a drive in File Explorer. It stays mounted while Glasswing is open.";
     if (linuxMode && !mountStatus.fuse?.available) {
       hint = mountStatus.fuse?.message || "Mounting needs FUSE. Install fuse3 (e.g. `sudo apt install fuse3`) and try again.";

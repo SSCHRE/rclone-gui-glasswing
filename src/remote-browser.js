@@ -2164,10 +2164,14 @@ function downloadableItems() {
   return selectedItems().filter((item) => !item.isDir);
 }
 
+function hasAddModifier(event) {
+  return window.rcloneGui?.platform === "darwin" ? event.metaKey : event.ctrlKey || event.metaKey;
+}
+
 function handleRowClick(event, entry) {
   if (event.shiftKey) {
-    selectRangeTo(entry, { additive: event.ctrlKey || event.metaKey });
-  } else if (event.ctrlKey || event.metaKey) {
+    selectRangeTo(entry, { additive: hasAddModifier(event) });
+  } else if (hasAddModifier(event)) {
     toggleEntry(entry);
   } else {
     selectEntry(entry);
@@ -2413,7 +2417,7 @@ function handleMarqueeDown(event) {
   marqueeDrag = {
     scroller,
     started: false,
-    mode: event.ctrlKey || event.metaKey ? "toggle" : event.shiftKey ? "add" : "replace",
+    mode: hasAddModifier(event) ? "toggle" : event.shiftKey ? "add" : "replace",
     base: new Map(selection),
     baseAnchor: selectionAnchor,
     originX: event.clientX,

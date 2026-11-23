@@ -210,9 +210,9 @@
   --danger-soft: var(--fl-danger-bg);
   --danger-glow: transparent;
 
-  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, Menlo, "SF Mono", "Courier New", monospace;
   --fs-xs: 12px;
   --fs-sm: 12.5px;
   --fs-md: 14px;

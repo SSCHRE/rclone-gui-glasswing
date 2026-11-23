@@ -7,6 +7,7 @@ const REASONS = {
   unsupported: "Updates can't be installed on this platform yet.",
   noConfig: "This build doesn't have update info, so it can't update itself.",
   portableFolder: "This folder isn't writable, so the portable version can't replace itself.",
+  macUnsigned: "On macOS the update has to be downloaded from the releases page for now.",
   noPkexec: "pkexec isn't installed, so the .deb can't be updated from here.",
 };
 
@@ -25,6 +26,9 @@ function detectKind({ isPackaged, platform, env, hasUpdateConfig }) {
       return "appimage";
     }
     return hasUpdateConfig ? "deb" : "unsupported";
+  }
+  if (platform === "darwin") {
+    return "mac";
   }
   return "unsupported";
 }
@@ -87,6 +91,9 @@ function createAppUpdater({ app, env = process.env, platform = process.platform,
     const detected = currentKind();
     if (detected === "dev") {
       return { canSelfUpdate: false, kind: detected, reason: REASONS.dev };
+    }
+    if (detected === "mac") {
+      return { canSelfUpdate: false, kind: detected, reason: REASONS.macUnsigned };
     }
     if (detected === "unsupported") {
       return { canSelfUpdate: false, kind: detected, reason: hasUpdateConfig() || platform === "win32" || platform === "linux" ? REASONS.noConfig : REASONS.unsupported };
