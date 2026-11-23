@@ -5,7 +5,7 @@ A desktop GUI for [rclone](https://rclone.org/). Run rclone jobs with a live pro
 
 ## Download
 
-Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (portable) from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases). On Linux there's an AppImage and a `.deb`, and on macOS a `.dmg` (one for Apple Silicon, one for Intel).
+Grab the latest release from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases). Every file has the OS in its name: **Windows-Setup** (installer) or **Windows-Portable** on Windows, an **AppImage** or **.deb** on Linux, and a **.dmg** on macOS (`arm64` for Apple Silicon, `x64` for Intel). The release notes have a little table too if you're not sure which one you need.
 
 ### First launch on macOS
 

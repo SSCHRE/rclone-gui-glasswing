@@ -68,7 +68,7 @@
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
       "runAfterFinish": false,
-      "artifactName": "Glasswing-Setup-${version}.${ext}"
+      "artifactName": "Glasswing-${version}-Windows-Setup.${ext}"
     },
     "mac": {
       "icon": "build/icon.png",
@@ -92,7 +92,7 @@
       "identity": "-",
       "hardenedRuntime": false,
       "notarize": false,
-      "artifactName": "Glasswing-${version}-${arch}.${ext}"
+      "artifactName": "Glasswing-${version}-macOS-${arch}.${ext}"
     },
     "linux": {
       "icon": "build/icons",
@@ -104,7 +104,7 @@
       "executableName": "glasswing",
       "synopsis": "Desktop GUI for rclone",
       "maintainer": "SSCHRE",
-      "artifactName": "Glasswing-${version}-${arch}.${ext}",
+      "artifactName": "Glasswing-${version}-Linux-${arch}.${ext}",
       "desktop": {
         "entry": {
           "StartupWMClass": "rclone-glasswing-gui"
@@ -135,7 +135,7 @@
       }
     ],
     "portable": {
-      "artifactName": "Glasswing-Portable-${version}.${ext}"
+      "artifactName": "Glasswing-${version}-Windows-Portable.${ext}"
     }
   },
   "allowScripts": {
