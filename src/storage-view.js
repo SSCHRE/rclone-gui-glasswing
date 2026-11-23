@@ -526,6 +526,25 @@ function createCard(spec, index) {
   return { el: card, swatch, badge, body, actions, trash: null, bodySignature: "loading", headSignature: "" };
 }
 
+function signInHint(name) {
+  const hint = createElement("div", "vault-note is-warn storage-card-signin");
+  hint.setAttribute("role", "status");
+  const oauth = window.SignIns.canReconnect(name);
+  const text = createElement("span", "storage-card-signin-text", oauth ? "Your sign-in has expired." : "It didn't accept its API key or password.");
+  const button = actionButton(oauth ? "Reconnect" : "Show remote", "primary storage-card-signin-action");
+  button.addEventListener("click", async () => {
+    if (!oauth) {
+      window.SignIns.openManager(name);
+      return;
+    }
+    if (await window.SignIns.reconnect(name)) {
+      void window.StorageUsage.load(targetOf(name), { force: true });
+    }
+  });
+  hint.append(text, button);
+  return hint;
+}
+
 function trashButton(name, usage) {
   const armed = armedTrash.has(name);
   const busy = cleaning.has(name);
@@ -579,6 +598,18 @@ function updateCard(card, spec) {
     card.el.classList.toggle("is-error", state === "error");
     card.el.classList.toggle("is-warn", level === "is-warn");
     card.el.classList.toggle("is-full", level === "is-full");
+  }
+
+  if (card.actions) {
+    const expired = window.SignIns?.stateOf(spec.name) === "expired";
+    if (expired && !card.signIn) {
+      card.signIn = signInHint(spec.name);
+      card.el.insertBefore(card.signIn, card.actions);
+    } else if (!expired && card.signIn) {
+      card.signIn.remove();
+      card.signIn = null;
+    }
+    card.el.classList.toggle("is-signin-expired", expired);
   }
 
   if (card.actions) {
@@ -1057,6 +1088,7 @@ storageView.sort?.addEventListener("change", scheduleRender);
 
 window.StorageView = {
   setRemotes,
+  refreshSignIns: scheduleRender,
   show,
   hide,
   setOptions(next) {

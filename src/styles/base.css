@@ -451,6 +451,20 @@ svg {
   animation: dotPop var(--dur-3) var(--ease-spring) both;
 }
 
+.sidebar-item.has-alert::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-soft);
+  animation: dotPop var(--dur-3) var(--ease-spring) both;
+}
+
 .header-actions {
   display: flex;
   flex-direction: column;
@@ -1591,7 +1605,7 @@ button:focus-visible {
   color: var(--accent);
   opacity: 0.55;
   transform-origin: left;
-  animation: snackbarTimer 3400ms linear both;
+  animation: snackbarTimer var(--snackbar-ms, 3400ms) linear both;
 }
 
 .snackbar-icon {
@@ -1666,12 +1680,31 @@ button:focus-visible {
 }
 
 .snackbar.running::after,
-.snackbar.running .snackbar-icon {
+.snackbar.running .snackbar-icon,
+.snackbar.warning::after,
+.snackbar.warning .snackbar-icon {
   color: var(--warning);
 }
 
-.snackbar.running .snackbar-icon {
+.snackbar.running .snackbar-icon,
+.snackbar.warning .snackbar-icon {
   background: var(--warning-soft);
+}
+
+.snackbar.warning .snackbar-icon::before {
+  mask-image: var(--icon-alert);
+}
+
+.snackbar-action {
+  flex-shrink: 0;
+  height: 30px;
+  margin-left: auto;
+  padding: 0 14px;
+  pointer-events: auto;
+}
+
+.snackbar:has(.snackbar-action:not(.hidden)) {
+  width: min(480px, 100%);
 }
 
 .snackbar.running .snackbar-icon::before {
@@ -1821,7 +1854,8 @@ button:focus-visible {
     overflow: visible;
   }
 
-  .mode-switch-btn.has-alert::after {
+  .mode-switch-btn.has-alert::after,
+  .sidebar-item.has-alert::after {
     top: 9px;
     right: 11px;
     margin-top: 0;

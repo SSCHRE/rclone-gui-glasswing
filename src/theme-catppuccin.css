@@ -447,6 +447,11 @@
     box-shadow: none;
   }
 
+  & .sidebar-item.has-alert::after {
+    background: var(--fl-warning);
+    box-shadow: none;
+  }
+
   & .header-actions {
     border-top-color: var(--fl-stroke2);
   }
@@ -1842,7 +1847,8 @@
     color: var(--fl-danger);
   }
 
-  & .snackbar.running .snackbar-icon {
+  & .snackbar.running .snackbar-icon,
+  & .snackbar.warning .snackbar-icon {
     background: transparent;
     color: var(--fl-warning);
   }
@@ -2172,6 +2178,16 @@
     border: 1px solid var(--fl-success-stroke);
     background: var(--fl-success-bg);
     color: var(--fl-success);
+  }
+
+  & .remote-signin-badge.is-expired {
+    background: var(--fl-warning-bg);
+    color: var(--fl-warning);
+  }
+
+  & .remote-signin-badge.is-unreachable {
+    background: transparent;
+    color: var(--fl-fg2);
   }
 
   & .vault-step-number {

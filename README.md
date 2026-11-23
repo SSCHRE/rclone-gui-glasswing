@@ -45,6 +45,7 @@ Self update doesn't work on the Mac build for now, new versions have to be downl
 
 ### Remotes
 - **Remote manager**: add remotes (including browser sign-in for OAuth providers), reconnect expired tokens, view a redacted config, and delete remotes
+- **Expired sign-in check**: a quiet background check a few seconds after startup flags OAuth remotes that need a new sign-in, with a one click Reconnect (toggle it in the Appearance menu)
 - **Quick insert remote**: drop `remote:path` into source or destination
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal
