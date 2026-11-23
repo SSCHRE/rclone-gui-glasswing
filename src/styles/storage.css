@@ -872,6 +872,24 @@
   border-top: 1px solid var(--hairline);
 }
 
+.storage-card-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: auto;
+}
+
+.storage-card-signin + .storage-card-actions {
+  margin-top: 0;
+}
+
+.storage-card-signin-text {
+  min-width: 0;
+  flex: 1 1 12em;
+}
+
 .storage-card-actions .storage-card-trash:not(.danger) {
   color: var(--muted);
 }

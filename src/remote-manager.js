@@ -38,6 +38,7 @@ const remoteManager = {
   addBtn: document.getElementById("remote-add-btn"),
   refreshBtn: document.getElementById("remote-refresh-btn"),
   reconnectBtn: document.getElementById("remote-reconnect-btn"),
+  signInNote: document.getElementById("remote-signin-note"),
   deleteBtn: document.getElementById("remote-delete-btn"),
   createCancelBtn: document.getElementById("remote-create-cancel"),
   createSubmitBtn: document.getElementById("remote-create-submit"),
@@ -171,6 +172,39 @@ function replayAnimation(node, className) {
   node.classList.add(className);
 }
 
+function signInBadge(name) {
+  const state = window.SignIns?.stateOf(name);
+  if (state !== "expired" && state !== "unreachable" && state !== "error") {
+    return null;
+  }
+  const badge = document.createElement("span");
+  badge.className = `remote-signin-badge is-${state === "error" ? "unreachable" : state}`;
+  const expiredText = window.SignIns.canReconnect(name) ? "Sign-in expired" : "Sign-in failed";
+  badge.textContent = state === "expired" ? expiredText : state === "error" ? "Check failed" : "Couldn't reach";
+  badge.title = window.SignIns.get(name)?.message || "";
+  return badge;
+}
+
+function renderSignInNote() {
+  const state = selectedRemoteName ? window.SignIns?.stateOf(selectedRemoteName) : "";
+  const expired = state === "expired";
+  const oauth = window.SignIns?.canReconnect(selectedRemoteName) ?? true;
+  const detail = window.SignIns?.get(selectedRemoteName)?.message || "";
+  remoteManager.signInNote.classList.toggle("hidden", !expired && state !== "unreachable" && state !== "error");
+  remoteManager.signInNote.classList.toggle("is-warn", expired);
+  if (expired && oauth) {
+    remoteManager.signInNote.textContent = `Your sign-in for ${selectedRemoteName} has expired. Reconnect to use it again.`;
+  } else if (expired) {
+    remoteManager.signInNote.textContent = `${selectedRemoteName} didn't accept its API key or password. Update it with the rclone config wizard below, or delete this remote and add it again.`;
+  } else if (state === "error") {
+    remoteManager.signInNote.textContent = `Checking ${selectedRemoteName} failed${detail ? `: ${detail}` : "."}`;
+  } else {
+    remoteManager.signInNote.textContent = `Couldn't reach ${selectedRemoteName} the last time it was checked. Check your connection.`;
+  }
+  remoteManager.reconnectBtn.classList.toggle("primary", expired && oauth);
+  remoteManager.reconnectBtn.classList.toggle("secondary", !(expired && oauth));
+}
+
 function renderRemoteList() {
   remoteManager.list.innerHTML = "";
   remoteManager.listEmpty.classList.toggle("hidden", remoteEntries.length > 0);
@@ -196,19 +230,30 @@ function renderRemoteList() {
     type.className = "remote-type-badge";
     type.textContent = entry.type;
 
+    const signIn = signInBadge(entry.name);
     const mount = getMount(entry.name);
+    const badgeNodes = [];
     if (mount) {
       const drive = document.createElement("span");
       drive.className = "remote-mount-badge";
       drive.textContent = isLinuxMount() ? shortMountPoint(mount.mountPoint) : mount.mountPoint;
       drive.title = `Mounted at ${mount.mountPoint}`;
+      badgeNodes.push(drive);
+    }
+    if (signIn) {
+      badgeNodes.unshift(signIn);
+    } else {
+      badgeNodes.push(type);
+    }
+    if (badgeNodes.length > 1) {
       const badges = document.createElement("span");
       badges.className = "remote-list-item-badges";
-      badges.append(drive, type);
+      badges.append(...badgeNodes);
       button.append(avatar, name, badges);
     } else {
-      button.append(avatar, name, type);
+      button.append(avatar, name, badgeNodes[0]);
     }
+    button.classList.toggle("is-signin-expired", signIn?.classList.contains("is-expired") ?? false);
     button.addEventListener("click", () => {
       void selectRemote(entry.name);
     });
@@ -453,6 +498,7 @@ async function selectRemote(name) {
     const entry = remoteEntries.find((item) => item.name === name);
     remoteManager.detailType.textContent = entry?.type || "unknown";
     updateReconnectAvailability();
+    renderSignInNote();
     remoteManager.detailConfig.textContent = await window.rcloneGui.getRemoteRedacted(name);
   } catch (error) {
     remoteManager.detailConfig.textContent = error.message || "Could not load remote settings.";
@@ -851,7 +897,7 @@ function updateReconnectAvailability() {
   remoteManager.reconnectBtn.classList.toggle("hidden", !optionNeedsAuthorize(provider));
 }
 
-async function openRemoteManager({ onChanged, onBrowse } = {}) {
+async function openRemoteManager({ onChanged, onBrowse, focus = "" } = {}) {
   if (!window.rcloneGui) {
     return;
   }
@@ -885,6 +931,9 @@ async function openRemoteManager({ onChanged, onBrowse } = {}) {
     remoteManager.configPath.textContent = error.message || "Could not load rclone config.";
   } finally {
     setBusy(false);
+  }
+  if (focus && remoteEntries.some((entry) => entry.name === focus)) {
+    await selectRemote(focus);
   }
 }
 
@@ -1137,6 +1186,14 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !remoteManager.dialog.classList.contains("hidden")) {
     closeRemoteManager();
   }
+});
+
+window.SignIns?.onChange(() => {
+  if (remoteManager.dialog.classList.contains("hidden")) {
+    return;
+  }
+  renderRemoteList();
+  renderSignInNote();
 });
 
 window.RemoteManager = {

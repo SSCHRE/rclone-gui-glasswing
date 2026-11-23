@@ -283,6 +283,19 @@ function parentSubPath(subPath) {
   return parts.join("/");
 }
 
+const SIGN_IN_ERROR = /unauthenticated|unauthori[sz]ed|\b401\b|invalid[_ ]token|invalid_grant|token (?:has )?expired|invalid api key|invalid credentials/i;
+
+function listingErrorMessage(error, remote) {
+  const raw = String(error?.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
+  if (SIGN_IN_ERROR.test(raw)) {
+    return `${remote || "This remote"} didn't accept its sign-in. Check it in Manage remotes.`;
+  }
+  const segments = raw.split(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/).map((part) => part.trim()).filter(Boolean);
+  const errorPart = segments.find((part) => part.startsWith("ERROR")) || segments[0] || "";
+  const text = errorPart.replace(/^ERROR\s*:\s*/, "").trim();
+  return text || "Failed to list remote path.";
+}
+
 function formatBytes(size) {
   if (size == null || size < 0 || Number.isNaN(size)) {
     return "—";
@@ -1541,6 +1554,12 @@ function notifyDeleteResult(deleted, failed, total, remote) {
     type: "error",
   });
 }
+function refreshSignInLabels() {
+  for (const pane of panes) {
+    pane.labelRemoteOptions();
+  }
+}
+
 function setRemotes(names) {
   browseRemotes = Array.isArray(names) ? [...names] : [];
   for (const pane of panes) {
@@ -2602,10 +2621,11 @@ async function loadListingForPath(subPath, token) {
       return;
     }
     entries = [];
-    setStatus(error.message || "Failed to list remote path.", true);
+    const message = listingErrorMessage(error, currentRemote);
+    setStatus(message, true);
     notify({
       title: "Browse failed",
-      message: error.message || "Failed to list remote path.",
+      message,
       type: "error",
     });
   }
@@ -2704,10 +2724,11 @@ async function loadListing(context = "") {
       return;
     }
     entries = [];
-    setStatus(error.message || "Failed to list remote path.", true);
+    const message = listingErrorMessage(error, currentRemote);
+    setStatus(message, true);
     notify({
       title: "Browse failed",
-      message: error.message || "Failed to list remote path.",
+      message,
       type: "error",
     });
   } finally {
@@ -2851,7 +2872,8 @@ function fillRemotePicker() {
 function labelRemoteOptions() {
   for (const option of remoteBrowser.remotePicker.options) {
     if (option.value) {
-      option.textContent = vaultBacking.has(option.value) ? `${option.value} 🔒` : option.value;
+      const base = window.SignIns?.label(option.value) ?? option.value;
+      option.textContent = vaultBacking.has(option.value) ? `${base} 🔒` : base;
     }
   }
 }
@@ -4317,6 +4339,7 @@ function browseRemote(name) {
 window.RemoteBrowser = {
   init,
   setRemotes,
+  refreshSignInLabels,
   queueUpload,
   show,
   hide,

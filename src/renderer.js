@@ -99,6 +99,7 @@ const elements = {
   snackbarIcon: document.getElementById("snackbar-icon"),
   snackbarTitle: document.getElementById("snackbar-title"),
   snackbarMessage: document.getElementById("snackbar-message"),
+  snackbarAction: document.getElementById("snackbar-action"),
 };
 
 const outputPanel = new JobOutputPanel(document.querySelector(".output-panel"));
@@ -116,6 +117,7 @@ const STATUS_FADE_MS = 450;
 const POPUP_AUTO_CLOSE_MS = 3500;
 const SNACKBAR_DURATION_MS = 3400;
 const SNACKBAR_LEAVE_MS = 220;
+const SIGN_IN_CHECK_DELAY_MS = 5000;
 
 function hideSnackbar() {
   if (snackbarHideTimeout) {
@@ -128,7 +130,10 @@ function hideSnackbar() {
     snackbarLeaveTimeout = null;
   }
 
-  elements.snackbar.classList.remove("success", "error", "running", "is-leaving");
+  elements.snackbar.classList.remove("success", "error", "running", "warning", "is-leaving");
+  elements.snackbar.style.removeProperty("--snackbar-ms");
+  elements.snackbarAction.classList.add("hidden");
+  elements.snackbarAction.onclick = null;
   elements.snackbarIcon.textContent = "";
   elements.snackbarTitle.textContent = "";
   elements.snackbarMessage.textContent = "";
@@ -148,13 +153,22 @@ function snackbarMessageNodes(message) {
   });
 }
 
-function showSnackbar({ title, message, type = "success" }) {
+function showSnackbar({ title, message, type = "success", action = null, duration = SNACKBAR_DURATION_MS }) {
   hideSnackbar();
   void elements.snackbar.offsetWidth;
 
   elements.snackbarTitle.textContent = title;
   elements.snackbarMessage.replaceChildren(...snackbarMessageNodes(message));
   elements.snackbar.classList.add(type);
+  elements.snackbar.style.setProperty("--snackbar-ms", `${duration}ms`);
+  if (action) {
+    elements.snackbarAction.textContent = action.label;
+    elements.snackbarAction.onclick = () => {
+      hideSnackbar();
+      action.onClick();
+    };
+    elements.snackbarAction.classList.remove("hidden");
+  }
   elements.snackbarRoot.classList.remove("hidden");
   elements.snackbarRoot.setAttribute("aria-hidden", "false");
 
@@ -162,7 +176,7 @@ function showSnackbar({ title, message, type = "success" }) {
     elements.snackbar.classList.add("is-leaving");
     snackbarLeaveTimeout = setTimeout(hideSnackbar, SNACKBAR_LEAVE_MS);
     snackbarHideTimeout = null;
-  }, SNACKBAR_DURATION_MS);
+  }, duration);
 }
 
 function hidePopup() {
@@ -636,7 +650,7 @@ function fillRemotePicker() {
 
     option.value = remote;
 
-    option.textContent = remote;
+    option.textContent = window.SignIns?.label(remote) ?? remote;
 
     elements.remotePicker.appendChild(option);
 
@@ -1276,6 +1290,7 @@ async function loadRemotes({ showFeedback = false } = {}) {
     updatePathMeters({ immediate: true });
     window.RemoteBrowser?.setRemotes(remotes);
     window.StorageView?.setRemotes(remotes);
+    void window.SignIns?.check();
 
     const countLabel = `${remotes.length} remote${remotes.length === 1 ? "" : "s"}`;
 
@@ -1350,6 +1365,7 @@ async function init() {
     window.StorageView?.setRemotes(remotes);
     elements.version.textContent = rcloneVersion;
     elements.operation.dispatchEvent(new Event("change"));
+    setTimeout(() => void window.SignIns?.check(), SIGN_IN_CHECK_DELAY_MS);
   } finally {
     if (window.rcloneGui) {
       await syncMinimumWindowSize(true);
@@ -1517,8 +1533,9 @@ window.RemoteBrowser?.init({
   onNotify: showSnackbar,
 });
 
-elements.manageRemotes?.addEventListener("click", () => {
+function openRemoteManager(focus = "") {
   window.RemoteManager?.open({
+    focus: typeof focus === "string" ? focus : "",
     onChanged: async (names) => {
       remotes = names;
       fillRemotePicker();
@@ -1531,7 +1548,9 @@ elements.manageRemotes?.addEventListener("click", () => {
       window.RemoteBrowser?.browseRemote(name);
     },
   });
-});
+}
+
+elements.manageRemotes?.addEventListener("click", openRemoteManager);
 elements.popupClose.addEventListener("click", hidePopup);
 elements.updateLater.addEventListener("click", hideUpdateDialog);
 elements.updateSkip?.addEventListener("click", async () => {
@@ -1814,6 +1833,39 @@ async function initExplorerMenu() {
       explorerMenu.offerYes.focus();
     }, 1500);
   }
+}
+
+const signInMenu = {
+  toggle: document.getElementById("signin-check-toggle"),
+};
+
+function renderSignInState() {
+  fillRemotePicker();
+  window.RemoteBrowser?.refreshSignInLabels();
+  window.StorageView?.refreshSignIns();
+  const expired = window.SignIns.expiredNames();
+  elements.manageRemotes?.classList.toggle("has-alert", expired.length > 0);
+  if (elements.manageRemotes) {
+    elements.manageRemotes.title = expired.length ? `Sign-in expired: ${expired.join(", ")}` : "";
+  }
+  signInMenu.toggle?.setAttribute("aria-checked", String(window.SignIns.isEnabled()));
+}
+
+async function toggleSignInCheck() {
+  const next = signInMenu.toggle.getAttribute("aria-checked") !== "true";
+  try {
+    await window.rcloneGui.setSignInCheckEnabled(next);
+    window.SignIns.setEnabled(next);
+    renderSignInState();
+  } catch (error) {
+    showSnackbar({ title: "Couldn't change that setting", message: String(error.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""), type: "error" });
+  }
+}
+
+if (window.SignIns) {
+  window.SignIns.onChange(renderSignInState);
+  void window.SignIns.init({ notify: showSnackbar, openManager: openRemoteManager }).then(renderSignInState);
+  signInMenu.toggle?.addEventListener("click", () => void toggleSignInCheck());
 }
 
 explorerMenu.toggle?.addEventListener("click", () => {

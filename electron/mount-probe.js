@@ -22,7 +22,7 @@ const AUTH_PATTERNS = [
   /refresh token/i,
   /oauth2?:/i,
   /\b40[13]\b/,
-  /unauthori[sz]ed/i,
+  /unauthori[sz]ed|unauthenticated/i,
   /forbidden/i,
   /authentication (?:failed|required)/i,
   /auth(?:orization)? (?:failed|error)/i,

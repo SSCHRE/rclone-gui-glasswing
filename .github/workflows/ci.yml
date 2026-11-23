@@ -249,7 +249,10 @@ jobs:
             echo "No build files found"; exit 1
           fi
           printf '%s\n' "${files[@]}"
-          gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
+          tag="${{ steps.version.outputs.tag }}"
+          sed "s/VERSION/${tag#v}/g" .github/release-notes.md > release-notes.md
+          gh release create "$tag" "${files[@]}" \
             --target "${{ github.sha }}" \
-            --title "${{ steps.version.outputs.tag }}" \
+            --title "$tag" \
+            --notes-file release-notes.md \
             --generate-notes

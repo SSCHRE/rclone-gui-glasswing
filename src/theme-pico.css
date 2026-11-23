@@ -270,6 +270,11 @@
     box-shadow: none;
   }
 
+  & .sidebar-item.has-alert::after {
+    background: var(--pc-warn);
+    box-shadow: none;
+  }
+
   & .header-actions {
     border-top-color: var(--pc-border);
   }
@@ -2286,6 +2291,20 @@
     color: var(--pc-muted);
   }
 
+  & .remote-signin-badge {
+    border-radius: var(--pc-radius);
+  }
+
+  & .remote-signin-badge.is-expired {
+    background: var(--pc-warn-soft);
+    color: var(--pc-warn);
+  }
+
+  & .remote-signin-badge.is-unreachable {
+    background: var(--pc-field-hover);
+    color: var(--pc-muted);
+  }
+
   & .remote-mount-status.is-mounted {
     color: var(--pc-ok-text);
   }
@@ -2713,14 +2732,16 @@
     border-left-color: var(--pc-err-bg);
   }
 
-  & .snackbar.running {
+  & .snackbar.running,
+  & .snackbar.warning {
     border-left-color: var(--pc-warn);
   }
 
   & .snackbar-icon,
   & .snackbar.success .snackbar-icon,
   & .snackbar.error .snackbar-icon,
-  & .snackbar.running .snackbar-icon {
+  & .snackbar.running .snackbar-icon,
+  & .snackbar.warning .snackbar-icon {
     box-shadow: none;
   }
 

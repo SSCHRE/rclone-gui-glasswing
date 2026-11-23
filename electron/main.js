@@ -7,6 +7,7 @@ const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const mounts = require("./mounts");
 const mountProbe = require("./mount-probe");
+const { createSignInChecker, remoteNameFromPath } = require("./sign-in-check");
 const serves = require("./serves");
 const { createStorageHistory } = require("./storage-history");
 const { createRunHistory, createRunTracker } = require("./run-history");
@@ -1464,6 +1465,7 @@ ipcMain.handle("list-remote-path", async (_event, remotePath) => {
   );
 
   if (result.code !== 0) {
+    noteAuthFailure(target, result.stderr);
     throw new Error(result.stderr || result.stdout || `Failed to list "${target}"`);
   }
 
@@ -1722,6 +1724,9 @@ ipcMain.handle("reconnect-remote", async (_event, name) => {
     throw new Error(result.stderr || `Failed to reconnect remote "${remote}"`);
   }
 
+  if (signInCheckEnabled()) {
+    void signIns.run({ only: [remote] });
+  }
   return result.stdout.trim();
 });
 
@@ -1791,6 +1796,68 @@ async function probeRemoteAccess(remote) {
   }
   return { code: result.code, message: mountProbe.probeMessage(result, remote), detail: result.detail };
 }
+
+const SIGN_IN_RETRY_MS = 60000;
+const SIGN_IN_HIDDEN_RECHECK_MS = 60 * 60 * 1000;
+let signInRetryTimer = null;
+let hiddenAt = 0;
+
+function signInCheckEnabled() {
+  return getAppSettings().checkSignIns !== false;
+}
+
+const signIns = createSignInChecker({
+  readDump: async () => {
+    const result = await runRclone(["config", "dump"], { timeoutMs: 30000 });
+    if (result.code !== 0) {
+      throw new Error(result.stderr || "Failed to read rclone config");
+    }
+    return parseConfigDump(result.stdout);
+  },
+  probe: probeRemoteAccess,
+  onChange: (payload) => send("remote-sign-ins-changed", payload),
+});
+
+async function requestSignInCheck() {
+  if (!signInCheckEnabled()) {
+    return { enabled: false, skipped: "off", results: [] };
+  }
+  if (activeJob || jobStarting) {
+    clearTimeout(signInRetryTimer);
+    signInRetryTimer = setTimeout(() => void requestSignInCheck(), SIGN_IN_RETRY_MS);
+    return { enabled: true, skipped: "busy", results: signIns.results() };
+  }
+  const results = await signIns.run();
+  return { enabled: true, skipped: "", results };
+}
+
+function noteAuthFailure(remotePath, stderr) {
+  const remote = remoteNameFromPath(remotePath);
+  if (!remote || !signInCheckEnabled()) {
+    return;
+  }
+  if (!/directory not found|object not found|doesn't exist|does not exist/i.test(String(stderr || ""))) {
+    void signIns.recheck(remote);
+  }
+}
+
+ipcMain.handle("get-remote-sign-ins", async () => ({
+  enabled: signInCheckEnabled(),
+  results: signIns.results(),
+}));
+
+ipcMain.handle("check-remote-sign-ins", async () => requestSignInCheck());
+
+ipcMain.handle("set-sign-in-check-enabled", async (_event, enabled) => {
+  await saveAppSettings({ checkSignIns: Boolean(enabled) });
+  if (enabled) {
+    void requestSignInCheck();
+  } else {
+    clearTimeout(signInRetryTimer);
+    signIns.clear();
+  }
+  return signInCheckEnabled();
+});
 
 ipcMain.handle("mount-remote", async (_event, payload) => {
   const remote = await configuredRemote(payload?.remote);
@@ -3540,6 +3607,10 @@ async function startJob(job, { scheduled = null } = {}) {
     const cancelled = jobState.killed;
     const success = code === 0 && !cancelled;
     const failure = !success && !cancelled ? describeJobFailure(operation, jobState.outputTail) : {};
+    if (!success && !cancelled) {
+      noteAuthFailure(job.source, jobState.outputTail);
+      noteAuthFailure(job.destination, jobState.outputTail);
+    }
     await markJobRunFinished(jobState.historyId, { success, cancelled });
     send("job-finished", {
       id: jobState.id,
@@ -3723,6 +3794,10 @@ function nextScheduledJob() {
 }
 
 function showWindow() {
+  if (hiddenAt && Date.now() - hiddenAt > SIGN_IN_HIDDEN_RECHECK_MS) {
+    void requestSignInCheck();
+  }
+  hiddenAt = 0;
   windowRevealed = true;
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
@@ -3759,6 +3834,7 @@ function hideToTray() {
   }
   mainWindow.hide();
   windowRevealed = false;
+  hiddenAt = Date.now();
   updateTray();
   if (!getAppSettings().trayHintShown) {
     showNotification(

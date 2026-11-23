@@ -5,7 +5,7 @@ A desktop GUI for [rclone](https://rclone.org/). Run rclone jobs with a live pro
 
 ## Download
 
-Grab the latest **Glasswing Setup x.exe** (installer) or **Glasswing x.exe** (portable) from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases). On Linux there's an AppImage and a `.deb`, and on macOS a `.dmg` (one for Apple Silicon, one for Intel).
+Grab the latest release from the [Releases page](https://github.com/SSCHRE/rclone-gui-glasswing/releases). Every file has the OS in its name: **Windows-Setup** (installer) or **Windows-Portable** on Windows, an **AppImage** or **.deb** on Linux, and a **.dmg** on macOS (`arm64` for Apple Silicon, `x64` for Intel). The release notes have a little table too if you're not sure which one you need.
 
 ### First launch on macOS
 
@@ -45,6 +45,7 @@ Self update doesn't work on the Mac build for now, new versions have to be downl
 
 ### Remotes
 - **Remote manager**: add remotes (including browser sign-in for OAuth providers), reconnect expired tokens, view a redacted config, and delete remotes
+- **Expired sign-in check**: a quiet background check a few seconds after startup flags OAuth remotes that need a new sign-in, with a one click Reconnect (toggle it in the Appearance menu)
 - **Quick insert remote**: drop `remote:path` into source or destination
 - **Refresh remotes**: reload your rclone config with clear success/error feedback
 - **rclone config wizard**: open the classic interactive `rclone config` in a terminal

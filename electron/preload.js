@@ -58,6 +58,14 @@ contextBridge.exposeInMainWorld("rcloneGui", {
   createVault: (payload) => ipcRenderer.invoke("create-vault", payload),
   authorizeProvider: (provider) => ipcRenderer.invoke("authorize-provider", provider),
   reconnectRemote: (name) => ipcRenderer.invoke("reconnect-remote", name),
+  getRemoteSignIns: () => ipcRenderer.invoke("get-remote-sign-ins"),
+  checkRemoteSignIns: () => ipcRenderer.invoke("check-remote-sign-ins"),
+  setSignInCheckEnabled: (enabled) => ipcRenderer.invoke("set-sign-in-check-enabled", enabled),
+  onRemoteSignInsChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("remote-sign-ins-changed", listener);
+    return () => ipcRenderer.removeListener("remote-sign-ins-changed", listener);
+  },
   openRcloneConfig: () => ipcRenderer.invoke("open-rclone-config"),
   getMountStatus: () => ipcRenderer.invoke("get-mount-status"),
   getBwlimit: () => ipcRenderer.invoke("get-bwlimit"),

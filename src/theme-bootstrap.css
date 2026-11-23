@@ -298,6 +298,11 @@
     box-shadow: none;
   }
 
+  & .sidebar-item.has-alert::after {
+    background: #ffc107;
+    box-shadow: none;
+  }
+
   & .header-actions {
     border-top-color: #dee2e6;
   }
@@ -601,7 +606,8 @@
     color: #dc3545;
   }
 
-  & .snackbar.running .snackbar-icon {
+  & .snackbar.running .snackbar-icon,
+  & .snackbar.warning .snackbar-icon {
     background: #fff3cd;
     color: #997404;
   }
@@ -1711,6 +1717,25 @@
   & .remote-mount-status.is-mounted {
     border: 0;
     background: #198754;
+    color: #ffffff;
+  }
+
+  & .remote-signin-badge {
+    border-radius: 0.375rem;
+  }
+
+  & .remote-signin-badge.is-expired {
+    background: #fff3cd;
+    color: #664d03;
+  }
+
+  & .remote-signin-badge.is-unreachable {
+    background: #e9ecef;
+    color: #6c757d;
+  }
+
+  & .remote-list-item.is-selected .remote-signin-badge {
+    background: rgba(255, 255, 255, 0.2);
     color: #ffffff;
   }
 }
