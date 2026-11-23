@@ -57,7 +57,7 @@ function parseMountOutput(text) {
 }
 
 function trimSlashes(dir) {
-  return path.posix.normalize(dir).replace(/(.)\/+$/, "$1");
+  return linux.trimTrailingSlashes(path.posix.normalize(dir));
 }
 
 function isMountedIn(text, dir, aliases = []) {
@@ -65,27 +65,9 @@ function isMountedIn(text, dir, aliases = []) {
   return parseMountOutput(text).some((entry) => targets.has(trimSlashes(entry.mountPoint)));
 }
 
-function buildMountArgs({ mode, remote, mountPoint, cacheModeFlag, rc, readOnly, bwlimit }) {
-  const flags = [
-    cacheModeFlag,
-    "--rc",
-    "--rc-addr",
-    `127.0.0.1:${rc.port}`,
-    "--rc-user",
-    rc.user,
-    "--rc-pass",
-    rc.pass,
-  ];
-  if (mode === "mount") {
-    flags.unshift(`--volname=${remote}`);
-  }
-  if (readOnly) {
-    flags.push("--read-only");
-  }
-  if (bwlimit) {
-    flags.push(`--bwlimit=${bwlimit}`);
-  }
-  return [mode, ...flags, "--", `${remote}:`, mountPoint];
+function buildMountArgs({ mode, remote, ...options }) {
+  const extraFlags = mode === "mount" ? [`--volname=${remote}`] : [];
+  return linux.buildMountArgs({ mode, remote, ...options, extraFlags });
 }
 
 function unmountCommands(dir) {
@@ -96,30 +78,14 @@ function unmountCommands(dir) {
   ];
 }
 
-async function runUnmountChain(dir, exec) {
-  let busy = false;
-  let lastError = "";
-  for (const [command, args] of unmountCommands(dir)) {
-    const result = await exec(command, args);
-    if (result.code === 0) {
-      return { ok: true, busy: false, error: "" };
-    }
-    if (result.notFound) {
-      continue;
-    }
-    const stderr = String(result.stderr || "").trim();
-    if (/busy/i.test(stderr)) {
-      busy = true;
-    }
-    lastError = stderr || lastError;
-  }
-  return { ok: false, busy, error: busy ? linux.busyMessage(dir) : lastError };
+function runUnmountChain(dir, exec) {
+  return linux.runUnmountChain(dir, exec, unmountCommands(dir));
 }
 
 function friendlyMountError(stderr, code) {
   const text = String(stderr || "");
-  if (/didn't find section in config file|not found in config/i.test(text)) {
-    return "This remote no longer exists in your rclone config.";
+  if (linux.isMissingRemoteError(text)) {
+    return linux.MISSING_REMOTE_MESSAGE;
   }
   if (/unknown command|not supported on this|mount is not supported|built without|nfsmount.*not (?:supported|available)/i.test(text)) {
     return NO_SUPPORT_MESSAGE;
@@ -131,17 +97,9 @@ function friendlyMountError(stderr, code) {
     return "macOS didn't let rclone mount there. Pick a folder inside your home folder.";
   }
   if (/directory already mounted|not empty|already mounted|resource busy/i.test(text)) {
-    return "That folder is already in use. Pick an empty folder.";
+    return linux.FOLDER_IN_USE_MESSAGE;
   }
-  const lastError = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /ERROR|CRITICAL|Fatal/i.test(line))
-    .pop();
-  if (lastError) {
-    return lastError.replace(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\s+/, "");
-  }
-  return `rclone mount exited with code ${code ?? "unknown"}.`;
+  return linux.lastRcloneError(text, code);
 }
 
 module.exports = {

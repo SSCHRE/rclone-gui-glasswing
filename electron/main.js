@@ -1961,7 +1961,7 @@ exit
 `,
     { mode: 0o700, flag: "wx" },
   );
-  const child = spawn("open", ["-a", "Terminal", script], { detached: true, stdio: "ignore" });
+  const child = spawn("/usr/bin/open", ["-a", "Terminal", script], { detached: true, stdio: "ignore" });
   child.on("error", () => {});
   child.unref();
 }

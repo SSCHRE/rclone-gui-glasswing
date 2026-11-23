@@ -68,8 +68,9 @@ function isMountedIn(text, dir) {
   return parseMountinfo(text).some((entry) => entry.mountPoint === target);
 }
 
-function buildMountArgs({ remote, mountPoint, cacheModeFlag, rc, readOnly, bwlimit }) {
+function buildMountArgs({ mode = "mount", remote, mountPoint, cacheModeFlag, rc, readOnly, bwlimit, extraFlags = [] }) {
   const flags = [
+    ...extraFlags,
     cacheModeFlag,
     "--rc",
     "--rc-addr",
@@ -85,7 +86,7 @@ function buildMountArgs({ remote, mountPoint, cacheModeFlag, rc, readOnly, bwlim
   if (bwlimit) {
     flags.push(`--bwlimit=${bwlimit}`);
   }
-  return ["mount", ...flags, "--", `${remote}:`, mountPoint];
+  return [mode, ...flags, "--", `${remote}:`, mountPoint];
 }
 
 function unmountCommands(dir) {
@@ -100,10 +101,10 @@ function busyMessage(dir) {
   return `Something is still using files in ${dir}. Close it and try again.`;
 }
 
-async function runUnmountChain(dir, exec) {
+async function runUnmountChain(dir, exec, commands = unmountCommands(dir)) {
   let busy = false;
   let lastError = "";
-  for (const [command, args] of unmountCommands(dir)) {
+  for (const [command, args] of commands) {
     const result = await exec(command, args);
     if (result.code === 0) {
       return { ok: true, busy: false, error: "" };
@@ -120,20 +121,14 @@ async function runUnmountChain(dir, exec) {
   return { ok: false, busy, error: busy ? busyMessage(dir) : lastError };
 }
 
-function friendlyLinuxMountError(stderr, code) {
-  const text = String(stderr || "");
-  if (/didn't find section in config file|not found in config/i.test(text)) {
-    return "This remote no longer exists in your rclone config.";
-  }
-  if (/fusermount3?: (?:exec: )?.*not found|fusermount.*executable file not found|fuse: .*not found|can't find fuse/i.test(text)) {
-    return FUSE_MISSING_MESSAGE;
-  }
-  if (/\/dev\/fuse/i.test(text) && /permission denied|no such file/i.test(text)) {
-    return "Glasswing can't open /dev/fuse. Check that FUSE is installed and your user is allowed to use it.";
-  }
-  if (/directory already mounted|not empty|already mounted/i.test(text)) {
-    return "That folder is already in use. Pick an empty folder.";
-  }
+const MISSING_REMOTE_MESSAGE = "This remote no longer exists in your rclone config.";
+const FOLDER_IN_USE_MESSAGE = "That folder is already in use. Pick an empty folder.";
+
+function isMissingRemoteError(text) {
+  return /didn't find section in config file|not found in config/i.test(text);
+}
+
+function lastRcloneError(text, code) {
   const lastError = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -145,11 +140,29 @@ function friendlyLinuxMountError(stderr, code) {
   return `rclone mount exited with code ${code ?? "unknown"}.`;
 }
 
+function friendlyLinuxMountError(stderr, code) {
+  const text = String(stderr || "");
+  if (isMissingRemoteError(text)) {
+    return MISSING_REMOTE_MESSAGE;
+  }
+  if (/fusermount3?: (?:exec: )?.*not found|fusermount.*executable file not found|fuse: .*not found|can't find fuse/i.test(text)) {
+    return FUSE_MISSING_MESSAGE;
+  }
+  if (/\/dev\/fuse/i.test(text) && /permission denied|no such file/i.test(text)) {
+    return "Glasswing can't open /dev/fuse. Check that FUSE is installed and your user is allowed to use it.";
+  }
+  if (/directory already mounted|not empty|already mounted/i.test(text)) {
+    return FOLDER_IN_USE_MESSAGE;
+  }
+  return lastRcloneError(text, code);
+}
+
 module.exports = {
   FUSE_MISSING_MESSAGE,
   defaultMountRoot,
   defaultMountPoint,
   normalizeMountPoint,
+  trimTrailingSlashes,
   detectFuse,
   parseMountinfo,
   isMountedIn,
@@ -157,5 +170,9 @@ module.exports = {
   unmountCommands,
   runUnmountChain,
   busyMessage,
+  MISSING_REMOTE_MESSAGE,
+  FOLDER_IN_USE_MESSAGE,
+  isMissingRemoteError,
+  lastRcloneError,
   friendlyLinuxMountError,
 };
