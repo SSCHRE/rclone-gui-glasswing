@@ -1047,7 +1047,7 @@ const uploadPanel = new TransferPanel(transferStack, {
   },
   cancel: () => window.rcloneGui?.cancelUpload?.(),
   onBatchFinished: (batch) => {
-    refreshAfterChange([batch.targetPath]);
+    refreshAfterChange([batch.targetPath, parentRemotePath(batch.targetPath)]);
     refreshAllMeters();
   },
 });
@@ -1079,7 +1079,8 @@ function transferRunBatch(method) {
 }
 
 function onTransferFinished(batch) {
-  refreshAfterChange([batch.destination, ...batch.sources.map(parentRemotePath)]);
+  const paths = [batch.destination, parentRemotePath(batch.destination), ...batch.sources.map(parentRemotePath)];
+  refreshAfterChange([...new Set(paths)]);
   refreshAllMeters();
 }
 
@@ -1180,13 +1181,53 @@ function describeCount(count) {
   return count === 1 ? "1 item" : `${count} items`;
 }
 
-async function transferItems(source, target, operation) {
-  if (!splitOn || !source || !target || source === target) {
+function isInsideItem(destination, item) {
+  return item.isDir && (destination === item.path || destination.startsWith(`${item.path}/`));
+}
+
+function canDropItems(items, destination) {
+  if (!items.length || !destination) {
+    return false;
+  }
+  if (items.some((item) => isInsideItem(destination, item))) {
+    return false;
+  }
+  return !items.every((item) => parentRemotePath(item.path) === destination);
+}
+
+async function folderNames(path) {
+  let listing = getCachedListing(path);
+  if (!listing) {
+    try {
+      const result = await window.rcloneGui.listRemotePath(path);
+      listing = result.entries || [];
+      setCachedListing(path, listing);
+    } catch {
+      listing = [];
+    }
+  }
+  return new Set(listing.map((entry) => entry.name));
+}
+
+function folderLabel(path) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return name || path;
+}
+
+async function transferItems(source, target, operation, drop = null) {
+  if (!splitOn || !source || !target) {
     return;
   }
-  const items = source.selectedItems();
-  const destination = target.currentPath();
+  const intoFolder = Boolean(drop?.destination);
+  if (source === target && !intoFolder) {
+    return;
+  }
+  const items = drop?.items || source.selectedItems();
+  const destination = intoFolder ? drop.destination : target.currentPath();
   if (!items.length || !destination) {
+    return;
+  }
+  if (intoFolder && !canDropItems(items, destination)) {
     return;
   }
 
@@ -1206,18 +1247,18 @@ async function transferItems(source, target, operation) {
   if (panel.cancelling) {
     return;
   }
-  if (!source.isSearching() && source.currentPath() === destination) {
+  if (!intoFolder && !source.isSearching() && source.currentPath() === destination) {
     notify({ title: "Same folder", message: "Both panes are looking at the same folder, pick another one on the other side.", type: "error" });
     return;
   }
 
-  const existing = target.existingNames();
+  const existing = destination === target.currentPath() && !target.isSearching() ? target.existingNames() : await folderNames(destination);
   const conflicts = transferNames(items).filter((name) => existing.has(name));
   if (moving) {
     const where = `${source.isSearching() ? "search results" : source.currentPath()} to ${destination}`;
     const overwrite = conflicts.length ? ` ${conflicts.length === 1 ? "One of them already exists" : `${conflicts.length} of them already exist`} there and will be replaced.` : "";
     const confirmed = await confirmAction({
-      title: `Move ${describeCount(items.length)}?`,
+      title: intoFolder ? `Move ${describeCount(items.length)} into "${folderLabel(destination)}"?` : `Move ${describeCount(items.length)}?`,
       message: `They'll be moved from ${where}.${overwrite}`,
       confirmLabel: "Move",
     });
@@ -1246,7 +1287,7 @@ function beginRowDrag(pane, event, entry) {
     event.preventDefault();
     return;
   }
-  rowDrag = { pane, count: items.length };
+  rowDrag = { pane, count: items.length, items: items.map((item) => ({ ...item })) };
   event.dataTransfer.effectAllowed = "copyMove";
   event.dataTransfer.setData("application/x-glasswing-items", String(items.length));
   const ghost = document.createElement("div");
@@ -3146,18 +3187,22 @@ async function pickAndUpload() {
 }
 
 async function uploadToCurrentFolder(localPaths) {
+  return uploadToFolder(localPaths, currentPath());
+}
+
+async function uploadToFolder(localPaths, targetPath) {
   const paths = (localPaths || []).filter(Boolean);
-  if (!paths.length || !canUpload()) {
+  if (!paths.length || !canUpload() || !targetPath) {
     return;
   }
 
-  const targetPath = currentPath();
-  const existing = new Set(entries.map((entry) => entry.name));
+  const intoCurrent = targetPath === currentPath();
+  const existing = intoCurrent ? new Set(entries.map((entry) => entry.name)) : await folderNames(targetPath);
   const conflicts = paths.map(localBaseName).filter((name) => existing.has(name));
-  if (conflicts.length && !(await confirmReplace(conflicts))) {
+  if (conflicts.length && !(await confirmReplace(conflicts, intoCurrent ? "this folder" : `"${folderLabel(targetPath)}"`))) {
     return;
   }
-  if (!canUpload() || currentPath() !== targetPath || uploadPanel.cancelling) {
+  if (!canUpload() || (intoCurrent && currentPath() !== targetPath) || uploadPanel.cancelling) {
     return;
   }
 
@@ -3172,9 +3217,11 @@ async function uploadToCurrentFolder(localPaths) {
   }));
 
   uploadPanel.enqueue({ targetPath, items });
-  try {
-    localStorage.setItem(LAST_UPLOAD_KEY, JSON.stringify({ remote: currentRemote, subPath: currentSubPath }));
-  } catch {}
+  if (intoCurrent) {
+    try {
+      localStorage.setItem(LAST_UPLOAD_KEY, JSON.stringify({ remote: currentRemote, subPath: currentSubPath }));
+    } catch {}
+  }
   return true;
 }
 
@@ -3184,36 +3231,97 @@ function bindUploadDrop() {
     return;
   }
 
-  const hasFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
-  const hasRows = (event) => Boolean(rowDrag) && rowDrag.pane !== pane && Array.from(event.dataTransfer?.types || []).includes("application/x-glasswing-items");
+  const hasType = (event, type) => Array.from(event.dataTransfer?.types || []).includes(type);
+  const hasFiles = (event) => hasType(event, "Files");
+  const hasRows = (event) => Boolean(rowDrag) && hasType(event, "application/x-glasswing-items");
+  const copyModifier = (event) => (window.rcloneGui?.platform === "darwin" ? event.altKey : event.ctrlKey);
   let dragDepth = 0;
+  let folderRow = null;
+
+  const setFolderRow = (row) => {
+    if (row === folderRow) {
+      return;
+    }
+    folderRow?.classList.remove("is-drop-folder");
+    folderRow = row;
+    folderRow?.classList.add("is-drop-folder");
+  };
+
+  const clearDropState = () => {
+    dragDepth = 0;
+    setFolderRow(null);
+    dropZone.classList.remove("is-drop-target");
+    setTransferTarget(false);
+  };
+
+  const folderRowAt = (event) => {
+    const row = event.target.closest?.("tr.browse-row.is-dir");
+    return row && dropZone.contains(row) ? row : null;
+  };
+
+  const resolveTarget = (event) => {
+    const rows = hasRows(event);
+    if (!rows && !hasFiles(event)) {
+      return null;
+    }
+    const row = folderRowAt(event);
+    const sameSource = rows && rowDrag.pane === pane;
+    if (row && row.classList.contains("is-pending")) {
+      return { rows, row: null, effect: "none" };
+    }
+    if (row) {
+      const destination = row.dataset.path;
+      if (rows) {
+        if (!canDropItems(rowDrag.items, destination)) {
+          return { rows, row: null, effect: "none" };
+        }
+        const effect = sameSource ? (copyModifier(event) ? "copy" : "move") : (event.shiftKey ? "move" : "copy");
+        return { rows, row, destination, effect };
+      }
+      return { rows, row, destination, effect: canUpload() ? "copy" : "none" };
+    }
+    if (sameSource) {
+      return { rows, row: null, effect: "none", ignore: true };
+    }
+    if (rows) {
+      const inside = rowDrag.items.some((item) => isInsideItem(currentPath(), item));
+      return { rows, row: null, effect: currentRemote && !inside ? (event.shiftKey ? "move" : "copy") : "none", current: true };
+    }
+    return { rows, row: null, effect: canUpload() ? "copy" : "none", current: true };
+  };
+
+  const showTarget = (target) => {
+    const folder = target.effect !== "none" && target.row ? target.row : null;
+    setFolderRow(folder);
+    const wholeList = !folder && target.current && target.effect !== "none";
+    dropZone.classList.toggle("is-drop-target", wholeList && !target.rows);
+    setTransferTarget(wholeList && target.rows);
+  };
 
   dropZone.addEventListener("dragenter", (event) => {
-    if (hasRows(event)) {
-      event.preventDefault();
-      dragDepth += 1;
-      setTransferTarget(Boolean(currentRemote));
+    const target = resolveTarget(event);
+    if (!target) {
       return;
     }
-    if (!hasFiles(event)) {
-      return;
-    }
-    event.preventDefault();
     dragDepth += 1;
-    dropZone.classList.toggle("is-drop-target", canUpload());
+    if (!target.ignore) {
+      event.preventDefault();
+    }
+    showTarget(target);
   });
 
   dropZone.addEventListener("dragover", (event) => {
-    if (hasRows(event)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = currentRemote ? (event.shiftKey ? "move" : "copy") : "none";
+    const target = resolveTarget(event);
+    if (!target) {
       return;
     }
-    if (!hasFiles(event)) {
+    if (target.ignore) {
+      showTarget(target);
       return;
     }
     event.preventDefault();
-    event.dataTransfer.dropEffect = canUpload() ? "copy" : "none";
+    event.dataTransfer.dropEffect = target.effect;
+    showTarget(target);
   });
 
   dropZone.addEventListener("dragleave", (event) => {
@@ -3222,30 +3330,31 @@ function bindUploadDrop() {
     }
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) {
-      dropZone.classList.remove("is-drop-target");
-      setTransferTarget(false);
+      clearDropState();
     }
   });
 
   dropZone.addEventListener("drop", (event) => {
-    if (hasRows(event)) {
-      event.preventDefault();
-      dragDepth = 0;
-      const source = rowDrag.pane;
-      const operation = event.shiftKey ? "move" : "copy";
-      endRowDrag();
-      if (currentRemote) {
-        setActivePane(pane);
-        void transferItems(source, pane, operation);
-      }
-      return;
-    }
-    if (!hasFiles(event)) {
+    const target = resolveTarget(event);
+    clearDropState();
+    if (!target || target.ignore) {
       return;
     }
     event.preventDefault();
-    dragDepth = 0;
-    dropZone.classList.remove("is-drop-target");
+    if (target.effect === "none") {
+      return;
+    }
+    if (target.rows) {
+      const source = rowDrag.pane;
+      const items = rowDrag.items;
+      const operation = target.effect === "move" ? "move" : "copy";
+      endRowDrag();
+      if (currentRemote) {
+        setActivePane(pane);
+        void transferItems(source, pane, operation, target.destination ? { items, destination: target.destination } : null);
+      }
+      return;
+    }
     if (!canUpload() || !window.rcloneGui?.getPathForFile) {
       return;
     }
@@ -3253,7 +3362,7 @@ function bindUploadDrop() {
       .map((file) => window.rcloneGui.getPathForFile(file))
       .filter(Boolean);
     setActivePane(pane);
-    void uploadToCurrentFolder(paths);
+    void uploadToFolder(paths, target.destination || currentPath());
   });
 }
 
