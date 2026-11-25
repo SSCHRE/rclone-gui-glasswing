@@ -63,7 +63,22 @@ const contextUi = {
   copyAcrossBtn: document.getElementById("context-copy-across"),
   moveAcrossBtn: document.getElementById("context-move-across"),
   renameBtn: document.getElementById("context-rename"),
+  moveToBtn: document.getElementById("context-move-to"),
+  copyToBtn: document.getElementById("context-copy-to"),
 };
+
+const pickerUi = {
+  dialog: document.getElementById("move-to-dialog"),
+  title: document.getElementById("move-to-title"),
+  upBtn: document.getElementById("move-to-up"),
+  crumbs: document.getElementById("move-to-crumbs"),
+  list: document.getElementById("move-to-list"),
+  recentBtn: document.getElementById("move-to-recent"),
+  reason: document.getElementById("move-to-reason"),
+  cancelBtn: document.getElementById("move-to-cancel"),
+  confirmBtn: document.getElementById("move-to-confirm"),
+};
+const recentTargets = new Map();
 let contextPane = null;
 
 const previewUi = {
@@ -1074,7 +1089,11 @@ function transferRunBatch(method) {
       items: batch.items.map((item) => ({ path: item.path, isDir: item.isDir })),
       destination: batch.destination,
     });
-    return { completed: result.completed, failed: result.failed, cancelled: result.cancelled };
+    const outcome = { completed: result.completed, failed: result.failed, cancelled: result.cancelled };
+    if (batch.successToast && outcome.completed && !outcome.cancelled && !outcome.failed?.length) {
+      notify({ ...batch.successToast, type: "success" });
+    }
+    return outcome;
   };
 }
 
@@ -1214,20 +1233,15 @@ function folderLabel(path) {
   return name || path;
 }
 
-async function transferItems(source, target, operation, drop = null) {
-  if (!splitOn || !source || !target) {
-    return;
-  }
-  const intoFolder = Boolean(drop?.destination);
-  if (source === target && !intoFolder) {
-    return;
-  }
-  const items = drop?.items || source.selectedItems();
-  const destination = intoFolder ? drop.destination : target.currentPath();
+function destinationLabel(destination) {
+  return remoteSidePath(destination) || destination;
+}
+
+async function transferToFolder({ source, items, destination, operation, folderTarget = false, confirmMove = true, existing = null, announce = false }) {
   if (!items.length || !destination) {
     return;
   }
-  if (intoFolder && !canDropItems(items, destination)) {
+  if (folderTarget && !canDropItems(items, destination)) {
     return;
   }
 
@@ -1247,18 +1261,14 @@ async function transferItems(source, target, operation, drop = null) {
   if (panel.cancelling) {
     return;
   }
-  if (!intoFolder && !source.isSearching() && source.currentPath() === destination) {
-    notify({ title: "Same folder", message: "Both panes are looking at the same folder, pick another one on the other side.", type: "error" });
-    return;
-  }
 
-  const existing = destination === target.currentPath() && !target.isSearching() ? target.existingNames() : await folderNames(destination);
-  const conflicts = transferNames(items).filter((name) => existing.has(name));
-  if (moving) {
+  const names = existing || await folderNames(destination);
+  const conflicts = transferNames(items).filter((name) => names.has(name));
+  if (moving && confirmMove) {
     const where = `${source.isSearching() ? "search results" : source.currentPath()} to ${destination}`;
     const overwrite = conflicts.length ? ` ${conflicts.length === 1 ? "One of them already exists" : `${conflicts.length} of them already exist`} there and will be replaced.` : "";
     const confirmed = await confirmAction({
-      title: intoFolder ? `Move ${describeCount(items.length)} into "${folderLabel(destination)}"?` : `Move ${describeCount(items.length)}?`,
+      title: folderTarget ? `Move ${describeCount(items.length)} into "${folderLabel(destination)}"?` : `Move ${describeCount(items.length)}?`,
       message: `They'll be moved from ${where}.${overwrite}`,
       confirmLabel: "Move",
     });
@@ -1278,7 +1288,267 @@ async function transferItems(source, target, operation, drop = null) {
       isDir: item.isDir,
       size: item.size || 0,
     })),
+    successToast: announce
+      ? { title: `${moving ? "Moved" : "Copied"} ${describeCount(items.length)}`, message: `to ${destinationLabel(destination)}` }
+      : null,
   });
+}
+
+async function transferItems(source, target, operation, drop = null) {
+  if (!splitOn || !source || !target) {
+    return;
+  }
+  const folderTarget = Boolean(drop?.destination);
+  if (source === target && !folderTarget) {
+    return;
+  }
+  const items = drop?.items || source.selectedItems();
+  const destination = folderTarget ? drop.destination : target.currentPath();
+  if (!items.length || !destination) {
+    return;
+  }
+  if (!folderTarget && !source.isSearching() && source.currentPath() === destination) {
+    notify({ title: "Same folder", message: "Both panes are looking at the same folder, pick another one on the other side.", type: "error" });
+    return;
+  }
+
+  const existing = !folderTarget && !target.isSearching() ? target.existingNames() : null;
+  await transferToFolder({ source, items, destination, operation, folderTarget, existing });
+}
+
+let pickerSession = null;
+
+function pickerPath(session) {
+  return formatRemotePath(session.remote, session.sub);
+}
+
+function pickerReason(session, path) {
+  const { items, operation } = session;
+  if (items.some((item) => isInsideItem(path, item))) {
+    return `Can't ${operation} a folder into itself.`;
+  }
+  if (items.every((item) => parentRemotePath(item.path) === path)) {
+    return items.length === 1 ? "It's already in this folder." : "They're already in this folder.";
+  }
+  return "";
+}
+
+function pickerCrumb(label, title, onClick) {
+  const crumb = document.createElement("button");
+  crumb.type = "button";
+  crumb.className = "browse-crumb";
+  crumb.textContent = label;
+  crumb.title = title;
+  crumb.addEventListener("click", onClick);
+  return crumb;
+}
+
+function renderPickerCrumbs(session) {
+  const nodes = [];
+  const root = pickerCrumb(session.remote, `${session.remote}:`, () => openPickerFolder(session, ""));
+  root.classList.add("is-root");
+  nodes.push(root);
+  let built = "";
+  for (const part of session.sub.split("/").filter(Boolean)) {
+    built = joinSubPath(built, part);
+    const target = built;
+    const separator = document.createElement("span");
+    separator.className = "browse-crumb-sep";
+    separator.setAttribute("aria-hidden", "true");
+    nodes.push(separator, pickerCrumb(part, part, () => openPickerFolder(session, target)));
+  }
+  pickerUi.crumbs.replaceChildren(...nodes);
+  pickerUi.crumbs.scrollLeft = pickerUi.crumbs.scrollWidth;
+}
+
+function pickerMessage(text, { spinner = false, retry = false } = {}) {
+  const box = document.createElement("div");
+  box.className = "move-to-state";
+  if (spinner) {
+    const dot = document.createElement("span");
+    dot.className = "browse-loading-spinner";
+    box.appendChild(dot);
+  }
+  const label = document.createElement("span");
+  label.textContent = text;
+  box.appendChild(label);
+  if (retry) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary move-to-retry";
+    button.textContent = "Try again";
+    button.addEventListener("click", () => void loadPickerFolder(pickerSession));
+    box.appendChild(button);
+  }
+  return box;
+}
+
+function pickerFolderRow(session, entry) {
+  const childSub = joinSubPath(session.sub, entry.name);
+  const childPath = formatRemotePath(session.remote, childSub);
+  const blocked = session.items.some((item) => isInsideItem(childPath, item));
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "move-to-row";
+  row.setAttribute("role", "option");
+  row.disabled = blocked;
+  if (blocked) {
+    row.title = "This one is part of your selection";
+  }
+  const icon = document.createElement("span");
+  icon.className = "browse-entry-icon is-dir";
+  icon.dataset.kind = "folder";
+  icon.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.className = "move-to-row-name";
+  name.textContent = entry.name;
+  row.append(icon, name);
+  row.addEventListener("click", () => openPickerFolder(session, childSub));
+  return row;
+}
+
+function renderPicker(session) {
+  renderPickerCrumbs(session);
+  const folders = session.entries
+    .filter((entry) => entry.isDir)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+
+  if (session.state === "loading") {
+    pickerUi.list.replaceChildren(pickerMessage("Loading folders…", { spinner: true }));
+  } else if (session.state === "error") {
+    pickerUi.list.replaceChildren(pickerMessage(session.error || "Couldn't load this folder.", { retry: true }));
+  } else if (!folders.length) {
+    pickerUi.list.replaceChildren(pickerMessage("No subfolders in here."));
+  } else {
+    pickerUi.list.replaceChildren(...folders.map((entry) => pickerFolderRow(session, entry)));
+  }
+  pickerUi.list.scrollTop = 0;
+
+  const path = pickerPath(session);
+  const reason = pickerReason(session, path);
+  pickerUi.reason.textContent = reason;
+  pickerUi.confirmBtn.disabled = Boolean(reason) || session.state !== "ready";
+  pickerUi.upBtn.disabled = !session.sub;
+
+  const recent = recentTargets.get(session.remote);
+  const recentPath = recent === undefined ? "" : formatRemotePath(session.remote, recent);
+  const showRecent = recent !== undefined && recent !== session.sub && !pickerReason(session, recentPath);
+  pickerUi.recentBtn.classList.toggle("hidden", !showRecent);
+  if (showRecent) {
+    pickerUi.recentBtn.textContent = `Recent: ${destinationLabel(recentPath)}`;
+    pickerUi.recentBtn.dataset.sub = recent;
+  }
+}
+
+function openPickerFolder(session, sub) {
+  if (pickerSession !== session) {
+    return;
+  }
+  session.sub = sub;
+  void loadPickerFolder(session);
+}
+
+async function loadPickerFolder(session) {
+  if (!session || pickerSession !== session) {
+    return;
+  }
+  const path = pickerPath(session);
+  const token = ++session.token;
+  const cached = getCachedListing(path);
+  session.entries = cached || [];
+  session.state = cached ? "ready" : "loading";
+  renderPicker(session);
+
+  try {
+    const result = await window.rcloneGui.listRemotePath(path);
+    if (pickerSession !== session || session.token !== token) {
+      return;
+    }
+    const listing = result.entries || [];
+    setCachedListing(path, listing);
+    if (!cached || !sameListing(cached, listing)) {
+      session.entries = listing;
+      session.state = "ready";
+      renderPicker(session);
+    }
+  } catch (error) {
+    if (pickerSession !== session || session.token !== token || cached) {
+      return;
+    }
+    session.state = "error";
+    session.error = TransferPanel.cleanError(error) || "Couldn't load this folder.";
+    renderPicker(session);
+  }
+}
+
+function closeFolderPicker() {
+  if (!pickerSession) {
+    return;
+  }
+  pickerSession = null;
+  pickerUi.dialog.classList.add("hidden");
+  pickerUi.dialog.setAttribute("aria-hidden", "true");
+}
+
+function confirmFolderPicker() {
+  const session = pickerSession;
+  if (!session || pickerUi.confirmBtn.disabled) {
+    return;
+  }
+  const destination = pickerPath(session);
+  recentTargets.set(session.remote, session.sub);
+  closeFolderPicker();
+  void transferToFolder({
+    source: session.pane,
+    items: session.items,
+    destination,
+    operation: session.operation,
+    folderTarget: true,
+    confirmMove: false,
+    announce: true,
+  });
+}
+
+function openFolderPicker(pane, operation) {
+  const remote = pane.getRemote();
+  const items = pane.selectedItems().map((item) => ({ ...item }));
+  if (!pickerUi.dialog || pickerSession || !remote || !items.length) {
+    return;
+  }
+  const verb = operation === "move" ? "Move" : "Copy";
+  const subject = items.length === 1 ? `"${items[0].name.split("/").pop()}"` : describeCount(items.length);
+  pickerSession = { pane, remote, items, operation, sub: pane.getSubPath(), token: 0, entries: [], state: "loading", error: "" };
+  pickerUi.title.textContent = `${verb} ${subject} to…`;
+  pickerUi.confirmBtn.textContent = `${verb} here`;
+  pickerUi.dialog.classList.remove("hidden");
+  pickerUi.dialog.setAttribute("aria-hidden", "false");
+  pickerUi.confirmBtn.focus();
+  void loadPickerFolder(pickerSession);
+}
+
+function bindFolderPicker() {
+  if (!pickerUi.dialog) {
+    return;
+  }
+  pickerUi.cancelBtn.addEventListener("click", closeFolderPicker);
+  pickerUi.dialog.querySelector("[data-move-to-close]")?.addEventListener("click", closeFolderPicker);
+  pickerUi.confirmBtn.addEventListener("click", confirmFolderPicker);
+  pickerUi.upBtn.addEventListener("click", () => {
+    if (pickerSession?.sub) {
+      openPickerFolder(pickerSession, pickerSession.sub.split("/").filter(Boolean).slice(0, -1).join("/"));
+    }
+  });
+  pickerUi.recentBtn.addEventListener("click", () => {
+    if (pickerSession && pickerUi.recentBtn.dataset.sub !== undefined) {
+      openPickerFolder(pickerSession, pickerUi.recentBtn.dataset.sub);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && pickerSession) {
+      event.stopPropagation();
+      closeFolderPicker();
+    }
+  }, true);
 }
 
 function beginRowDrag(pane, event, entry) {
@@ -1937,6 +2207,27 @@ function canDeleteSelection() {
 function canRenameSelection() {
   return selection.size === 1 && !loading && !searchState && Boolean(window.rcloneGui?.renameRemoteItem);
 }
+function selectionHasPendingRename() {
+  const pending = pendingRenames.get(currentPath());
+  if (!pending || !pending.size) {
+    return false;
+  }
+  const touched = new Set([...pending.keys(), ...pending.values()]);
+  return selectedItems().some((item) => touched.has(item.name));
+}
+
+function canPickFolderTarget() {
+  return Boolean(
+    currentRemote &&
+      selection.size &&
+      !loading &&
+      !searchState &&
+      !selectionHasPendingRename() &&
+      window.rcloneGui?.copyRemoteItems &&
+      window.rcloneGui?.moveRemoteItems,
+  );
+}
+
 function canTransferAcross() {
   const other = splitOn ? otherPaneOf(pane) : null;
   return Boolean(other && other.getRemote() && currentRemote && selection.size && !loading);
@@ -3991,6 +4282,14 @@ function showContextMenu(event) {
     }
   }
 
+  const canPick = canPickFolderTarget();
+  for (const button of [contextUi.moveToBtn, contextUi.copyToBtn]) {
+    button?.classList.toggle("hidden", !canPick);
+    if (button) {
+      button.disabled = !canPick;
+    }
+  }
+
   const canRename = canRenameSelection();
   contextUi.renameBtn?.classList.toggle("hidden", !canRename);
   if (contextUi.renameBtn) {
@@ -4012,6 +4311,12 @@ function showContextMenu(event) {
   contextUi.uploadBtn?.classList.toggle("hidden", !canUploadHere);
   if (contextUi.uploadBtn) {
     contextUi.uploadBtn.disabled = !canUploadHere;
+  }
+
+  const card = contextUi.menu.querySelector(".context-menu-card");
+  if (card) {
+    contextUi.menu.style.left = Math.max(10, Math.min(left, window.innerWidth - card.offsetWidth - 10)) + "px";
+    contextUi.menu.style.top = Math.max(10, Math.min(top, window.innerHeight - card.offsetHeight - 10)) + "px";
   }
 }
 
@@ -4166,6 +4471,7 @@ Object.assign(pane, {
   canPickUpload,
   canCreateFolder,
   canTransferAcross,
+  canPickFolderTarget,
   uploadToCurrentFolder,
   pickAndUpload,
   showNewFolderDialog,
@@ -4278,6 +4584,20 @@ function bindContextMenu() {
     contextPane?.startRename();
   });
 
+  contextUi.moveToBtn?.addEventListener("click", () => {
+    closeContextMenu();
+    if (contextPane?.canPickFolderTarget()) {
+      openFolderPicker(contextPane, "move");
+    }
+  });
+
+  contextUi.copyToBtn?.addEventListener("click", () => {
+    closeContextMenu();
+    if (contextPane?.canPickFolderTarget()) {
+      openFolderPicker(contextPane, "copy");
+    }
+  });
+
   copyAcrossBtn?.addEventListener("click", () => {
     closeContextMenu();
     void transferItems(contextPane, otherPaneOf(contextPane), "copy");
@@ -4308,6 +4628,7 @@ function bindGlobalEvents() {
   bindPendingUpload();
   bindDivider();
   bindContextMenu();
+  bindFolderPicker();
 
   const hasFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
   document.addEventListener("dragover", (event) => {
