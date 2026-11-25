@@ -1424,6 +1424,25 @@
           </span>
           <span class="context-menu-label">Move to other side</span>
         </button>
+        <button id="context-move-to" type="button" class="context-menu-item hidden" data-action="move-to" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M9 13h6" />
+              <path d="m13 10 3 3-3 3" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Move to…</span>
+        </button>
+        <button id="context-copy-to" type="button" class="context-menu-item hidden" data-action="copy-to" role="menuitem">
+          <span class="context-menu-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M12 10.5v5M9.5 13h5" />
+            </svg>
+          </span>
+          <span class="context-menu-label">Copy to…</span>
+        </button>
         <button id="context-rename" type="button" class="context-menu-item hidden" data-action="rename" role="menuitem">
           <span class="context-menu-icon" aria-hidden="true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -1491,6 +1510,28 @@
         <div class="popup-actions">
           <button id="new-folder-cancel" type="button" class="secondary">Cancel</button>
           <button id="new-folder-create" type="button" class="primary">Create</button>
+        </div>
+      </div>
+    </div>
+    <div id="move-to-dialog" class="popup-root hidden" aria-hidden="true">
+      <div class="popup-backdrop" data-move-to-close></div>
+      <div class="popup-card popup-card-form popup-card-move-to" role="dialog" aria-modal="true" aria-labelledby="move-to-title">
+        <p id="move-to-title" class="popup-title">Move to…</p>
+        <div class="move-to-nav">
+          <button id="move-to-up" type="button" class="secondary move-to-up" aria-label="Up one level" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5" />
+              <path d="m5 12 7-7 7 7" />
+            </svg>
+          </button>
+          <div id="move-to-crumbs" class="move-to-crumbs"></div>
+        </div>
+        <div id="move-to-list" class="move-to-list" role="listbox" aria-label="Folders"></div>
+        <button id="move-to-recent" type="button" class="move-to-recent hidden"></button>
+        <p id="move-to-reason" class="move-to-reason" aria-live="polite"></p>
+        <div class="popup-actions">
+          <button id="move-to-cancel" type="button" class="secondary">Cancel</button>
+          <button id="move-to-confirm" type="button" class="primary">Move here</button>
         </div>
       </div>
     </div>

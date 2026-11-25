@@ -672,6 +672,8 @@ function createWindow() {
     );
   });
 
+  mainWindow.on("focus", () => recheckFailingSignIns());
+
   mainWindow.on("close", (event) => {
     if (!appQuitting && shouldKeepRunning()) {
       event.preventDefault();
@@ -1469,6 +1471,7 @@ ipcMain.handle("list-remote-path", async (_event, remotePath) => {
     throw new Error(result.stderr || result.stdout || `Failed to list "${target}"`);
   }
 
+  signIns.markOk(remoteNameFromPath(target));
   const trimmed = result.stdout.trim();
   const entries = trimmed ? JSON.parse(trimmed) : [];
   if (!Array.isArray(entries)) {
@@ -1829,6 +1832,43 @@ async function requestSignInCheck() {
   }
   const results = await signIns.run();
   return { enabled: true, skipped: "", results };
+}
+
+const CONFIG_WATCH_DEBOUNCE_MS = 1500;
+let configWatcher = null;
+let configWatchTimer = null;
+
+function recheckFailingSignIns(options) {
+  if (signInCheckEnabled() && !activeJob && !jobStarting) {
+    void signIns.recheckFailing(options);
+  }
+}
+
+async function watchRcloneConfig() {
+  if (configWatcher) {
+    return;
+  }
+  const result = await runRclone(["config", "file"], { timeoutMs: 15000 }).catch(() => null);
+  const configPath = String(result?.stdout || "").trim().split(/\r?\n/).pop()?.trim();
+  if (!result || result.code !== 0 || !configPath || !path.isAbsolute(configPath)) {
+    return;
+  }
+  const fileName = path.basename(configPath);
+  try {
+    configWatcher = fsSync.watch(path.dirname(configPath), (_eventType, changed) => {
+      if (changed && String(changed) !== fileName) {
+        return;
+      }
+      clearTimeout(configWatchTimer);
+      configWatchTimer = setTimeout(() => recheckFailingSignIns({ force: true }), CONFIG_WATCH_DEBOUNCE_MS);
+    });
+    configWatcher.on("error", () => {
+      configWatcher?.close();
+      configWatcher = null;
+    });
+  } catch {
+    configWatcher = null;
+  }
 }
 
 function noteAuthFailure(remotePath, stderr) {
@@ -4727,6 +4767,7 @@ void app.whenReady().then(() => {
   }
   void repairExplorerMenu();
   void appUpdater.cleanupOnStartup();
+  void watchRcloneConfig();
 
   void refreshSchedules();
   setTimeout(() => void checkSchedules(), SCHEDULER_FIRST_CHECK_MS);

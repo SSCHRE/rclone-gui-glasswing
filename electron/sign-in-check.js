@@ -144,6 +144,25 @@ function createSignInChecker({ readDump, probe, onChange, concurrency = CONCURRE
     return run({ only: [name] });
   }
 
+  function failingNames() {
+    return [...results.values()].filter((entry) => entry.state !== "ok").map((entry) => entry.name);
+  }
+
+  function recheckFailing({ force = false } = {}) {
+    const names = failingNames().filter((name) => force || now() - (lastChecked.get(name) || 0) >= RECHECK_COOLDOWN_MS);
+    return names.length ? run({ only: names }) : null;
+  }
+
+  function markOk(name) {
+    const entry = results.get(name);
+    if (!entry || entry.state === "ok") {
+      return;
+    }
+    results.set(name, { ...entry, state: "ok", message: "" });
+    lastChecked.set(name, now());
+    emit(Boolean(running));
+  }
+
   function clear() {
     results = new Map();
     emit(false);
@@ -152,6 +171,8 @@ function createSignInChecker({ readDump, probe, onChange, concurrency = CONCURRE
   return {
     run,
     recheck,
+    recheckFailing,
+    markOk,
     clear,
     results: snapshot,
     isRunning: () => Boolean(running),
