@@ -18,8 +18,16 @@ function blockedExtensions(platform) {
   return new Set(BLOCKED_EXTENSIONS[platform] || [...BLOCKED_EXTENSIONS.linux, ".jar"]);
 }
 
+function trimTrailingDotsAndSpaces(value) {
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === "." || value[end - 1] === " ")) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function fileExtension(name) {
-  const trimmed = String(name || "").replace(/[. ]+$/, "");
+  const trimmed = trimTrailingDotsAndSpaces(String(name || ""));
   const dot = trimmed.lastIndexOf(".");
   return dot > 0 ? trimmed.slice(dot).toLowerCase() : "";
 }
@@ -30,10 +38,11 @@ function isBlockedFile(name, platform = process.platform) {
 }
 
 function safeFileName(name) {
-  let cleaned = String(name || "")
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
-    .replace(/[. ]+$/, "")
-    .replace(/^\.+$/, "_");
+  const replaced = String(name || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+  let cleaned = trimTrailingDotsAndSpaces(replaced);
+  if (!cleaned && replaced) {
+    cleaned = "_";
+  }
   if (!cleaned || cleaned === META_NAME || RESERVED_WINDOWS_NAME.test(cleaned)) {
     cleaned = `_${cleaned}`;
   }

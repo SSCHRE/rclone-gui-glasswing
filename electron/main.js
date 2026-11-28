@@ -2595,6 +2595,60 @@ async function removePartialDownloads(localPath) {
   } catch {}
 }
 
+async function downloadWithProgress({ source, localPath, channel, transfer }) {
+  const errors = [];
+  const chunks = createChunkTracker();
+  send(channel, { index: 0, bytes: 0, confirmed: 0, total: 0 });
+  const result = await runRclone(
+    rcloneArgs("copyto", [source, localPath], [
+      "--stats",
+      "500ms",
+      "--stats-log-level",
+      "NOTICE",
+      "--log-level",
+      "DEBUG",
+      "--retries",
+      "1",
+      "--use-json-log",
+      ...bwlimitArgs(),
+    ]),
+    {
+      timeoutMs: 0,
+      onSpawn: (child) => {
+        transfer.child = child;
+        child.stderr.on("data", createJsonLogReader((entry) => {
+          if (entry.level === "error" && entry.msg) {
+            errors.push(String(entry.msg).trim());
+          }
+          if (entry.level === "debug") {
+            chunks.handle(entry);
+            return;
+          }
+          const stats = entry.stats;
+          if (stats) {
+            send(channel, {
+              index: 0,
+              bytes: Number(stats.bytes) || 0,
+              confirmed: chunks.confirmed(stats),
+              total: Number(stats.totalBytes) || 0,
+            });
+          }
+        }));
+      },
+    },
+  );
+
+  if (transfer.cancelled) {
+    await removePartialDownloads(localPath);
+    return true;
+  }
+  if (result.code !== 0) {
+    await removePartialDownloads(localPath);
+    throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
+  }
+  return false;
+}
+
 ipcMain.handle("download-remote-file", async (_event, payload) => {
   if (activeJob) {
     throw new Error("Wait for the current job to finish before downloading.");
@@ -2612,59 +2666,10 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   const source = await normalizeRemoteBrowsePath(remotePath);
   const download = { child: null, cancelled: false };
   activeDownload = download;
-  const errors = [];
-  const chunks = createChunkTracker();
 
   try {
-    send("download-progress", { index: 0, bytes: 0, confirmed: 0, total: 0 });
-    const result = await runRclone(
-      rcloneArgs("copyto", [source, localPath], [
-        "--stats",
-        "500ms",
-        "--stats-log-level",
-        "NOTICE",
-        "--log-level",
-        "DEBUG",
-        "--retries",
-        "1",
-        "--use-json-log",
-        ...bwlimitArgs(),
-      ]),
-      {
-        timeoutMs: 0,
-        onSpawn: (child) => {
-          download.child = child;
-          child.stderr.on("data", createJsonLogReader((entry) => {
-            if (entry.level === "error" && entry.msg) {
-              errors.push(String(entry.msg).trim());
-            }
-            if (entry.level === "debug") {
-              chunks.handle(entry);
-              return;
-            }
-            const stats = entry.stats;
-            if (stats) {
-              send("download-progress", {
-                index: 0,
-                bytes: Number(stats.bytes) || 0,
-                confirmed: chunks.confirmed(stats),
-                total: Number(stats.totalBytes) || 0,
-              });
-            }
-          }));
-        },
-      },
-    );
-
-    if (download.cancelled) {
-      await removePartialDownloads(localPath);
-      return { source, localPath, cancelled: true };
-    }
-    if (result.code !== 0) {
-      await removePartialDownloads(localPath);
-      throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
-    }
-    return { source, localPath, cancelled: false };
+    const cancelled = await downloadWithProgress({ source, localPath, channel: "download-progress", transfer: download });
+    return { source, localPath, cancelled };
   } finally {
     activeDownload = null;
   }
@@ -2768,60 +2773,13 @@ ipcMain.handle("open-remote-file", async (_event, payload) => {
 
   const open = { child: null, cancelled: false };
   activeOpen = open;
-  const errors = [];
-  const chunks = createChunkTracker();
 
   try {
     const reusable = await openCache.findReusable(paths, source, size, modTime);
     if (!reusable) {
       await fs.mkdir(paths.dir, { recursive: true });
-      send("open-progress", { index: 0, bytes: 0, confirmed: 0, total: 0 });
-      const result = await runRclone(
-        rcloneArgs("copyto", [source, paths.filePath], [
-          "--stats",
-          "500ms",
-          "--stats-log-level",
-          "NOTICE",
-          "--log-level",
-          "DEBUG",
-          "--retries",
-          "1",
-          "--use-json-log",
-          ...bwlimitArgs(),
-        ]),
-        {
-          timeoutMs: 0,
-          onSpawn: (child) => {
-            open.child = child;
-            child.stderr.on("data", createJsonLogReader((entry) => {
-              if (entry.level === "error" && entry.msg) {
-                errors.push(String(entry.msg).trim());
-              }
-              if (entry.level === "debug") {
-                chunks.handle(entry);
-                return;
-              }
-              const stats = entry.stats;
-              if (stats) {
-                send("open-progress", {
-                  index: 0,
-                  bytes: Number(stats.bytes) || 0,
-                  confirmed: chunks.confirmed(stats),
-                  total: Number(stats.totalBytes) || 0,
-                });
-              }
-            }));
-          },
-        },
-      );
-
-      if (open.cancelled) {
-        await removePartialDownloads(paths.filePath);
+      if (await downloadWithProgress({ source, localPath: paths.filePath, channel: "open-progress", transfer: open })) {
         return { cancelled: true };
-      }
-      if (result.code !== 0) {
-        await removePartialDownloads(paths.filePath);
-        throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
       }
     }
     if (open.cancelled) {
