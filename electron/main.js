@@ -16,6 +16,7 @@ const migrations = require("./migrations");
 const remoteSearch = require("./remote-search");
 const { createAppUpdater } = require("./app-updater");
 const { createExplorerMenu, uploadPathsFromArgv } = require("./explorer-menu");
+const openCache = require("./open-cache");
 
 function loginShellPath() {
   if (process.platform === "win32") {
@@ -1344,7 +1345,7 @@ function selfUpdateBlocker(target = "rclone") {
   if (migrationTask) {
     return `A migration check is still running. Wait for it to finish before updating ${target}.`;
   }
-  if (activeUpload || activeDownload || activeRemoteTransfer) {
+  if (activeUpload || activeDownload || activeOpen || activeRemoteTransfer) {
     return `A transfer is still running. Wait for it to finish before updating ${target}.`;
   }
   if (activeRename > 0) {
@@ -2594,6 +2595,60 @@ async function removePartialDownloads(localPath) {
   } catch {}
 }
 
+async function downloadWithProgress({ source, localPath, channel, transfer }) {
+  const errors = [];
+  const chunks = createChunkTracker();
+  send(channel, { index: 0, bytes: 0, confirmed: 0, total: 0 });
+  const result = await runRclone(
+    rcloneArgs("copyto", [source, localPath], [
+      "--stats",
+      "500ms",
+      "--stats-log-level",
+      "NOTICE",
+      "--log-level",
+      "DEBUG",
+      "--retries",
+      "1",
+      "--use-json-log",
+      ...bwlimitArgs(),
+    ]),
+    {
+      timeoutMs: 0,
+      onSpawn: (child) => {
+        transfer.child = child;
+        child.stderr.on("data", createJsonLogReader((entry) => {
+          if (entry.level === "error" && entry.msg) {
+            errors.push(String(entry.msg).trim());
+          }
+          if (entry.level === "debug") {
+            chunks.handle(entry);
+            return;
+          }
+          const stats = entry.stats;
+          if (stats) {
+            send(channel, {
+              index: 0,
+              bytes: Number(stats.bytes) || 0,
+              confirmed: chunks.confirmed(stats),
+              total: Number(stats.totalBytes) || 0,
+            });
+          }
+        }));
+      },
+    },
+  );
+
+  if (transfer.cancelled) {
+    await removePartialDownloads(localPath);
+    return true;
+  }
+  if (result.code !== 0) {
+    await removePartialDownloads(localPath);
+    throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
+  }
+  return false;
+}
+
 ipcMain.handle("download-remote-file", async (_event, payload) => {
   if (activeJob) {
     throw new Error("Wait for the current job to finish before downloading.");
@@ -2611,59 +2666,10 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
   const source = await normalizeRemoteBrowsePath(remotePath);
   const download = { child: null, cancelled: false };
   activeDownload = download;
-  const errors = [];
-  const chunks = createChunkTracker();
 
   try {
-    send("download-progress", { index: 0, bytes: 0, confirmed: 0, total: 0 });
-    const result = await runRclone(
-      rcloneArgs("copyto", [source, localPath], [
-        "--stats",
-        "500ms",
-        "--stats-log-level",
-        "NOTICE",
-        "--log-level",
-        "DEBUG",
-        "--retries",
-        "1",
-        "--use-json-log",
-        ...bwlimitArgs(),
-      ]),
-      {
-        timeoutMs: 0,
-        onSpawn: (child) => {
-          download.child = child;
-          child.stderr.on("data", createJsonLogReader((entry) => {
-            if (entry.level === "error" && entry.msg) {
-              errors.push(String(entry.msg).trim());
-            }
-            if (entry.level === "debug") {
-              chunks.handle(entry);
-              return;
-            }
-            const stats = entry.stats;
-            if (stats) {
-              send("download-progress", {
-                index: 0,
-                bytes: Number(stats.bytes) || 0,
-                confirmed: chunks.confirmed(stats),
-                total: Number(stats.totalBytes) || 0,
-              });
-            }
-          }));
-        },
-      },
-    );
-
-    if (download.cancelled) {
-      await removePartialDownloads(localPath);
-      return { source, localPath, cancelled: true };
-    }
-    if (result.code !== 0) {
-      await removePartialDownloads(localPath);
-      throw new Error(errors[errors.length - 1] || `Failed to download "${source}"`);
-    }
-    return { source, localPath, cancelled: false };
+    const cancelled = await downloadWithProgress({ source, localPath, channel: "download-progress", transfer: download });
+    return { source, localPath, cancelled };
   } finally {
     activeDownload = null;
   }
@@ -2671,6 +2677,146 @@ ipcMain.handle("download-remote-file", async (_event, payload) => {
 
 ipcMain.handle("cancel-download", async () => {
   stopActiveDownload();
+});
+
+const OPEN_CACHE_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+const OPEN_WATCH_MS = 60 * 60 * 1000;
+const OPEN_WATCH_DEBOUNCE_MS = 1500;
+
+let activeOpen = null;
+const openWatchers = new Map();
+
+function openCacheRoot() {
+  return path.join(app.getPath("temp"), openCache.CACHE_FOLDER);
+}
+
+function stopActiveOpen() {
+  if (!activeOpen) {
+    return;
+  }
+  activeOpen.cancelled = true;
+  const child = activeOpen.child;
+  if (child && !child.killed) {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
+function stopOpenWatcher(filePath) {
+  const entry = openWatchers.get(filePath);
+  if (!entry) {
+    return;
+  }
+  openWatchers.delete(filePath);
+  clearTimeout(entry.timer);
+  clearTimeout(entry.expiry);
+  try {
+    entry.watcher.close();
+  } catch {}
+}
+
+function stopAllOpenWatchers() {
+  for (const filePath of [...openWatchers.keys()]) {
+    stopOpenWatcher(filePath);
+  }
+}
+
+async function watchOpenedFile(filePath, remotePath, name) {
+  stopOpenWatcher(filePath);
+  let baseline;
+  try {
+    baseline = await fs.stat(filePath);
+  } catch {
+    return;
+  }
+  const entry = { watcher: null, timer: null, expiry: null };
+  const lowerName = name.toLowerCase();
+  const check = async () => {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.mtimeMs !== baseline.mtimeMs || stat.size !== baseline.size) {
+        baseline = stat;
+        send("open-file-changed", { remotePath, localPath: filePath, name });
+      }
+    } catch {}
+  };
+  try {
+    entry.watcher = fsSync.watch(path.dirname(filePath), (_type, changed) => {
+      if (changed && String(changed).toLowerCase() !== lowerName) {
+        return;
+      }
+      clearTimeout(entry.timer);
+      entry.timer = setTimeout(() => void check(), OPEN_WATCH_DEBOUNCE_MS);
+    });
+    entry.watcher.on("error", () => stopOpenWatcher(filePath));
+  } catch {
+    return;
+  }
+  entry.expiry = setTimeout(() => stopOpenWatcher(filePath), OPEN_WATCH_MS);
+  entry.expiry.unref?.();
+  openWatchers.set(filePath, entry);
+}
+
+ipcMain.handle("open-remote-file", async (_event, payload) => {
+  if (activeJob) {
+    throw new Error("Wait for the current job to finish before opening files.");
+  }
+  if (activeOpen) {
+    throw new Error("Another file is already being opened.");
+  }
+
+  const source = await normalizeRemoteBrowsePath(payload?.remotePath);
+  const size = Number(payload?.size) || 0;
+  const modTime = payload?.modTime ?? "";
+  const paths = openCache.buildCachePaths(openCacheRoot(), source);
+
+  const open = { child: null, cancelled: false };
+  activeOpen = open;
+
+  try {
+    const reusable = await openCache.findReusable(paths, source, size, modTime);
+    if (!reusable) {
+      await fs.mkdir(paths.dir, { recursive: true });
+      if (await downloadWithProgress({ source, localPath: paths.filePath, channel: "open-progress", transfer: open })) {
+        return { cancelled: true };
+      }
+    }
+    if (open.cancelled) {
+      return { cancelled: true };
+    }
+    await openCache.writeMeta(paths, source, size, modTime);
+
+    if (openCache.isBlockedFile(paths.name)) {
+      return { cancelled: false, blocked: true, localPath: paths.filePath, name: paths.name };
+    }
+
+    const failure = await shell.openPath(paths.filePath);
+    if (failure) {
+      const extension = path.extname(paths.name);
+      throw new Error(
+        extension
+          ? `No app is set up to open ${extension} files.`
+          : `No app is set up to open ${paths.name}.`,
+      );
+    }
+    void watchOpenedFile(paths.filePath, source, paths.name);
+    return { cancelled: false, blocked: false, localPath: paths.filePath, name: paths.name };
+  } finally {
+    activeOpen = null;
+  }
+});
+
+ipcMain.handle("cancel-open-remote-file", async () => {
+  stopActiveOpen();
+});
+
+ipcMain.handle("show-opened-file", async (_event, localPath) => {
+  const target = path.resolve(String(localPath || ""));
+  if (!openCache.isInside(openCacheRoot(), target)) {
+    throw new Error("That file isn't one Glasswing downloaded.");
+  }
+  shell.showItemInFolder(target);
 });
 
 let activeRemoteTransfer = null;
@@ -4767,6 +4913,7 @@ void app.whenReady().then(() => {
   }
   void repairExplorerMenu();
   void appUpdater.cleanupOnStartup();
+  void openCache.cleanupCache(openCacheRoot(), OPEN_CACHE_MAX_AGE_MS);
   void watchRcloneConfig();
 
   void refreshSchedules();
@@ -4818,6 +4965,8 @@ app.on("before-quit", (event) => {
   stopPreviewFetch();
   stopActiveUpload();
   stopActiveDownload();
+  stopActiveOpen();
+  stopAllOpenWatchers();
   stopActiveRemoteTransfer();
 
   if (mounts.hasMounts() || serves.hasServes() || mountsAndServesStopping) {

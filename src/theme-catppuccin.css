@@ -692,7 +692,8 @@
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ) {
   min-height: 32px;
   padding: 5px 10px;
@@ -715,7 +716,8 @@
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ):hover:not(:disabled) {
   border-color: var(--fl-stroke-accessible);
   background-color: var(--fl-bg-hover);
@@ -732,7 +734,8 @@
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ):focus {
   border-color: var(--fl-stroke1);
   border-bottom-color: var(--fl-brand-stroke);
@@ -740,7 +743,7 @@
   box-shadow: inset 0 -1px 0 var(--fl-brand-stroke);
 }
 
-:where(:root[data-theme="catppuccin"]) :where(input, select, textarea):disabled {
+:where(:root[data-theme="catppuccin"]) :where(input, select, textarea, .cs-trigger):disabled {
   opacity: 1;
   border-color: var(--fl-stroke-disabled);
   background-color: var(--fl-bg-disabled);
@@ -762,7 +765,7 @@
   }
 }
 
-:where(:root[data-theme="catppuccin"]) :where(select) {
+:where(:root[data-theme="catppuccin"]) :where(select, .cs-trigger) {
   background-position: right 10px center;
 }
 
@@ -1340,7 +1343,7 @@
   }
 }
 
-:where(:root[data-theme="catppuccin"]) :where(select) {
+:where(:root[data-theme="catppuccin"]) :where(select, .cs-trigger) {
   padding-right: 32px;
 }
 
@@ -2909,5 +2912,29 @@
   & .snackbar {
     background: var(--ct-base);
     border-color: var(--ct-surface1);
+  }
+}
+
+:root[data-theme="catppuccin"] {
+  & .cs-popup .cs-option {
+    padding: 4px 8px;
+  }
+
+  & .cs-popup .cs-option.is-active {
+    background: var(--fl-bg-hover);
+    color: var(--fl-fg1);
+  }
+
+  & .cs-popup .cs-option[aria-selected="true"] {
+    color: var(--fl-fg1);
+    font-weight: 600;
+  }
+
+  & .cs-popup .cs-option[aria-selected="true"] .cs-check {
+    background: var(--fl-brand-fg);
+  }
+
+  & .cs-popup .cs-group-label {
+    color: var(--fl-fg2);
   }
 }

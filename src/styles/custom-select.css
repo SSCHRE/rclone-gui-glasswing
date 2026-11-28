@@ -1,0 +1,100 @@
+.cs-native {
+  display: none !important;
+}
+
+.cs-trigger[hidden] {
+  display: none !important;
+}
+
+.cs-trigger {
+  text-align: left;
+  overflow: hidden;
+}
+
+.cs-trigger-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-popup.context-menu-card {
+  position: fixed;
+  z-index: 3000;
+  min-width: 0;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+}
+
+.cs-popup .cs-option {
+  height: auto;
+  min-height: 32px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  gap: 8px;
+  user-select: none;
+}
+
+.cs-popup .cs-option[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.cs-popup .cs-in-group {
+  padding-left: 18px;
+}
+
+.cs-popup .cs-option-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cs-popup .cs-check {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: var(--accent);
+  mask: var(--icon-check) center / contain no-repeat;
+  opacity: 0;
+  scale: 0.5;
+  transition: opacity var(--dur-1) var(--ease-out), scale var(--dur-3) var(--ease-spring);
+}
+
+.cs-popup .cs-option[aria-selected="true"] .cs-check {
+  opacity: 1;
+  scale: 1;
+}
+
+.cs-popup .cs-option[aria-selected="true"] {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.cs-popup .cs-group-label {
+  padding: 8px 10px 4px;
+  color: var(--faint);
+  font-size: var(--fs-xs, 11px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cs-popup .cs-group-label:first-child {
+  padding-top: 4px;
+}
+
+:root[data-theme="glass"] .cs-popup .cs-option.is-active,
+:root:not([data-theme]) .cs-popup .cs-option.is-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+button.cs-trigger.cs-trigger {
+  display: block;
+  justify-content: normal;
+  width: 100%;
+  min-width: 0;
+}

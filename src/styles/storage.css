@@ -70,7 +70,8 @@
   font-weight: 600;
 }
 
-.storage-sort select {
+.storage-sort select,
+.storage-sort .cs-trigger {
   width: auto;
   min-width: 0;
 }

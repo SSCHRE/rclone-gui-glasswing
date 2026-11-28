@@ -391,6 +391,11 @@ class TransferPanel {
     const failedCount = this.failed.length;
     const variant = cancelled || failedCount ? "is-error" : "is-success";
 
+    if (this.labels.quiet && variant === "is-success") {
+      this.hide();
+      return;
+    }
+
     this.show(variant);
     if (cancelled) {
       this.title.textContent = `${noun} cancelled`;
