@@ -97,6 +97,19 @@ contextBridge.exposeInMainWorld("rcloneGui", {
     ipcRenderer.on("download-progress", listener);
     return () => ipcRenderer.removeListener("download-progress", listener);
   },
+  openRemoteFile: (payload) => ipcRenderer.invoke("open-remote-file", payload),
+  cancelOpenRemoteFile: () => ipcRenderer.invoke("cancel-open-remote-file"),
+  showOpenedFile: (localPath) => ipcRenderer.invoke("show-opened-file", localPath),
+  onOpenProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("open-progress", listener);
+    return () => ipcRenderer.removeListener("open-progress", listener);
+  },
+  onOpenedFileChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("open-file-changed", listener);
+    return () => ipcRenderer.removeListener("open-file-changed", listener);
+  },
   pickUploadFiles: () => ipcRenderer.invoke("pick-upload-files"),
   measureLocalPaths: (paths) => ipcRenderer.invoke("measure-local-paths", paths),
   uploadToRemote: (payload) => ipcRenderer.invoke("upload-to-remote", payload),

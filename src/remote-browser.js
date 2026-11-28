@@ -55,6 +55,7 @@ function paneElements(root) {
 
 const contextUi = {
   menu: document.getElementById("browse-context-menu"),
+  openBtn: document.getElementById("context-open"),
   downloadBtn: document.getElementById("context-download"),
   deleteBtn: document.getElementById("context-delete"),
   previewBtn: document.getElementById("context-preview"),
@@ -300,7 +301,7 @@ function parentSubPath(subPath) {
 
 const SIGN_IN_ERROR = /unauthenticated|unauthori[sz]ed|\b401\b|invalid[_ ]token|invalid_grant|token (?:has )?expired|invalid api key|invalid credentials/i;
 
-function listingErrorMessage(error, remote) {
+function listingErrorMessage(error, remote, fallback = "Failed to list remote path.") {
   const raw = String(error?.message || "").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
   if (SIGN_IN_ERROR.test(raw)) {
     return `${remote || "This remote"} didn't accept its sign-in. Check it in Manage remotes.`;
@@ -308,7 +309,7 @@ function listingErrorMessage(error, remote) {
   const segments = raw.split(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/).map((part) => part.trim()).filter(Boolean);
   const errorPart = segments.find((part) => part.startsWith("ERROR")) || segments[0] || "";
   const text = errorPart.replace(/^ERROR\s*:\s*/, "").trim();
-  return text || "Failed to list remote path.";
+  return text || fallback;
 }
 
 function formatBytes(size) {
@@ -1081,6 +1082,121 @@ const downloadPanel = new TransferPanel(transferStack, {
       : { completed: 1, detail: result.localPath };
   },
   cancel: () => window.rcloneGui?.cancelDownload?.(),
+});
+
+const OPEN_CONFIRM_BYTES = 500 * 1000 * 1000;
+const OPEN_PANEL_BYTES = 20 * 1024 * 1024;
+const OPEN_CHANGE_TOAST_MS = 20000;
+const openedCopies = new Map();
+let openInFlight = false;
+
+const openPanel = new TransferPanel(transferStack, {
+  labels: { active: "Opening", noun: "Open", past: "opened", direction: "down", quiet: true },
+  formatBytes,
+  subscribe: (onProgress) => window.rcloneGui.onOpenProgress?.(onProgress),
+  runBatch: async (batch) => {
+    const result = await runOpenRequest(batch.request);
+    return { completed: result.cancelled ? 0 : 1, cancelled: result.cancelled };
+  },
+  cancel: () => window.rcloneGui?.cancelOpenRemoteFile?.(),
+});
+
+function remoteNameOf(remotePath) {
+  const colon = remotePath.indexOf(":");
+  return colon > 0 ? remotePath.slice(0, colon) : remotePath;
+}
+
+async function runOpenRequest(request) {
+  const { remotePath, name, ownerPane, big } = request;
+  try {
+    const result = await window.rcloneGui.openRemoteFile({
+      remotePath,
+      size: request.size,
+      modTime: request.modTime,
+    });
+    if (result.cancelled) {
+      if (!big) {
+        notify({ title: "Cancelled", message: `Stopped opening ${name}.`, type: "success" });
+      }
+      return result;
+    }
+    if (result.blocked) {
+      notify({
+        title: `${name} not opened`,
+        message: "Glasswing doesn't run programs from your cloud. It's downloaded, you can open it yourself.",
+        type: "warning",
+        duration: 12000,
+        action: {
+          label: "Show in folder",
+          onClick: () => {
+            window.rcloneGui.showOpenedFile(result.localPath).catch((error) => {
+              notify({ title: "Couldn't show the file", message: listingErrorMessage(error, "", "It may have been cleaned up already."), type: "error" });
+            });
+          },
+        },
+      });
+      return result;
+    }
+    openedCopies.set(result.localPath, { remotePath, ownerPane });
+    notify({
+      title: `Opened ${name}`,
+      message: `This is a copy. Changes aren't saved back to ${remoteNameOf(remotePath)}.`,
+      type: "success",
+    });
+    return result;
+  } catch (error) {
+    notify({
+      title: `Couldn't open ${name}`,
+      message: listingErrorMessage(error, remoteNameOf(remotePath), "Something went wrong while opening the file."),
+      type: "error",
+    });
+    throw error;
+  }
+}
+
+async function openRemoteCopy(request) {
+  if (openInFlight || openPanel.running) {
+    notify({ title: "Already opening a file", message: "Wait for it to finish first.", type: "error" });
+    return;
+  }
+  openInFlight = true;
+  try {
+    if (request.size >= OPEN_PANEL_BYTES) {
+      openPanel.enqueue({ request: { ...request, big: true }, items: [{ name: request.name, size: request.size, isDir: false }] });
+      while (openPanel.running) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      return;
+    }
+    notify({
+      title: `Opening ${request.name}…`,
+      message: "Getting a copy to open.",
+      type: "running",
+      duration: 300000,
+      action: { label: "Cancel", onClick: () => void window.rcloneGui.cancelOpenRemoteFile?.() },
+    });
+    await runOpenRequest({ ...request, big: false }).catch(() => {});
+  } finally {
+    openInFlight = false;
+  }
+}
+
+window.rcloneGui?.onOpenedFileChanged?.((change) => {
+  const copy = openedCopies.get(change.localPath);
+  if (!copy) {
+    return;
+  }
+  const target = panes.includes(copy.ownerPane) ? copy.ownerPane : activePane;
+  notify({
+    title: `${change.name} changed`,
+    message: `Your edits are only on this computer. Upload to put them back in ${remoteNameOf(copy.remotePath)}.`,
+    type: "success",
+    duration: OPEN_CHANGE_TOAST_MS,
+    action: {
+      label: "Upload",
+      onClick: () => void target?.uploadToFolder([change.localPath], parentRemotePath(copy.remotePath)),
+    },
+  });
 });
 
 function transferRunBatch(method) {
@@ -1938,6 +2054,7 @@ let entries = [];
 let selectedPath = null;
 let selectedIsDir = false;
 let selectedSize = null;
+let selectedModTime = "";
 const selection = new Map();
 let selectionAnchor = null;
 let loading = false;
@@ -2414,6 +2531,7 @@ function selectionItem(entry) {
     name: entry.name,
     isDir: Boolean(entry.isDir),
     size: typeof entry.size === "number" ? entry.size : null,
+    modTime: entry.modTime || "",
   };
 }
 
@@ -2422,6 +2540,7 @@ function syncPrimarySelection() {
   selectedPath = only ? only.path : null;
   selectedIsDir = only ? only.isDir : false;
   selectedSize = only ? only.size : null;
+  selectedModTime = only ? only.modTime || "" : "";
 }
 
 function clearSelectionState() {
@@ -2891,11 +3010,7 @@ function renderEntries({ animate = true } = {}) {
         void navigateTo(joinSubPath(currentSubPath, entry.name));
       } else {
         selectEntry(entry);
-        if (canPreviewSelection()) {
-          void previewSelectedFile();
-        } else {
-          void downloadSelectedFile();
-        }
+        activateSelectedFile();
       }
     });
     row.addEventListener("keydown", (event) => {
@@ -2905,11 +3020,7 @@ function renderEntries({ animate = true } = {}) {
           void navigateTo(joinSubPath(currentSubPath, entry.name));
         } else {
           selectEntry(entry);
-          if (canPreviewSelection()) {
-            void previewSelectedFile();
-          } else {
-            void downloadSelectedFile();
-          }
+          activateSelectedFile();
         }
       }
     });
@@ -3248,6 +3359,52 @@ function selectedFileName() {
   const remoteSide = parts.length > 1 ? parts.slice(1).join(":") : selectedPath;
   const name = remoteSide.split("/").filter(Boolean).pop();
   return name || "download";
+}
+
+function canOpenSelection() {
+  return (
+    Boolean(selectedPath) &&
+    selection.size === 1 &&
+    !selectedIsDir &&
+    !loading &&
+    !selectionHasPendingRename() &&
+    Boolean(window.rcloneGui?.openRemoteFile)
+  );
+}
+
+async function openSelectedFile() {
+  if (!canOpenSelection()) {
+    return;
+  }
+  const request = {
+    remotePath: selectedPath,
+    name: selectedFileName(),
+    size: selectedSize || 0,
+    modTime: selectedModTime,
+    ownerPane: pane,
+  };
+  const large = request.size > OPEN_CONFIRM_BYTES;
+  const confirmed = await confirmAction({
+    title: `Open "${request.name}"?`,
+    message: large
+      ? `This is a ${formatBytes(request.size)} file. Glasswing will download a copy and open it with the default app on your computer.`
+      : "Glasswing will download a copy and open it with the default app on your computer.",
+    confirmLabel: large ? "Download and open" : "Open",
+  });
+  if (!confirmed) {
+    return;
+  }
+  await openRemoteCopy(request);
+}
+
+function activateSelectedFile() {
+  if (canPreviewSelection()) {
+    void previewSelectedFile();
+  } else if (canOpenSelection()) {
+    void openSelectedFile();
+  } else {
+    void downloadSelectedFile();
+  }
 }
 
 async function previewSelectedFile() {
@@ -4260,6 +4417,12 @@ function showContextMenu(event) {
   contextUi.menu.classList.remove("hidden");
   contextUi.menu.setAttribute("aria-hidden", "false");
 
+  const canOpen = canOpenSelection();
+  contextUi.openBtn?.classList.toggle("hidden", !canOpen);
+  if (contextUi.openBtn) {
+    contextUi.openBtn.disabled = !canOpen;
+  }
+
   const canPreview = selectedPath && canPreviewSelection();
   contextUi.previewBtn.classList.toggle("hidden", !canPreview || loading);
   contextUi.previewBtn.disabled = !canPreview || loading;
@@ -4476,6 +4639,8 @@ Object.assign(pane, {
   pickAndUpload,
   showNewFolderDialog,
   previewSelectedFile,
+  openSelectedFile,
+  uploadToFolder,
   downloadSelectedFile,
   deleteSelectedFile,
   startRename,
@@ -4562,6 +4727,11 @@ function bindContextMenu() {
   uploadBtn?.addEventListener("click", () => {
     closeContextMenu();
     void contextPane?.pickAndUpload();
+  });
+
+  contextUi.openBtn?.addEventListener("click", () => {
+    closeContextMenu();
+    void contextPane?.openSelectedFile();
   });
 
   previewBtn.addEventListener("click", () => {
