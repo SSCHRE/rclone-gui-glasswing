@@ -1773,7 +1773,8 @@
   color: var(--muted);
 }
 
-.history-filter select {
+.history-filter select,
+.history-filter .cs-trigger {
   width: auto;
   max-width: 240px;
   height: var(--control-h-sm);

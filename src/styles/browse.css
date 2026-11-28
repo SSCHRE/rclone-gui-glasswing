@@ -76,7 +76,8 @@
   translate: 0 -50%;
 }
 
-.browse-remote-field select {
+.browse-remote-field select,
+.browse-remote-field .cs-trigger {
   height: var(--control-h);
   padding-left: 35px;
   overflow: hidden;

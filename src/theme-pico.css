@@ -575,7 +575,8 @@
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ) {
   padding: 0.5rem 0.7rem;
   border-radius: var(--pc-radius);
@@ -583,7 +584,7 @@
   border-color: var(--pc-border);
 }
 
-:where(:root[data-theme="pico"]) :where(select:not([multiple], [size])) {
+:where(:root[data-theme="pico"]) :where(select:not([multiple], [size]), .cs-trigger) {
   padding-right: 2.25rem;
 }
 
@@ -1200,7 +1201,8 @@
     color: var(--pc-primary);
   }
 
-  & .browse-remote-field select {
+  & .browse-remote-field select,
+  & .browse-remote-field .cs-trigger {
     color: var(--pc-h);
     font-weight: 400;
   }
@@ -2825,5 +2827,29 @@
 
   & :where(.form-body, .output-scroll, .activity-feed, .raw-log, .history-scroll, .run-history-log)::-webkit-scrollbar-thumb:hover {
     background-color: #3a4458;
+  }
+}
+
+:root[data-theme="pico"] {
+  & .cs-popup.context-menu-card {
+    padding: 0.25rem;
+  }
+
+  & .cs-popup .cs-option.is-active {
+    background: var(--pc-primary-soft);
+    color: var(--pc-primary);
+  }
+
+  & .cs-popup .cs-option[aria-selected="true"] {
+    color: var(--pc-primary);
+    font-weight: 600;
+  }
+
+  & .cs-popup .cs-check {
+    background: var(--pc-primary);
+  }
+
+  & .cs-popup .cs-group-label {
+    color: var(--pc-muted);
   }
 }

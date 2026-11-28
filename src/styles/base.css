@@ -778,7 +778,7 @@ svg {
   display: none;
 }
 
-button {
+button:where(:not(.cs-trigger)) {
   position: relative;
   border: 0;
   border-radius: var(--radius-sm);
@@ -798,12 +798,12 @@ button {
     scale var(--dur-1) var(--ease-out);
 }
 
-button:disabled {
+button:where(:not(.cs-trigger)):disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-button:focus-visible {
+button:where(:not(.cs-trigger)):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -931,7 +931,8 @@ button:focus-visible {
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ) {
   width: 100%;
   min-height: var(--control-h);
@@ -965,7 +966,8 @@ button:focus-visible {
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ):hover:not(:disabled) {
   border-color: var(--input-border-hover);
 }
@@ -981,14 +983,15 @@ button:focus-visible {
   input[type="date"],
   input:not([type]),
   textarea,
-  select
+  select,
+  .cs-trigger
 ):focus {
   outline: none;
   border-color: var(--input-focus-border);
   box-shadow: var(--input-focus-ring);
 }
 
-:where(input, select, textarea):disabled {
+:where(input, select, textarea, .cs-trigger):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -998,7 +1001,7 @@ button:focus-visible {
   cursor: pointer;
 }
 
-:where(select) {
+:where(select, .cs-trigger) {
   appearance: none;
   padding-right: 34px;
   background-image: var(--select-chevron);
